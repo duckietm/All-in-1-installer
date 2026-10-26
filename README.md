@@ -471,8 +471,9 @@ https://example.com/api/...  Traefik          -> Polaris    http://127.0.0.1:209
    Cloudflare, `X-Forwarded-For` is only trusted from Cloudflare's published IP ranges; without it, Traefik
    writes the header itself, so it cannot be faked. Ports 80 and 443 are opened in ufw when it is active.
 4. **Polaris**: the address is added to `ws.whitelist` (websocket origins and CORS for `/api`), and
-   `ws.ip.header = X-Forwarded-For`, so bans and rate limits see the visitor's IP. The emulator restarts when
-   that changed.
+   `ws.ip.header = X-Forwarded-For`, so bans and rate limits see the visitor's IP; with Cloudflare also
+   `ws.ip.header.trusted` = Cloudflare's ranges (see **The players' real IP behind Cloudflare** below). The emulator
+   restarts when that changed. With Cloudflare the weekly refresh of Cloudflare's ranges is set up too.
 5. **Test** on the server through Traefik: the site, `/api/health` and a websocket upgrade on `/ws` (101), and
    with https it waits up to 2 minutes for the certificate. Without a certificate the step ends with a warning
    that shows Let's Encrypt's error (usually: the domain does not point to this server yet, or port 80 is closed).
@@ -547,9 +548,22 @@ Nothing to fill in.
 1. **Polaris** (the emulator is stopped while they are written, then started again):
    `ws.whitelist` = only the hotel's address (`example.com`; Polaris drops `www.` itself), the old
    `websockets.whitelist` the same, and `ws.ip.header` = `X-Forwarded-For`.
-   That header is right **with Cloudflare too**: Polaris only reads it from a trusted proxy (Traefik, on
-   127.0.0.1). Traefik keeps the `X-Forwarded-For` from Cloudflare's ranges only (visitor first, Polaris takes the
-   first entry) and replaces it for everyone else, so it cannot be faked; `CF-Connecting-IP` is not needed.
+   That header is right **with Cloudflare too**, with `ws.ip.header.trusted` = Cloudflare's ranges and the same
+   ranges for NGINX (see **The players' real IP behind Cloudflare** below).
+
+   **The players' real IP behind Cloudflare.** Cloudflare sends `X-Forwarded-For: <player>`; Traefik trusts that
+   only from Cloudflare's ranges and appends the Cloudflare address it saw: `<player>, <Cloudflare>`. Polaris and
+   NGINX read the header **from the right** and skip only the proxies they trust (a visitor can write anything on
+   the left, so that is the only safe way), so both must trust Cloudflare's ranges, or every player shows up as a
+   Cloudflare address (`logged in from IP 172.71.x.x using proxyserver 127.0.0.1`). The installer gives Polaris
+   `ws.ip.header.trusted` = Cloudflare's ranges, and NGINX `/etc/nginx/hotel-real-ip.conf` (`set_real_ip_from`
+   127.0.0.1 and Cloudflare's ranges, with `real_ip_header X-Forwarded-For` and `real_ip_recursive on` in the hotel
+   site). `CF-Connecting-IP` is not used on purpose: Traefik passes it through unchanged, so anyone reaching the
+   server without Cloudflare could write their own. Cloudflare changes its ranges now and then, so
+   `/var/scripts/CF_Refresh.sh` runs every Sunday at 04:00 from `/etc/cron.d/cf-refresh` (output in
+   `/var/log/cf-refresh.log`): it rewrites NGINX's list (a graceful reload), and Traefik's and Polaris' only when the
+   ranges really changed (Traefik is restarted, the emulator stopped and started, because it writes its settings
+   back when it stops). On an existing server, **Tools → Fix visitor IPs** does all of this at once.
 2. **MariaDB over an SSH tunnel**: 3306 stays closed; HeidiSQL and the like use your SSH key. A tunnel arrives
    from 127.0.0.1, which MariaDB counts as `root@localhost` (socket login only), so that account also gets the
    saved root password (`IDENTIFIED VIA unix_socket OR mysql_native_password`). In HeidiSQL: network type
@@ -653,7 +667,7 @@ Every install step first checks the server and shows what it found:
 | Polaris / Octane / Renderer | the folder is a clone of that repository, on the branch picked under **Branch** | **Skip (already installed)** · Update (git pull) |
 | Emulator | JDK 25, the `emulator` account, a built JAR, `config.ini`, and the emulator running | **Skip (already installed)** · Rebuild and restart |
 | Web access | Docker from download.docker.com running, the Traefik container running, the hotel site on 127.0.0.1:85 | **Skip (already installed)** · Set up again |
-| Harden | ufw active with deny incoming and no 3306 rule, the TCP settings in `/etc/sysctl.conf`, `ws.whitelist` = the hotel's address and `ws.ip.header` = `X-Forwarded-For` | **Skip (already installed)** · Apply again |
+| Harden | ufw active with deny incoming and no 3306 rule, the TCP settings in `/etc/sysctl.conf`, `ws.whitelist` = the hotel's address and `ws.ip.header` = `X-Forwarded-For`; with Cloudflare also `ws.ip.header.trusted` and NGINX's real-IP file with Cloudflare's ranges | **Skip (already installed)** · Apply again |
 | SSH login | sshd -T says no password and no keyboard-interactive login | **Skip (already installed)** · Apply again |
 | Octane | `dist/` built and served, `/var/www/gamedata` exists, `socket.url` matches the web access address, the camera URLs are set (ui-config and emulator) and `plainConfigBaseUrl` matches the layout (`/configuration/`, or `/client/configuration/` with AtomCMS) | **Skip (already installed)** · Configure and rebuild |
 | AtomCMS (addon) | `vendor/` and the atom theme are built, AtomCMS' tables exist, the hotel site's root is `/var/www/atomcms/public` and `hotel.env` has `CMS=atom` | **Skip (already installed)** · Update and rebuild |
@@ -960,6 +974,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Restart NGINX** | `nginx -t` first (a broken configuration is not restarted), then PHP-FPM 8.5 and NGINX; checks 127.0.0.1:85 |
 | **Restart Traefik** | `docker restart traefik`; waits for port 80 |
 | **Restart all** | MariaDB, emulator, NGINX + PHP-FPM, Traefik, in that order |
+| **Fix visitor IPs** | for a hotel behind Cloudflare whose players show up with a Cloudflare address: gives Polaris (`ws.ip.header.trusted`), NGINX (`/etc/nginx/hotel-real-ip.conf`) and Traefik Cloudflare's current ranges and sets up the weekly refresh (`/var/scripts/CF_Refresh.sh`, `/etc/cron.d/cf-refresh`). Asks first: the emulator restarts when its setting changes, Traefik when its list changes. A hotel set up without Cloudflare gets the advice to run Web access again with Cloudflare on |
 | **Enable firewall** | switches ufw on with the Harden step's rules: when that step set them up they are switched on again, after checking that every SSH port (and the one you are connected on) is in them, so you cannot lock yourself out; on a server where it never ran, the same rules are set up (SSH rate limited, 80/443 for everyone or only Cloudflare's ranges, everything else closed) |
 | **Disable firewall** | `ufw disable` (asks first: every port is reachable again, also the emulator's 3000 and 2096). The rules are kept, so Enable firewall switches the same rules on again; for testing a connection problem |
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |

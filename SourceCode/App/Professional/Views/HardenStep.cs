@@ -92,6 +92,9 @@ public sealed class HardenStep : InstallStep
         // Only the hotel's own pages may open the websocket.
         bool polaris = await Task.Run(() => HardenInstaller.ConfigurePolarisAsync(connection, site, Run.Log));
         Run.Done(polaris ? $"ws.whitelist = {HardenInstaller.WhitelistHost(site)}" : "emulator not set up yet");
+        // The visitor's real address behind Cloudflare, in NGINX too, kept current weekly.
+        await Task.Run(() => WebAccessInstaller.ConfigureNginxRealIpAsync(connection, site, Run.Log));
+        await Task.Run(() => WebAccessInstaller.InstallCloudflareRefreshAsync(connection, site, Run.Log));
 
         // An SSH tunnel arrives as root@localhost, so that account takes the root password too.
         DatabaseCredentials? credentials = ClientConfiguration.LoadDatabaseCredentials(connection.Login.Host);

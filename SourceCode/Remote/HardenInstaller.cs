@@ -10,13 +10,18 @@ public sealed record HardenState(
     bool SysctlConfigured,
     string? Whitelist,
     string? IpHeader,
-    bool FirewallLogSeparate = true)
+    bool FirewallLogSeparate = true,
+    string? TrustedProxies = null,
+    bool NginxRealIpCloudflare = false)
 {
     /// <summary>Polaris strips "www." itself, so the bare address is enough.</summary>
     public string? ExpectedWhitelist => Site is null ? null : HardenInstaller.WhitelistHost(Site);
 
     public bool IsComplete => Site is not null && UfwActive && DenyIncoming && !MariaDbOpen && SysctlConfigured &&
-                              Whitelist == ExpectedWhitelist && IpHeader == "X-Forwarded-For" && FirewallLogSeparate;
+                              Whitelist == ExpectedWhitelist && IpHeader == "X-Forwarded-For" && FirewallLogSeparate && VisitorIpsReadable;
+
+    /// <summary>Behind Cloudflare, Polaris and NGINX must trust Cloudflare's ranges to see the visitor instead of Cloudflare.</summary>
+    public bool VisitorIpsReadable => Site is not { Cloudflare: true } || (!string.IsNullOrEmpty(TrustedProxies) && NginxRealIpCloudflare);
 }
 
 /// <summary>ufw firewall, Polaris origin and IP header settings, and SYN flood protection.</summary>
@@ -82,10 +87,13 @@ public static class HardenInstaller
             # The firewall's messages only in /var/log/ufw.log: "& stop" is on in rsyslog's ufw file (no file, no rsyslog: fine).
             f={{UfwRsyslog}}
             echo "ufwlog=$([ ! -f "$f" ] || grep -qE '^[[:space:]]*&[[:space:]]*stop' "$f" && echo yes)"
+            # NGINX trusts more than 127.0.0.1 (Cloudflare's ranges) in the hotel site's real-IP file.
+            echo "realipcf=$([ "$(grep -c '^set_real_ip_from' {{HotelSite.RealIpFile}} 2>/dev/null)" -gt 1 ] && grep -q 'include {{HotelSite.RealIpFile}}' {{HotelSite.File}} 2>/dev/null && echo yes)"
             db=$(grep -sE '^db.database=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2)
             if [ -n "$db" ]; then
               echo "whitelist=$(mariadb -N "$db" -e "SELECT \`value\` FROM emulator_settings WHERE \`key\` = 'ws.whitelist'" 2>/dev/null)"
               echo "ipheader=$(mariadb -N "$db" -e "SELECT \`value\` FROM emulator_settings WHERE \`key\` = 'ws.ip.header'" 2>/dev/null)"
+              echo "trusted=$(mariadb -N "$db" -e "SELECT \`value\` FROM emulator_settings WHERE \`key\` = 'ws.ip.header.trusted'" 2>/dev/null)"
             fi
             """;
         CommandResult result = await connection.RunAsRootAsync(script, token);
@@ -95,7 +103,8 @@ public static class HardenInstaller
         var ports = (values["ssh"] ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => int.TryParse(p, out int n) ? n : 0).Where(n => n > 0).ToList();
         return new HardenState(site, values.Yes("active"), values.Yes("deny"), ports,
-            values["mariadb"] == "open", values.Yes("sysctl"), values["whitelist"], values["ipheader"], values.Yes("ufwlog"));
+            values["mariadb"] == "open", values.Yes("sysctl"), values["whitelist"], values["ipheader"], values.Yes("ufwlog"),
+            values["trusted"], values.Yes("realipcf"));
     }
 
     /// <summary>
@@ -231,16 +240,21 @@ public static class HardenInstaller
         return RemoteScript.RunAsync(connection, script, log, "Changing the TCP settings failed", token);
     }
 
-    /// <summary>Restricts ws.whitelist to the hotel and trusts X-Forwarded-For, which Traefik sets.</summary>
-    public static Task<bool> ConfigurePolarisAsync(ServerConnection connection, WebAccessSettings site, Action<string> log,
+    /// <summary>
+    /// Restricts ws.whitelist to the hotel and trusts X-Forwarded-For, which Traefik sets; behind Cloudflare also
+    /// Cloudflare's ranges, so Polaris reads past the Cloudflare hop to the visitor.
+    /// </summary>
+    public static async Task<bool> ConfigurePolarisAsync(ServerConnection connection, WebAccessSettings site, Action<string> log,
         CancellationToken token = default)
     {
         string host = WhitelistHost(site);
-        return EmulatorInstaller.SetSettingsAsync(connection,
+        string trusted = await WebAccessInstaller.PolarisTrustedProxiesAsync(connection, site, token);
+        return await EmulatorInstaller.SetSettingsAsync(connection,
         [
             ("ws.whitelist", host),
             ("websockets.whitelist", host),
-            ("ws.ip.header", "X-Forwarded-For")
+            ("ws.ip.header", "X-Forwarded-For"),
+            ("ws.ip.header.trusted", trusted)
         ], "websocket whitelist and visitor IP", log, token: token);
     }
 }

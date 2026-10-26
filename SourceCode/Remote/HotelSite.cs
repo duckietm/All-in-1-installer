@@ -8,6 +8,8 @@ public static class HotelSite
     /// <summary>Written by Polaris, served by NGINX.</summary>
     public static readonly string Camera = OctaneInstaller.Gamedata + "/camera";
     public const string LogDirectory = "/var/log/nginx/hotel";
+    /// <summary>The proxies NGINX takes the visitor's address from: 127.0.0.1 (Traefik), and Cloudflare's ranges behind Cloudflare.</summary>
+    public const string RealIpFile = "/etc/nginx/hotel-real-ip.conf";
     public const string DefaultRoot = "/usr/share/nginx/html";
 
     private const string Cors = """
@@ -145,8 +147,9 @@ public static class HotelSite
                 autoindex     off;
                 server_tokens off;
 
-                # The visitor's address from Traefik, not 127.0.0.1.
-                set_real_ip_from  127.0.0.1;
+                # The visitor's address from X-Forwarded-For, read from the right past the trusted proxies: Traefik on
+                # 127.0.0.1 and, behind Cloudflare, Cloudflare's ranges (in the real-IP file).
+                include {{RealIpFile}};
                 real_ip_header    X-Forwarded-For;
                 real_ip_recursive on;
 
@@ -200,6 +203,37 @@ public static class HotelSite
     }
 
     /// <summary>
+    /// Writes <see cref="RealIpFile"/>: 127.0.0.1, plus Cloudflare's ranges when the site uses Cloudflare (a failed
+    /// download keeps the file as it was), and points an older hotel site at it instead of its own 127.0.0.1 line.
+    /// Does not reload NGINX.
+    /// </summary>
+    public static string RealIpScript(WebAccessSettings site) => $$"""
+        realip={{RealIpFile}}
+        if [ {{(site.Cloudflare ? "yes" : "no")}} = yes ]; then
+          cf=$( (curl -fsS --max-time 20 https://www.cloudflare.com/ips-v4; echo; curl -fsS --max-time 20 https://www.cloudflare.com/ips-v6) \
+            | grep -E '^[0-9a-f.:]+/[0-9]+$' ) || true
+          if [ "$(echo "$cf" | grep -c .)" -ge 10 ]; then
+            { echo "# Proxies NGINX takes the visitor's address from (written by All-in-1 Installer): Traefik and Cloudflare."
+              echo "set_real_ip_from 127.0.0.1;"
+              echo "$cf" | sed 's/.*/set_real_ip_from &;/'; } > "$realip"
+            echo "> $realip: 127.0.0.1 and $(echo "$cf" | grep -c .) Cloudflare ranges (the visitor's address, not Cloudflare's)"
+          elif [ -f "$realip" ]; then
+            echo "  Could not download Cloudflare's ranges: $realip stays as it was"
+          else
+            printf 'set_real_ip_from 127.0.0.1;\n' > "$realip"
+            echo "  Could not download Cloudflare's ranges: NGINX sees Cloudflare's address until this runs again"
+          fi
+        else
+          printf '# Proxies NGINX takes the visitor'"'"'s address from (written by All-in-1 Installer): Traefik.\nset_real_ip_from 127.0.0.1;\n' > "$realip"
+          echo "> $realip: 127.0.0.1 (Traefik)"
+        fi
+        if [ -f {{File}} ] && ! grep -q 'include {{RealIpFile}}' {{File}}; then
+          sed -i -E 's#^([[:space:]]*)set_real_ip_from[[:space:]]+127\.0\.0\.1;#\1include {{RealIpFile}};#' {{File}}
+          echo "  {{File}} now takes its proxies from $realip"
+        fi
+        """;
+
+    /// <summary>
     /// Also disables other sites on 80/443 and checks 127.0.0.1:85. A null <paramref name="root"/> keeps the
     /// current root.
     /// </summary>
@@ -224,6 +258,7 @@ public static class HotelSite
           echo "  nginx is now in the www-data group (to read the emulator's camera photos)"
         fi
 
+        {{RealIpScript(site)}}
         echo "> {{File}}: listen 127.0.0.1:{{Port}}, root $root"
         cat > {{File}} <<'SITE'
         {{Config(site)}}

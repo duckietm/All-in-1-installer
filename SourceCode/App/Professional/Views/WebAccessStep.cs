@@ -188,6 +188,8 @@ public sealed partial class WebAccessStep : InstallStep
         Run.Log("> Polaris: ws.whitelist and ws.ip.header (emulator_settings)");
         bool polaris = await Task.Run(() => WebAccessInstaller.ConfigurePolarisAsync(connection, settings, Run.Log));
         Run.Done(polaris ? $"{settings.Address} whitelisted" : "emulator not set up yet");
+        // Behind Cloudflare: its ranges for NGINX, Traefik and Polaris, refreshed weekly.
+        await Task.Run(() => WebAccessInstaller.InstallCloudflareRefreshAsync(connection, settings, Run.Log));
 
         // Test through Traefik from the server itself.
         WebAccessResult result = await Task.Run(() => WebAccessInstaller.TestAsync(connection, settings, Run.Log));
