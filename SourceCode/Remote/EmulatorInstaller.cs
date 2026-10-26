@@ -29,6 +29,7 @@ public static class EmulatorInstaller
     public static readonly string Directory = Repository + "/Emulator";
     public static readonly string LogDirectory = ServerLayout.Current.EmulatorLogs;
     public static readonly string Account = ServerLayout.Current.EmulatorAccount;
+    /// <summary>The home folder a new account gets; an existing account (root, a person's account) keeps its own.</summary>
     public static readonly string AccountHome = ServerLayout.Current.EmulatorHome;
 
     /// <summary>Adoptium's signing key, used for Temurin where the distribution has no OpenJDK 25.</summary>
@@ -219,16 +220,19 @@ public static class EmulatorInstaller
             chown {{Account}}:www-data "$d/build.sh"
             chmod 755 "$d/build.sh" "$d/mvnw"
             echo "> $d/build.sh (as {{Account}})"
-            [ -d {{AccountHome}}/.m2/repository ] || echo "  The first build downloads the libraries (about 150 MB): this takes a few minutes."
+            # The account's real home (an existing account keeps its own), for Maven's ~/.m2.
+            home=$(getent passwd {{Account}} | cut -d: -f6)
+            home=${home:-{{AccountHome}}}
+            [ -d "$home/.m2/repository" ] || echo "  The first build downloads the libraries (about 150 MB): this takes a few minutes."
             cd "$d"
             # Maven prints little while it downloads, so report progress every 30 s and give up after 30 minutes.
             start=$(date +%s)
-            timeout 1800 runuser -u {{Account}} -- env HOME={{AccountHome}} "$d/build.sh" &
+            timeout 1800 runuser -u {{Account}} -- env HOME="$home" "$d/build.sh" &
             build=$!
             (
               while sleep 30 </dev/null >/dev/null 2>&1; do
                 kill -0 $build 2>/dev/null || exit 0
-                echo "  ... still building: $(( ($(date +%s) - start) / 60 )) min, $(du -sm {{AccountHome}}/.m2 2>/dev/null | cut -f1) MB in ~/.m2"
+                echo "  ... still building: $(( ($(date +%s) - start) / 60 )) min, $(du -sm "$home/.m2" 2>/dev/null | cut -f1) MB in ~/.m2"
               done
             ) &
             beat=$!

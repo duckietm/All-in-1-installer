@@ -887,6 +887,11 @@ port; **Log in to MariaDB** asks again.
   | Database backups | `/var/backups/all-in-1` |
   | Hotel database (for new MariaDB passwords files) | `habbo` |
 
+  **Emulator account** is a list of the server's accounts once you are logged in: `root`, the people's accounts and
+  the accounts in group `www-data` (where the emulator's account lives), each with a short note. **+ Create a new
+  user ...** at the bottom asks for a name and creates it on the server right away as a service account (no login,
+  home in `/var/lib/<name>`, member of `www-data`); without a login the name is chosen and the Emulator step creates
+  it. An existing account keeps its own home folder for the build's `~/.m2`.
   **Emulator account `root`** works but gets a warning: the emulator, and every plugin in it, could then change
   anything on the server. A normal account (created by the Emulator step) can only touch the hotel's files.
   **AtomCMS installed** decides whether AtomCMS is on the dashboard, in the update check and in **Update AtomCMS**:
@@ -1098,6 +1103,7 @@ SourceCode/
   Remote/GamedataFiles.cs                 Asset Explorer server side: list, upload (rights), download, rename, delete, locked to gamedata
   Remote/SqlSession.cs                    SQL Editor: SSH tunnel to MariaDB (MySqlConnector), tables, data, edits, scripts
   Remote/SqlScript.cs                     Splits a script into statements like the mariadb client (quotes, comments, DELIMITER)
+  Remote/ServerUsers.cs                   The server's accounts for Settings → Server layout, and creating a service account
   Remote/ServerTools.cs                   Restarts, database backup / import, system and emulator updates
   Remote/ServerStatus.cs                  Samples CPU, memory, network, disks, users and the git versions
   Remote/EmulatorMonitor.cs               Emulator threads (CPU per thread, jcmd names) and slow-wired log warnings

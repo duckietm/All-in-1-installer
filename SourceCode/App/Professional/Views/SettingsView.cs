@@ -50,7 +50,19 @@ public sealed class SettingsView
 
     // Server layout: one box per value, in the order of the card.
     private readonly TextBox _emulatorPath = LayoutBox("/var/www/emulator");
-    private readonly TextBox _emulatorAccount = LayoutBox("emulator");
+    // The emulator's account: the server's users when logged in, and "Create a new user" at the bottom.
+    private readonly ComboBox _emulatorAccount = new() { MinWidth = 380 };
+    private string _account = "emulator";
+    private List<ServerUser>? _users;
+    private ServerConnection? _usersFor;
+    private bool _settingAccounts;
+    private readonly Func<ServerConnection?> _connection;
+
+    // ToString is what the list shows; no name is the "Create a new user" entry.
+    private sealed record AccountItem(string? Name, string Caption)
+    {
+        public override string ToString() => Name is null ? Caption : $"{Name}   ({Caption})";
+    }
     private readonly TextBox _emulatorLogs = LayoutBox("/var/log/emu");
     private readonly TextBox _octanePath = LayoutBox("/var/www/Octane");
     private readonly TextBox _rendererPath = LayoutBox("/var/www/Octane-Renderer");
@@ -67,8 +79,11 @@ public sealed class SettingsView
     private readonly ResultBanner _layoutResult = new();
     private readonly Button _layoutRestart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
 
-    public SettingsView()
+    /// <param name="connection">The login at startup, for the list of the server's users.</param>
+    public SettingsView(Func<ServerConnection?> connection)
     {
+        _connection = connection;
+        _emulatorAccount.SelectionChanged += async (_, _) => await AccountChosenAsync();
         var page = new StackPanel { Spacing = 18 };
         page.Children.Add(Card(BuildLook(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDefaults(), new Thickness(24, 20)));
@@ -95,6 +110,8 @@ public sealed class SettingsView
         for (int i = 0; i < _branches.Length; i++)
             _branches[i].SelectedItem = InstallerSettings.ChoiceFor(settings.BranchFor(InstallerWindow.Components[i].Repository));
         RefreshKeyList();
+        ShowAccounts();
+        _ = LoadUsersAsync();
     }
 
     private Control BuildDefaults()
@@ -212,7 +229,6 @@ public sealed class SettingsView
         Row("Hotel database", _database);
         panel.Children.Add(grid);
         panel.Children.Add(_rootWarning);
-        _emulatorAccount.TextChanged += (_, _) => ShowRootWarning();
 
         var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
         save.Click += (_, _) => SaveLayout();
@@ -236,7 +252,8 @@ public sealed class SettingsView
     private void ShowLayout(ServerLayout layout)
     {
         _emulatorPath.Text = layout.EmulatorRepository;
-        _emulatorAccount.Text = layout.EmulatorAccount;
+        _account = layout.EmulatorAccount;
+        ShowAccounts();
         _emulatorLogs.Text = layout.EmulatorLogs;
         _octanePath.Text = layout.Octane;
         _rendererPath.Text = layout.Renderer;
@@ -251,7 +268,7 @@ public sealed class SettingsView
     // root works, but the emulator then has every right on the server.
     private void ShowRootWarning()
     {
-        if ((_emulatorAccount.Text ?? "").Trim() == ServerLayout.RootAccount)
+        if (_account == ServerLayout.RootAccount)
             _rootWarning.Show(ResultKind.Warning, "Use a normal account for the emulator, not root",
                 "As root the emulator (and every plugin in it) can change anything on the server: a bug, or someone who finds a hole in it, " +
                 "can take over the whole machine. A normal account such as emulator can only touch the hotel's files. The installer creates the account for you.");
@@ -259,12 +276,92 @@ public sealed class SettingsView
             _rootWarning.Hide();
     }
 
+    // Fills the account list: the server's users when logged in, the chosen account, and "Create a new user".
+    private void ShowAccounts()
+    {
+        ServerConnection? connection = _connection();
+        List<ServerUser>? users = ReferenceEquals(_usersFor, connection) ? _users : null;
+        var items = new List<AccountItem>();
+        foreach (ServerUser user in users ?? [])
+            items.Add(new AccountItem(user.Name, user.Uid == 0 ? "administrator, not recommended"
+                : (user.IsSystem ? "service account" : $"user, uid {user.Uid}") + (user.InWwwData ? ", in www-data" : "") + (user.CanLogIn ? "" : ", no login")));
+        if (items.All(i => i.Name != _account))
+            items.Insert(0, new AccountItem(_account, connection is null ? "log in to see the server's users"
+                : users is null ? "reading the server's users ..." : "not on the server yet: the Emulator step creates it"));
+        items.Add(new AccountItem(null, connection is null ? "+ Create a new user (the Emulator step creates it) ..." : "+ Create a new user ..."));
+        _settingAccounts = true;
+        _emulatorAccount.ItemsSource = items;
+        _emulatorAccount.SelectedItem = items.First(i => i.Name == _account);
+        _settingAccounts = false;
+        ShowRootWarning();
+    }
+
+    // Reads the users once per login (and again after creating one).
+    private async Task LoadUsersAsync(bool force = false)
+    {
+        if (_connection() is not { } connection || (!force && ReferenceEquals(_usersFor, connection))) return;
+        _usersFor = connection;
+        _users = null;
+        ShowAccounts();
+        try
+        {
+            _users = await Task.Run(() => ServerUsers.ListAsync(connection));
+        }
+        catch (Exception ex)
+        {
+            _users = [];
+            _layoutResult.Show(ResultKind.Warning, "Could not read the server's users", ex.Message);
+        }
+        ShowAccounts();
+    }
+
+    private async Task AccountChosenAsync()
+    {
+        if (_settingAccounts || _emulatorAccount.SelectedItem is not AccountItem item) return;
+        if (item.Name is not null)
+        {
+            _account = item.Name;
+            ShowRootWarning();
+            return;
+        }
+        // "Create a new user": back to the current account until the new one exists.
+        ShowAccounts();
+        if (TopLevel.GetTopLevel(View) is not Window owner) return;
+        ServerConnection? connection = _connection();
+        string? name = await NameDialog.ShowAsync(owner, "New account for the emulator",
+            connection is null
+                ? "A service account (no login, home in /var/lib/<name>, member of www-data). You are not logged in, so the Emulator step creates it on the server."
+                : $"A service account on {connection.Login.Host}, created now: no login, home in /var/lib/<name>, member of www-data. The Emulator step gives it the emulator's folders.",
+            "hotel", "Create",
+            text => !ServerLayout.IsValidAccount(text) ? "Use lower case letters, digits, '_' and '-', starting with a letter or '_'."
+                : text == ServerLayout.RootAccount ? "root already exists, and is not recommended for the emulator."
+                : _users?.Any(u => u.Name == text) == true ? $"{text} already exists: pick it in the list." : null);
+        if (name is null) return;
+        if (connection is not null)
+        {
+            try
+            {
+                await Task.Run(() => ServerUsers.CreateAsync(connection, name));
+            }
+            catch (Exception ex)
+            {
+                _layoutResult.Show(ResultKind.Error, $"Creating {name} failed", ex.Message);
+                return;
+            }
+        }
+        _account = name;
+        _layoutResult.Show(ResultKind.Success, connection is null ? $"{name} is chosen" : $"{name} is created on {connection.Login.Host}",
+            "Save to make it the emulator's account; the Emulator step gives it the emulator's folders.");
+        if (connection is not null) await LoadUsersAsync(force: true);
+        else ShowAccounts();
+    }
+
     private void SaveLayout()
     {
         var layout = new ServerLayout
         {
             EmulatorRepository = _emulatorPath.Text ?? "",
-            EmulatorAccount = _emulatorAccount.Text ?? "",
+            EmulatorAccount = _account,
             EmulatorLogs = _emulatorLogs.Text ?? "",
             Octane = _octanePath.Text ?? "",
             Renderer = _rendererPath.Text ?? "",

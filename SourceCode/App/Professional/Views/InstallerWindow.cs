@@ -45,7 +45,7 @@ public sealed class InstallerWindow : Window
     private Button? _toolsNavigation;
     private Button? _settingsNavigation;
     private Button? _aboutNavigation;
-    private readonly SettingsView _settings = new();
+    private readonly SettingsView _settings;
     private readonly ServerWizard _wizard;
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _deployWizard;
@@ -104,6 +104,7 @@ public sealed class InstallerWindow : Window
             _toolsBusy = busy;
             SetStatus(status);
         });
+        _settings = new SettingsView(() => Session);
         _settings.RestartRequested += RestartForLook;
         _tools.MonitorRequested += ShowMonitor;
         _tools.TerminalRequested += ShowTerminal;
@@ -213,6 +214,7 @@ public sealed class InstallerWindow : Window
             case Page.SqlEditor: ShowSqlEditor(); break;
             case Page.Tools or Page.ServerStatus or Page.EmulatorMonitor or Page.Terminal: ShowTools(); break;
             case Page.Dashboard: ShowDashboard(); break;
+            case Page.Settings: ShowSettings(); break;
             default:
                 RefreshHeader();
                 RefreshFooter();

@@ -26,6 +26,9 @@ public sealed partial class ServerLayout
 
     public const string RootAccount = "root";
 
+    /// <summary>A Linux user name: lower case letters, digits, '_' and '-', starting with a letter or '_'.</summary>
+    public static bool IsValidAccount(string name) => AccountPattern().IsMatch(name);
+
     /// <summary>The layout this run of the installer uses.</summary>
     public static ServerLayout Current { get; } = InstallerSettings.Load().Layout ?? new ServerLayout();
 
