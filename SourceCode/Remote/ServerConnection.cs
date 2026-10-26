@@ -421,6 +421,53 @@ public sealed class ServerConnection : IAsyncDisposable
     }
 
     /// <summary>
+    /// Runs a command that never ends by itself (tail -F, docker logs -f) as root and streams its lines until
+    /// <paramref name="token"/> is cancelled or the connection drops. The script gets $ALL_IN_1_WATCH, a process that
+    /// ends when the SSH channel closes: <see cref="FollowScript"/> waits for it and then stops the command, so nothing
+    /// keeps running on the server after the log is left.
+    /// </summary>
+    public async Task FollowAsRootAsync(string script, Action<string> onLine, CancellationToken token)
+    {
+        // A background job's stdin is /dev/null unless it is redirected, hence <&0. sudo -S only reads the password line.
+        (string commandLine, string? password) = RootCommandLine("exec 2>&1\ncat >/dev/null <&0 &\nALL_IN_1_WATCH=$!\n" + script);
+        using SshCommand ssh = _client.CreateCommand(commandLine.ReplaceLineEndings("\n"));
+        Task execution = ssh.ExecuteAsync(token);
+        // Stdin stays open while following: closing it would end the watcher, and with it the command.
+        Stream input = ssh.CreateInputStream();
+        try
+        {
+            if (password is not null)
+            {
+                await input.WriteAsync(System.Text.Encoding.UTF8.GetBytes(password), token);
+                await input.FlushAsync(token);
+            }
+            Task reading = Task.Run(async () =>
+            {
+                using var reader = new StreamReader(ssh.OutputStream, System.Text.Encoding.UTF8);
+                while (await reader.ReadLineAsync(token) is { } line) onLine(line.TrimEnd('\r'));
+            }, token);
+            await execution;
+            await reading;
+        }
+        finally
+        {
+            try { input.Dispose(); } catch (Exception) { }
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="command"/> in a process group of its own until the log is left, then stops the whole group,
+    /// so a pipeline or an if/else with tail in it stops too.
+    /// </summary>
+    public static string FollowScript(string command) => $"""
+        setsid bash -c {ShellQuote(command)} &
+        follower=$!
+        wait $ALL_IN_1_WATCH
+        kill -- -$follower 2>/dev/null
+        true
+        """;
+
+    /// <summary>
     /// Runs <paramref name="script"/> as root with stdin written by <paramref name="writeInput"/>, such as a tar archive
     /// for tar -x. Stdin closes when <paramref name="writeInput"/> returns.
     /// </summary>

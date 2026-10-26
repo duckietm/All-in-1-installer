@@ -9,13 +9,14 @@ public sealed record HardenState(
     bool MariaDbOpen,
     bool SysctlConfigured,
     string? Whitelist,
-    string? IpHeader)
+    string? IpHeader,
+    bool FirewallLogSeparate = true)
 {
     /// <summary>Polaris strips "www." itself, so the bare address is enough.</summary>
     public string? ExpectedWhitelist => Site is null ? null : HardenInstaller.WhitelistHost(Site);
 
     public bool IsComplete => Site is not null && UfwActive && DenyIncoming && !MariaDbOpen && SysctlConfigured &&
-                              Whitelist == ExpectedWhitelist && IpHeader == "X-Forwarded-For";
+                              Whitelist == ExpectedWhitelist && IpHeader == "X-Forwarded-For" && FirewallLogSeparate;
 }
 
 /// <summary>ufw firewall, Polaris origin and IP header settings, and SYN flood protection.</summary>
@@ -25,6 +26,36 @@ public static class HardenInstaller
     /// Once present, other steps stop opening ports in ufw. ufw_allow in RemoteScript.Prelude checks the same path.
     /// </summary>
     public const string Marker = "/etc/ufw/all-in-1-hardened";
+
+    /// <summary>rsyslog's rule that writes the firewall's messages to /var/log/ufw.log.</summary>
+    public const string UfwRsyslog = "/etc/rsyslog.d/20-ufw.conf";
+    public const string UfwLog = "/var/log/ufw.log";
+
+    // ufw logging on, and "& stop" in rsyslog's ufw rule, so blocked connections only go to /var/log/ufw.log instead of
+    // also filling kern.log and syslog. Restarts rsyslog. Without rsyslog the messages stay in the journal.
+    private const string FirewallLogScript = $$"""
+        echo "> Firewall log: {{UfwLog}}"
+        if ufw status verbose 2>/dev/null | grep -q '^Logging: off'; then ufw logging low >/dev/null; echo "  ufw logging switched on (low)"; fi
+        f={{UfwRsyslog}}
+        if [ -f "$f" ]; then
+          if grep -qE '^[[:space:]]*#[[:space:]]*&[[:space:]]*stop' "$f"; then
+            sed -i -E 's/^[[:space:]]*#[[:space:]]*(&[[:space:]]*stop)/\1/' "$f"
+            echo "  $f: '& stop' switched on: the firewall's messages go only to {{UfwLog}}, not also to kern.log and syslog"
+          elif grep -qE '^[[:space:]]*&[[:space:]]*stop' "$f"; then
+            echo "  $f: '& stop' is already on"
+          else
+            printf '& stop\n' >> "$f"
+            echo "  $f: '& stop' added"
+          fi
+          if { [ -d /run/systemd/system ] && systemctl restart rsyslog; } || service rsyslog restart >/dev/null 2>&1; then
+            echo "  rsyslog restarted"
+          else
+            echo "  rsyslog could not be restarted: run 'sudo service rsyslog restart' yourself"
+          fi
+        else
+          echo "  No $f (rsyslog is not installed): the firewall's messages are in the journal (journalctl -k | grep UFW)"
+        fi
+        """;
 
     public static readonly (string Key, string Value)[] Sysctl =
     [
@@ -48,6 +79,9 @@ public static class HardenInstaller
             echo "ssh=$( (ss -Hltnp 2>/dev/null | grep -E '"sshd"|ssh.socket' | awk '{print $4}' | sed 's/.*://'; sshd -T 2>/dev/null | awk '$1=="port" {print $2}') | sort -un | tr '\n' ' ')"
             echo "mariadb=$(echo "$status" | grep -qE '^3306[/ ].*ALLOW' && echo open)"
             echo "sysctl=$({{sysctlCheck}} && echo yes)"
+            # The firewall's messages only in /var/log/ufw.log: "& stop" is on in rsyslog's ufw file (no file, no rsyslog: fine).
+            f={{UfwRsyslog}}
+            echo "ufwlog=$([ ! -f "$f" ] || grep -qE '^[[:space:]]*&[[:space:]]*stop' "$f" && echo yes)"
             db=$(grep -sE '^db.database=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2)
             if [ -n "$db" ]; then
               echo "whitelist=$(mariadb -N "$db" -e "SELECT \`value\` FROM emulator_settings WHERE \`key\` = 'ws.whitelist'" 2>/dev/null)"
@@ -61,7 +95,7 @@ public static class HardenInstaller
         var ports = (values["ssh"] ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => int.TryParse(p, out int n) ? n : 0).Where(n => n > 0).ToList();
         return new HardenState(site, values.Yes("active"), values.Yes("deny"), ports,
-            values["mariadb"] == "open", values.Yes("sysctl"), values["whitelist"], values["ipheader"]);
+            values["mariadb"] == "open", values.Yes("sysctl"), values["whitelist"], values["ipheader"], values.Yes("ufwlog"));
     }
 
     /// <summary>
@@ -116,6 +150,7 @@ public static class HardenInstaller
             printf 'Firewall set up by the All-in-1 Installer harden step on %s.\nThe other steps no longer open ports; run the harden step again to change the rules.\n' "$(date)" > {{Marker}}
             ufw status verbose | sed 's/^/  /' | grep -v '^  $' | grep -v 'Cloudflare' || true
             [ -z "$ranges" ] || echo "  (+ $(ufw status | grep -c Cloudflare) Cloudflare rules for 80,443)"
+            {{FirewallLogScript}}
             """;
         return RemoteScript.RunAsync(connection, script, log, "Setting up the firewall failed", token);
     }

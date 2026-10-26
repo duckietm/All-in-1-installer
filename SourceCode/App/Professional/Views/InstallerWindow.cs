@@ -43,6 +43,7 @@ public sealed class InstallerWindow : Window
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
     private Button? _toolsNavigation;
+    private Button? _debugNavigation;
     private Button? _settingsNavigation;
     private Button? _aboutNavigation;
     private readonly SettingsView _settings;
@@ -51,6 +52,7 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
+    private readonly DebugView _debug;
     private readonly ToolsView _tools;
     private bool _toolsBusy;
     // The dashboard's components card, with the versions on the server and what the update check found.
@@ -99,6 +101,7 @@ public sealed class InstallerWindow : Window
             "Assets on the server", keyStep: false);
         _explorer = new AssetExplorerView(() => Session, ShowDashboard);
         _sqlEditor = new SqlEditorView(() => Session, ShowDashboard);
+        _debug = new DebugView(() => Session);
         _tools = new ToolsView(() => Session, (busy, status) =>
         {
             _toolsBusy = busy;
@@ -212,6 +215,7 @@ public sealed class InstallerWindow : Window
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
+            case Page.Debug: ShowDebug(); break;
             case Page.Tools or Page.ServerStatus or Page.EmulatorMonitor or Page.Terminal: ShowTools(); break;
             case Page.Dashboard: ShowDashboard(); break;
             case Page.Settings: ShowSettings(); break;
@@ -347,6 +351,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(SidebarLabel("TOOLS"));
         _toolsNavigation = NavButton("Tools", Icons.Wrench, ShowTools);
         nav.Children.Add(_toolsNavigation);
+        _debugNavigation = NavButton("Debug", Icons.Bug, ShowDebug);
+        nav.Children.Add(_debugNavigation);
         nav.Children.Add(SidebarLabel("GENERAL"));
         _settingsNavigation = NavButton("Settings", Icons.Cog, ShowSettings);
         nav.Children.Add(_settingsNavigation);
@@ -428,7 +434,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, DeployAssets, AssetExplorer, SqlEditor, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -448,6 +454,9 @@ public sealed class InstallerWindow : Window
                 ? "Addon: a database client like HeidiSQL, through the SSH login (no open MariaDB port needed)."
                 : $"The databases of {host}: browse and edit tables, run queries."),
             Page.DeployAssets => ("Deploy Assets", $"Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {OctaneInstaller.Gamedata} on the server."),
+            Page.Debug => ("Debug", session is null
+                ? "Live logs of the emulator, NGINX, Traefik and the firewall."
+                : $"Live logs on {host}: the emulator, NGINX, Traefik and the firewall."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
             Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
@@ -506,7 +515,9 @@ public sealed class InstallerWindow : Window
             Text("TOOLS", 11, "Pro.Muted", FontWeight.SemiBold),
             TileGrid(
                 SmallTile("Tools", "Restarts, database backup and import, updates, settings backup.",
-                    Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools))
+                    Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools),
+                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik and the firewall.",
+                    Icons.Bug, Color.Parse("#DC2626"), ShowDebug))
         ]);
         _componentsHost.Content = BuildComponentsCard();
         ShowScrollPage([.. tiles]);
@@ -571,6 +582,9 @@ public sealed class InstallerWindow : Window
 
     private void ShowAssetExplorer() => ShowWorkspace(Page.AssetExplorer, _explorerNavigation, _explorer,
         $"The Asset Explorer works on {OctaneInstaller.Gamedata} of the server you are logged in to.");
+
+    private void ShowDebug() => ShowWorkspace(Page.Debug, _debugNavigation, _debug,
+        "Debug follows the logs on the server you are logged in to.");
 
     private void ShowSqlEditor() => ShowWorkspace(Page.SqlEditor, _sqlNavigation, _sqlEditor,
         "The SQL Editor reaches MariaDB through the login to the server.");

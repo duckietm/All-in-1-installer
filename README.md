@@ -573,6 +573,11 @@ Nothing to fill in.
    with the host network, so Docker publishes no ports past ufw. Without IPv6 only Cloudflare's IPv4 ranges are
    used. `/etc/ufw/all-in-1-hardened` marks the firewall as managed: the NGINX, MariaDB, Emulator and Web access
    steps then no longer open ports themselves.
+   **Firewall log**: `ufw logging` is switched on (low) when it was off, and in `/etc/rsyslog.d/20-ufw.conf` the last
+   line `#& stop` becomes `& stop` (added when missing), so the firewall's messages go only to `/var/log/ufw.log`
+   instead of also filling `kern.log` and `syslog`; then rsyslog is restarted. Without rsyslog (Debian 12 keeps only
+   the journal) the messages stay in the journal. **Debug → Firewall** shows the log live. A server hardened before
+   this counts as not done yet, so the step offers **Apply again**.
 5. **Log in again**: a new SSH login through the firewall proves you are not locked out (the current session stays
    open; if it fails, the step says so and `ufw disable` undoes it).
 
@@ -919,6 +924,25 @@ port; **Log in to MariaDB** asks again.
 
 ![Settings: All-in-1 downloader](docs/screenshots/settings-downloader.png)
 
+## Debug
+
+**Debug** (sidebar, under TOOLS) follows the server's logs live over the login, newest lines at the bottom:
+
+| Log | What it follows |
+|---|---|
+| **Emulator** | `<emulator logs>/emulator.log` (Settings → Server layout; `/var/log/emu` by default) |
+| **NGINX errors** | `/var/log/nginx/hotel/error.log` and `/var/log/nginx/error.log` |
+| **NGINX access** | `/var/log/nginx/hotel/access.log`: every request that reaches the hotel site |
+| **Traefik** | `docker logs traefik`: certificates, routing and connection errors |
+| **Firewall** | `/var/log/ufw.log` (see the Harden step), or the kernel journal's UFW lines without rsyslog |
+
+It starts with the last lines of the log and then shows what comes in. **Filter** shows only the lines with a text
+(for example `BLOCK` or a player's IP), **Pause** holds the view still while lines keep being collected, **Clear**
+empties it and **Restart** follows the log again (for example after the connection dropped). The last 5,000 lines are
+kept; **Copy log** and Ctrl+C copy them. The log is only followed while the page is on screen: leaving it, or the
+connection dropping, stops `tail` / `docker logs` on the server too (the follower runs in a process group of its own,
+which is stopped as soon as the SSH channel closes), so nothing keeps running there.
+
 ## Tools
 
 The sidebar's **TOOLS** section is for running the hotel. The page shows the server tools, and the settings
@@ -1061,6 +1085,7 @@ SourceCode/
   App/Professional/Views/NameDialog.cs    Asks for a file or folder name (rename, new folder)
   App/Professional/Views/SqlEditorView.cs SQL Editor: database tree, table data (edit, filter, pages), structure, query editor
   App/Professional/Views/DatabaseLoginDialog.cs  MariaDB user, password and port for the SQL Editor
+  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik and the firewall
   App/Professional/Views/ToolsView.cs     Tools page: server tools and the settings backup
   App/Professional/Views/TerminalView.cs  SSH terminal page (toolbar, terminal, ssh command)
   App/Professional/Views/SettingsView.cs  Settings page: default server and key, importing SSH keys, downloader path
