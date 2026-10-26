@@ -819,7 +819,7 @@ public sealed class InstallerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left
         });
         layout.Children.Add(words);
-        hotel.Margin = new Thickness(0, 0, 26, 3);
+        hotel.Margin = new Thickness(0, 0, 26, 0);
         Grid.SetColumn(hotel, 1);
         layout.Children.Add(hotel);
 
@@ -887,11 +887,11 @@ public sealed class InstallerWindow : Window
 
     // The hotel scene on the right of the banner (App/Images/hotel-view.png). Pixel art only stays sharp when every
     // pixel of the picture becomes the same whole number of screen pixels, so the size follows the screen's scaling:
-    // the largest whole factor that keeps it at most 160 high (1x at 100 %, 2x at 125-175 %, 3x at 200 %).
+    // the largest whole factor that keeps it at most 160 high (for the 154 high picture: 1x up to 175 %, 2x at 200 %).
     private static Control HotelPicture()
     {
         var bitmap = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(new Uri("avares://All-in-1 Installer/App/Images/hotel-view.png")));
-        var picture = new Image { Source = bitmap, VerticalAlignment = VerticalAlignment.Bottom, Stretch = Stretch.Fill };
+        var picture = new Image { Source = bitmap, VerticalAlignment = VerticalAlignment.Center, Stretch = Stretch.Fill };
         RenderOptions.SetBitmapInterpolationMode(picture, Avalonia.Media.Imaging.BitmapInterpolationMode.None);
         void Fit(double scaling)
         {
