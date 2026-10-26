@@ -477,17 +477,19 @@ public sealed class InstallerWindow : Window
                 Icons.ServerPlus, Brand, ShowInstallNewServer),
             _componentsHost,
             Text("ADDONS", 11, "Pro.Muted", FontWeight.SemiBold),
-            Tile("AtomCMS", "After the installation: AtomCMS (github.com/ObjectRetros/atomcms) as the hotel's website, Octane moves to /client.",
-                Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
-            Tile("Deploy Assets", "Sync the furniture, clothes, badges and game data of the All-in-1 downloader to /var/www/gamedata (only new and changed files), and the client's UI texts in your language.",
-                Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
-            Tile("Asset Explorer", "Two panes like Norton Commander: this computer and /var/www/gamedata on the server. Upload, download, rename, delete; uploads get the right owner and rights.",
-                Icons.FolderSync, Color.Parse("#2563EB"), ShowAssetExplorer),
-            Tile("SQL Editor", "A database client like HeidiSQL: databases and tables, browse, filter and edit rows, run queries and scripts, export to CSV. MariaDB is reached through the SSH login.",
-                Icons.Database, Color.Parse("#0891B2"), ShowSqlEditor),
+            TileGrid(
+                SmallTile("AtomCMS", "AtomCMS as the hotel's website; Octane moves to /client.",
+                    Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
+                SmallTile("Deploy Assets", "The All-in-1 downloader's assets and the UI texts to /var/www/gamedata.",
+                    Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
+                SmallTile("Asset Explorer", "Two panes: this computer and /var/www/gamedata. Upload, download, rename.",
+                    Icons.FolderSync, Color.Parse("#2563EB"), ShowAssetExplorer),
+                SmallTile("SQL Editor", "Like HeidiSQL: browse and edit tables, run queries, export to CSV.",
+                    Icons.Database, Color.Parse("#0891B2"), ShowSqlEditor)),
             Text("TOOLS", 11, "Pro.Muted", FontWeight.SemiBold),
-            Tile("Tools", "Restart services, database backup and import, system / emulator / Octane updates, encrypted settings backup.",
-                Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools)
+            TileGrid(
+                SmallTile("Tools", "Restarts, database backup and import, updates, settings backup.",
+                    Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools))
         ]);
         _componentsHost.Content = BuildComponentsCard();
         ShowScrollPage([.. tiles]);
@@ -659,6 +661,66 @@ public sealed class InstallerWindow : Window
             Padding = new Thickness(22, 20),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            CornerRadius = new CornerRadius(12),
+            BorderThickness = new Thickness(1),
+            Classes = { "tile" }
+        };
+        tile.Click += (_, _) =>
+        {
+            if (AnyBusy) return;
+            open();
+        };
+        return tile;
+    }
+
+    // Small tiles side by side: as many columns of at least 250 px as fit, at most four, all the same width. Three
+    // columns become two, so the four addons are a row of four or two rows of two.
+    private static Control TileGrid(params Control[] tiles)
+    {
+        // The negative margin takes back the gap after the last column and row, so the edges line up with the cards.
+        var grid = new Avalonia.Controls.Primitives.UniformGrid { Columns = Math.Min(4, tiles.Length), Margin = new Thickness(0, 0, -12, -12) };
+        foreach (Control tile in tiles) grid.Children.Add(tile);
+        // Always the column count of the width, also for one tile (Tools), so it is as wide as an addon tile above it.
+        grid.SizeChanged += (_, e) => grid.Columns = Math.Clamp((int)(e.NewSize.Width / 250), 1, 4) is var columns && columns == 3 ? 2 : columns;
+        return grid;
+    }
+
+    private Control SmallTile(string title, string description, string iconPath, Color color, Action open)
+    {
+        var icon = Icon(iconPath, 20);
+        icon.Foreground = Solid(color);
+        var panel = new StackPanel { Spacing = 10 };
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 12 };
+        top.Children.Add(new Border
+        {
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(10),
+            Background = Solid(Color.FromArgb(0x26, color.R, color.G, color.B)),
+            Child = icon
+        });
+        TextBlock name = Text(title, 14.5, weight: FontWeight.SemiBold);
+        name.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(name, 1);
+        top.Children.Add(name);
+        var chevron = Icon(Icons.ChevronRight, 18).Bind(PathIcon.ForegroundProperty, "Pro.Subtle");
+        chevron.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(chevron, 2);
+        top.Children.Add(chevron);
+        panel.Children.Add(top);
+        TextBlock text = Text(description, 12, "Pro.Muted");
+        text.TextWrapping = TextWrapping.Wrap;
+        panel.Children.Add(text);
+
+        var tile = new Button
+        {
+            Content = panel,
+            Padding = new Thickness(16, 14),
+            Margin = new Thickness(0, 0, 12, 12),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Top,
             CornerRadius = new CornerRadius(12),
             BorderThickness = new Thickness(1),
             Classes = { "tile" }
