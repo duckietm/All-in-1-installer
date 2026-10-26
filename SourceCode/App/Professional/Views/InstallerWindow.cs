@@ -740,7 +740,8 @@ public sealed class InstallerWindow : Window
         };
     }
 
-    // The top of the dashboard: a hotel view (sky, clouds, an isometric hotel) drawn here, by day or by night.
+    // The top of the dashboard: a hotel view (the hotel's blue sky, outlined clouds, an isometric hotel) drawn here, by
+    // day or by night.
     private Control HotelBanner()
     {
         bool night = ActualThemeVariant == ThemeVariant.Dark;
@@ -749,9 +750,11 @@ public sealed class InstallerWindow : Window
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
             EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative)
         };
-        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#071C30" : "#4FB3E6"), 0));
-        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#1D4A6E" : "#BDE7F8"), 1));
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#071C30" : "#65A1D7"), 0));
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#1D4A6E" : "#78B0E0"), 1));
         var scene = new Canvas { Height = 170, ClipToBounds = true };
+        // Hard pixel edges, like the hotel view.
+        RenderOptions.SetEdgeMode(scene, EdgeMode.Aliased);
         if (night)
         {
             // Stars at fixed places, so the banner looks the same every time.
@@ -765,33 +768,50 @@ public sealed class InstallerWindow : Window
                 scene.Children.Add(star);
             }
         }
-        // Clouds of stacked blocks, pixel style, around the words rather than behind them.
-        foreach ((double x, double y, double scale) in new[] { (640.0, 20.0, 1.0), (860.0, 104.0, 0.75), (36.0, 140.0, 0.6), (1060.0, 34.0, 0.85), (1300.0, 120.0, 0.7) })
+        // Clouds around the words rather than behind them, and the small specks the hotel view has between them.
+        foreach ((double x, double y, double scale) in new[]
+                 { (620.0, 22.0, 1.25), (930.0, 96.0, 1.0), (1180.0, 30.0, 0.8), (450.0, 12.0, 0.5), (760.0, 128.0, 0.5), (1420.0, 110.0, 0.6) })
             scene.Children.Add(Cloud(x, y, scale, night));
+        foreach ((double x, double y) in new[] { (590.0, 92.0), (720.0, 70.0), (880.0, 40.0), (1080.0, 136.0), (1110.0, 62.0), (470.0, 148.0) })
+            scene.Children.Add(Speck(x, y, night));
 
         var hotel = HotelDrawing(night);
         var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         layout.Children.Add(scene);
         Grid.SetColumnSpan(scene, 2);
 
-        var words = new StackPanel { Spacing = 6, Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        var welcome = new TextBlock
+        // Plain bold letters with a dark edge read well on the sky; the pixel font made the server's address hard to read.
+        IBrush text = night ? Brushes.White : Solid(Outline);
+        var words = new StackPanel { Spacing = 8, Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        words.Children.Add(new TextBlock
         {
-            Text = Session is null ? "Welcome to your hotel" : $"Welcome back to {Session.Login.Host}",
-            FontFamily = Pixel,
+            Text = Session is null ? "Welcome to your hotel!" : "Welcome back!",
             FontSize = 30,
             FontWeight = FontWeight.Bold,
-            Foreground = Solid(HotelYellow),
-            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 3, BlurRadius = 0, Color = Outline }
-        };
-        words.Children.Add(welcome);
+            Foreground = Brushes.White,
+            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Outline }
+        });
+        if (Session is { } session)
+        {
+            var address = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            address.Children.Add(new Avalonia.Controls.Shapes.Ellipse { Width = 8, Height = 8, Fill = Solid(Color.Parse("#5BD15B")), VerticalAlignment = VerticalAlignment.Center });
+            address.Children.Add(new TextBlock { Text = "Connected to", FontSize = 13, Foreground = Solid(Color.Parse("#CFE6F5")), VerticalAlignment = VerticalAlignment.Center });
+            address.Children.Add(new TextBlock { Text = session.Login.Host, FontFamily = Mono, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+            words.Children.Add(new Border
+            {
+                Background = Solid(Color.FromArgb(0xD0, Outline.R, Outline.G, Outline.B)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(10, 4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = address
+            });
+        }
         words.Children.Add(new TextBlock
         {
             Text = Session is null
                 ? "Log in to your server, then install, run and update your Habbo retro: Polaris, Octane and AtomCMS."
                 : "Install, run and update your Habbo retro: Polaris, Octane and AtomCMS.",
-            // Dark on the day sky, white on the night sky.
-            Foreground = night ? Brushes.White : Solid(Outline),
+            Foreground = text,
             FontSize = 14,
             FontWeight = FontWeight.Medium,
             TextWrapping = TextWrapping.Wrap,
@@ -816,20 +836,53 @@ public sealed class InstallerWindow : Window
         };
     }
 
+    // A hotel view cloud: round white puffs on a flat base, one dark outline around the whole, a pale band underneath.
     private static Control Cloud(double x, double y, double scale, bool night)
     {
         var cloud = new Canvas();
-        IBrush white = Solid(night ? Color.FromArgb(0x30, 255, 255, 255) : Color.FromArgb(0xE6, 255, 255, 255));
-        foreach ((double bx, double by, double bw, double bh) in new[] { (0.0, 12.0, 96.0, 14.0), (14.0, 4.0, 64.0, 10.0), (30.0, -2.0, 30.0, 8.0) })
+        // Opaque by night too, so the puffs do not show through each other.
+        Color white = Color.Parse(night ? "#3A5A78" : "#FFFFFF");
+        Color under = Color.Parse(night ? "#2B4763" : "#D3E3F2");
+        Color edge = night ? Color.Parse("#06121D") : Outline;
+        // Base from 0 to 80 wide at the bottom, puffs (centre x, centre y, radius) on top of it.
+        (double X, double Y, double R)[] puffs = [(20, 24, 11), (42, 17, 17), (62, 24, 10)];
+        const double baseTop = 22, baseBottom = 34, width = 80;
+        double outline = 2 / scale;
+
+        void Round(double left, double top, double w, double h, double corner, Color color)
         {
-            var block = new Avalonia.Controls.Shapes.Rectangle { Width = bw * scale, Height = bh * scale, Fill = white };
-            Canvas.SetLeft(block, bx * scale);
-            Canvas.SetTop(block, by * scale);
-            cloud.Children.Add(block);
+            var shape = new Border { Width = w * scale, Height = h * scale, CornerRadius = new CornerRadius(corner * scale), Background = Solid(color) };
+            Canvas.SetLeft(shape, left * scale);
+            Canvas.SetTop(shape, top * scale);
+            cloud.Children.Add(shape);
         }
+
+        // The outline first, a little larger than the cloud, then the cloud on top of it, so no lines show inside.
+        Round(-outline, baseTop - outline, width + 2 * outline, baseBottom - baseTop + 2 * outline, (baseBottom - baseTop) / 2 + outline, edge);
+        foreach ((double px, double py, double r) in puffs) Round(px - r - outline, py - r - outline, 2 * (r + outline), 2 * (r + outline), r + outline, edge);
+        Round(0, baseTop, width, baseBottom - baseTop, (baseBottom - baseTop) / 2, under);
+        foreach ((double px, double py, double r) in puffs) Round(px - r, py - r, 2 * r, 2 * r, r, white);
+        Round(4, baseTop, width - 8, baseBottom - baseTop - 4, 4, white);
         Canvas.SetLeft(cloud, x);
         Canvas.SetTop(cloud, y);
         return cloud;
+    }
+
+    // The tiny outlined dots between the clouds.
+    private static Control Speck(double x, double y, bool night)
+    {
+        var speck = new Border
+        {
+            Width = 7,
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = Solid(Color.Parse(night ? "#3A5A78" : "#FFFFFF")),
+            BorderBrush = Solid(night ? Color.Parse("#06121D") : Outline),
+            BorderThickness = new Thickness(1)
+        };
+        Canvas.SetLeft(speck, x);
+        Canvas.SetTop(speck, y);
+        return speck;
     }
 
     // Two isometric blocks with windows and a HOTEL sign on the roof. Lit windows by night.
