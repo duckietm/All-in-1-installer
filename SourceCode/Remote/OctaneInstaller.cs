@@ -1,3 +1,4 @@
+using AllInOneInstaller.Configuration;
 namespace AllInOneInstaller.Remote;
 
 /// <summary>Octane state before the step runs.</summary>
@@ -30,11 +31,11 @@ public sealed record OctaneState(
 /// <summary>Configures, builds and publishes the Octane client.</summary>
 public static class OctaneInstaller
 {
-    public const string Octane = "/var/www/Octane";
-    public const string Renderer = "/var/www/Octane-Renderer";
-    public const string Gamedata = "/var/www/gamedata";
-    public const string Dist = Octane + "/dist";
-    public const string ConfigurationDirectory = Octane + "/public/configuration";
+    public static readonly string Octane = ServerLayout.Current.Octane;
+    public static readonly string Renderer = ServerLayout.Current.Renderer;
+    public static readonly string Gamedata = ServerLayout.Current.Gamedata;
+    public static readonly string Dist = Octane + "/dist";
+    public static readonly string ConfigurationDirectory = Octane + "/public/configuration";
 
     /// <summary>Files the manual install renames from .example to .json.</summary>
     public static readonly string[] ConfigurationFiles =
@@ -156,7 +157,7 @@ public static class OctaneInstaller
     /// <summary>Restores www-data read/write access to gamedata. Run it again after copying assets in.</summary>
     public const string PermissionsScript = "/usr/local/sbin/gamedata-permissions";
 
-    private const string PermissionsScriptContent = $$"""
+    private static readonly string PermissionsScriptContent = $$"""
         #!/bin/sh
         # Read/write access to {{Gamedata}} for the www-data group (written by All-in-1 Installer).
         # The emulator (a member of www-data) writes custom badges to c_images/album1584 and edits config/*.json;

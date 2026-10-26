@@ -12,10 +12,10 @@ public sealed record RemoteEntry(string Name, bool IsDirectory, bool IsLink, lon
 /// </summary>
 public static class GamedataFiles
 {
-    public const string Root = OctaneInstaller.Gamedata;
+    public static readonly string Root = OctaneInstaller.Gamedata;
 
     // "inside PATH" prints the real path, or fails when it resolves outside gamedata, symlinks included.
-    private const string Guard = $$"""
+    private static readonly string Guard = $$"""
         set -e
         # Called in $(...), so the message goes to stderr and set -e stops the script on failure.
         inside() {

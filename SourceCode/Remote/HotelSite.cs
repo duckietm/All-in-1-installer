@@ -6,7 +6,7 @@ public static class HotelSite
     public const string File = "/etc/nginx/sites-available/hotel";
     public const string Port = "85";
     /// <summary>Written by Polaris, served by NGINX.</summary>
-    public const string Camera = OctaneInstaller.Gamedata + "/camera";
+    public static readonly string Camera = OctaneInstaller.Gamedata + "/camera";
     public const string LogDirectory = "/var/log/nginx/hotel";
     public const string DefaultRoot = "/usr/share/nginx/html";
 
@@ -60,7 +60,7 @@ public static class HotelSite
         """;
 
     // AtomCMS serves the site and Octane lives under /client/, which the CMS opens as /client/index.html?sso=...
-    private const string AtomLocations = $$"""
+    private static readonly string AtomLocations = $$"""
             client_max_body_size 20m;
 
             location / {

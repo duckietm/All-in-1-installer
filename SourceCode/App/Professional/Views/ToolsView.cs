@@ -733,6 +733,8 @@ public sealed class ToolsView
 
     private async Task UpdateAtomCmsAsync(Window owner, ServerConnection connection)
     {
+        if (ServerLayout.Current.AtomCmsInstalled == AtomCmsPresence.NotInstalled)
+            throw new ServerConnectionException("Settings → Server layout says AtomCMS is not installed on this server. Change that there to update it.");
         AtomCmsState state = await Task.Run(() => AtomCmsInstaller.InspectAsync(connection));
         if (!state.VendorPresent || !state.Migrated)
             throw new ServerConnectionException($"AtomCMS is not installed on this server ({AtomCmsInstaller.Directory}): install it with Addons → AtomCMS.");

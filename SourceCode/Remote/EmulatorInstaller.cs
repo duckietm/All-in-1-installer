@@ -22,14 +22,14 @@ public sealed record EmulatorState(
 
 public sealed record EmulatorStartResult(string Jar, bool Systemd, int Errors);
 
-/// <summary>Builds and runs the Polaris emulator from /var/www/emulator as emulator.service.</summary>
+/// <summary>Builds and runs the Polaris emulator from its clone (Settings → Server layout) as emulator.service.</summary>
 public static class EmulatorInstaller
 {
-    public const string Repository = "/var/www/emulator";
-    public const string Directory = "/var/www/emulator/Emulator";
-    public const string LogDirectory = "/var/log/emu";
-    public const string Account = "emulator";
-    public const string AccountHome = "/var/lib/emulator";
+    public static readonly string Repository = ServerLayout.Current.EmulatorRepository;
+    public static readonly string Directory = Repository + "/Emulator";
+    public static readonly string LogDirectory = ServerLayout.Current.EmulatorLogs;
+    public static readonly string Account = ServerLayout.Current.EmulatorAccount;
+    public static readonly string AccountHome = ServerLayout.Current.EmulatorHome;
 
     /// <summary>Adoptium's signing key, used for Temurin where the distribution has no OpenJDK 25.</summary>
     public const string AdoptiumKeyFingerprint = "3B04D753C9050D9A5D343F39843C48A565F8F04B";
@@ -38,11 +38,11 @@ public static class EmulatorInstaller
     public const string FindJava = "ls -d /usr/lib/jvm/java-25-openjdk-* /usr/lib/jvm/temurin-25-jdk-* 2>/dev/null | head -1";
 
     // Without systemd, look for the process instead.
-    private const string RunningCheck =
-        "if [ -d /run/systemd/system ]; then systemctl is-active --quiet emulator; else pgrep -u emulator -f 'jar-with-dependencies' >/dev/null; fi";
+    private static readonly string RunningCheck =
+        $"if [ -d /run/systemd/system ]; then systemctl is-active --quiet emulator; else pgrep -u {Account} -f 'jar-with-dependencies' >/dev/null; fi";
 
     // Shell helpers that control the emulator. The calling script must set $d and $log.
-    public const string ControlFunctions = $$"""
+    public static readonly string ControlFunctions = $$"""
         emulator_running() { {{RunningCheck}}; }
         stop_emulator() {
           # pkill fails when nothing runs, which would end the script under set -e.
@@ -311,8 +311,8 @@ public static class EmulatorInstaller
             # The previous log is kept as emulator.log.<time>; kept logs older than 30 days are removed.
             JAVA_HOME=JAVA_HOME_HERE
             MEMORY_MB=MEMORY_HERE
-            LOG_DIR=/var/log/emu
-            # Logs and backups: writable by emulator, readable by group www-data, not by others.
+            LOG_DIR={{LogDirectory}}
+            # Logs and backups: writable by the emulator's account, readable by group www-data, not by others.
             umask 027
             cd "$(dirname "$0")"
             jar=$(ls -t target/Polaris-*-jar-with-dependencies.jar target/Habbo-*-jar-with-dependencies.jar 2>/dev/null | head -1)
@@ -337,12 +337,11 @@ public static class EmulatorInstaller
             Requires=mariadb.service
 
             [Service]
-            User=emulator
-            Group=emulator
+            User={{Account}}
             SupplementaryGroups=www-data
             # config.ini, build.sh and the start script live here; target/ only holds the build output.
-            WorkingDirectory=/var/www/emulator/Emulator
-            ExecStart=/var/www/emulator/Emulator/emulator
+            WorkingDirectory={{Directory}}
+            ExecStart={{Directory}}/emulator
             SuccessExitStatus=143
             TimeoutStopSec=30
             Restart=on-failure

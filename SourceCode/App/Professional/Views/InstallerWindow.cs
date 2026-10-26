@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Input;
 using Avalonia.Threading;
+using AllInOneInstaller.Configuration;
 using AllInOneInstaller.Remote;
 using AllInOneInstaller.Update;
 using static AllInOneInstaller.App.Professional.ProfessionalTheme;
@@ -439,12 +440,12 @@ public sealed class InstallerWindow : Window
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.AssetExplorer => ("Asset Explorer", session is null
-                ? "Addon: manage the files in /var/www/gamedata, with this computer next to it."
+                ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
                 : $"This computer on the left, {host}:{GamedataFiles.Root} on the right."),
             Page.SqlEditor => ("SQL Editor", session is null
                 ? "Addon: a database client like HeidiSQL, through the SSH login (no open MariaDB port needed)."
                 : $"The databases of {host}: browse and edit tables, run queries."),
-            Page.DeployAssets => ("Deploy Assets", "Addon: copy the hotel's assets, the client's UI texts and the emulator's images to /var/www/gamedata on the server."),
+            Page.DeployAssets => ("Deploy Assets", $"Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {OctaneInstaller.Gamedata} on the server."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
             Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
@@ -494,9 +495,9 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("AtomCMS", "AtomCMS as the hotel's website; Octane moves to /client.",
                     Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
-                SmallTile("Deploy Assets", "The All-in-1 downloader's assets and the UI texts to /var/www/gamedata.",
+                SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
-                SmallTile("Asset Explorer", "Two panes: this computer and /var/www/gamedata. Upload, download, rename.",
+                SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
                     Icons.FolderSync, Color.Parse("#2563EB"), ShowAssetExplorer),
                 SmallTile("SQL Editor", "Like HeidiSQL: browse and edit tables, run queries, export to CSV.",
                     Icons.Database, Color.Parse("#0891B2"), ShowSqlEditor)),
@@ -567,7 +568,7 @@ public sealed class InstallerWindow : Window
     }
 
     private void ShowAssetExplorer() => ShowWorkspace(Page.AssetExplorer, _explorerNavigation, _explorer,
-        "The Asset Explorer works on /var/www/gamedata of the server you are logged in to.");
+        $"The Asset Explorer works on {OctaneInstaller.Gamedata} of the server you are logged in to.");
 
     private void ShowSqlEditor() => ShowWorkspace(Page.SqlEditor, _sqlNavigation, _sqlEditor,
         "The SQL Editor reaches MariaDB through the login to the server.");
@@ -1009,8 +1010,10 @@ public sealed class InstallerWindow : Window
         foreach (var component in Rows)
         {
             RepositoryVersion? version = versions?.FirstOrDefault(v => v.Directory == component.Directory);
-            // AtomCMS is an addon: listed once it is installed.
-            if (component.Update == ToolsView.Component.AtomCms && version is null) continue;
+            // AtomCMS is an addon: listed once it is installed, or always / never when Settings say so.
+            AtomCmsPresence presence = ServerLayout.Current.AtomCmsInstalled;
+            if (component.Update == ToolsView.Component.AtomCms &&
+                (presence == AtomCmsPresence.NotInstalled || (presence == AtomCmsPresence.Detect && version is null))) continue;
             RepositoryUpdate? update = updates?.FirstOrDefault(u => u.Directory == component.Directory);
 
             Color color = Color.Parse(component.Color);
@@ -1048,6 +1051,12 @@ public sealed class InstallerWindow : Window
                 state.Children.Add(Chip("INCLUDED", "Pro.SuccessBack", "Pro.SuccessText"));
             else if (versions is null)
                 state.Children.Add(Chip("READING ...", "Pro.InfoBack", "Pro.InfoText"));
+            else if (version is null && component.Update == ToolsView.Component.AtomCms)
+            {
+                Border missing = Chip("NOT FOUND", "Pro.WarningBack", "Pro.WarningText");
+                ToolTip.SetTip(missing, $"Settings say AtomCMS is installed, but {component.Directory} is not a git clone.");
+                state.Children.Add(missing);
+            }
             else if (version is null)
                 state.Children.Add(Chip("NOT INSTALLED", "Pro.Hover", "Pro.Muted"));
             else if (updates is null)

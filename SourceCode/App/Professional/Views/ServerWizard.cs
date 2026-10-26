@@ -54,11 +54,11 @@ public sealed class ServerWizard
     public static InstallStep[] ServerSteps() =>
     [
         new NginxStep(), new PhpStep(), new MariaDbStep(), new DevToolsStep(),
-        new CloneStep("Polaris", "Emulator", "duckietm/Polaris-Emulator", "/var/www/emulator",
+        new CloneStep("Polaris", "Emulator", "duckietm/Polaris-Emulator", EmulatorInstaller.Repository,
             "The Polaris game server (emulator): Java sources, the database and the hotel assets."),
-        new CloneStep("Octane", "Client", "duckietm/Octane", "/var/www/Octane",
+        new CloneStep("Octane", "Client", "duckietm/Octane", OctaneInstaller.Octane,
             "The Octane browser client: the hotel's user interface."),
-        new CloneStep("Renderer", "Octane-Renderer", "duckietm/Octane-Renderer", "/var/www/Octane-Renderer",
+        new CloneStep("Renderer", "Octane-Renderer", "duckietm/Octane-Renderer", OctaneInstaller.Renderer,
             "The Octane Renderer: draws rooms, avatars and furniture for Octane."),
         new EmulatorStep(), new WebAccessStep(), new OctaneStep(), new HardenStep(), new SshLoginStep()
     ];

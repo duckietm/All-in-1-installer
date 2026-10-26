@@ -68,7 +68,7 @@ public sealed record RepositoryUpdate(string Name, string Directory, string? Bra
 public static class ServerStatus
 {
     // Network totals cover the server's own interfaces, not loopback or Docker's bridges.
-    private const string SampleScript = $$"""
+    private static readonly string SampleScript = $$"""
         echo "cpu $(head -1 /proc/stat)"
         echo "cores $(nproc)"
         awk '/^(MemTotal|MemAvailable|SwapTotal|SwapFree):/ {print "mem", $1, $2}' /proc/meminfo
@@ -139,7 +139,10 @@ public static class ServerStatus
         ("Emulator (Polaris)", EmulatorInstaller.Repository, "duckietm/Polaris-Emulator"),
         ("Octane", OctaneInstaller.Octane, "duckietm/Octane"),
         ("Octane-Renderer", OctaneInstaller.Renderer, "duckietm/Octane-Renderer"),
-        ("AtomCMS", AtomCmsInstaller.Directory, null)
+        // Last, so the indexes of the others stay the same without it. Left out when Settings say it is not installed.
+        .. ServerLayout.Current.AtomCmsInstalled == AtomCmsPresence.NotInstalled
+            ? Array.Empty<(string, string, string?)>()
+            : [("AtomCMS", AtomCmsInstaller.Directory, (string?)null)]
     ];
 
     /// <summary>

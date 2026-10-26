@@ -48,11 +48,31 @@ public sealed class SettingsView
     private readonly ResultBanner _lookResult = new();
     private readonly Button _restart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
 
+    // Server layout: one box per value, in the order of the card.
+    private readonly TextBox _emulatorPath = LayoutBox("/var/www/emulator");
+    private readonly TextBox _emulatorAccount = LayoutBox("emulator");
+    private readonly TextBox _emulatorLogs = LayoutBox("/var/log/emu");
+    private readonly TextBox _octanePath = LayoutBox("/var/www/Octane");
+    private readonly TextBox _rendererPath = LayoutBox("/var/www/Octane-Renderer");
+    private readonly TextBox _gamedataPath = LayoutBox("/var/www/gamedata");
+    private readonly TextBox _atomPath = LayoutBox("/var/www/atomcms");
+    private readonly ComboBox _atomInstalled = new()
+    {
+        MinWidth = 380,
+        ItemsSource = new[] { "Detect: look on the server", "Installed", "Not installed" }
+    };
+    private readonly TextBox _backupsPath = LayoutBox("/var/backups/all-in-1");
+    private readonly TextBox _database = LayoutBox("habbo");
+    private readonly ResultBanner _rootWarning = new();
+    private readonly ResultBanner _layoutResult = new();
+    private readonly Button _layoutRestart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
+
     public SettingsView()
     {
         var page = new StackPanel { Spacing = 18 };
         page.Children.Add(Card(BuildLook(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDefaults(), new Thickness(24, 20)));
+        page.Children.Add(Card(BuildLayout(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildBranches(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildKeys(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDownloader(), new Thickness(24, 20)));
@@ -160,6 +180,115 @@ public sealed class SettingsView
         _lookResult.Show(changed ? ResultKind.Info : ResultKind.Success, "Saved",
             changed ? $"The {(hotel ? "hotel" : "professional")} look starts with the next start of the installer: Restart now, or later."
                     : $"The {(hotel ? "hotel" : "professional")} look is the one you see now.");
+    }
+
+    private static TextBox LayoutBox(string placeholder) => new() { PlaceholderText = placeholder, MinWidth = 380, FontFamily = Mono, FontSize = 13 };
+
+    private Control BuildLayout()
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(Text("Server layout", 15, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("Where the hotel lives on the server and the account the emulator runs as. The installer installs to these places, " +
+                                "and the tools, addons and the dashboard look for everything there. Changing a value does not move anything on the server: " +
+                                "move the folder yourself (or install again). It applies when the installer starts again.", 12.5, "Pro.Muted"));
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 14, RowSpacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        void Row(string label, Control input)
+        {
+            TextBlock text = Label(label);
+            text.VerticalAlignment = VerticalAlignment.Center;
+            input.HorizontalAlignment = HorizontalAlignment.Left;
+            AddGridRow(grid, text, input);
+        }
+        Row("Emulator (Polaris clone)", _emulatorPath);
+        Row("Emulator account", _emulatorAccount);
+        Row("Emulator logs", _emulatorLogs);
+        Row("Octane", _octanePath);
+        Row("Octane-Renderer", _rendererPath);
+        Row("Gamedata (assets, served on /gamedata)", _gamedataPath);
+        Row("AtomCMS", _atomPath);
+        Row("AtomCMS installed", _atomInstalled);
+        Row("Database backups", _backupsPath);
+        Row("Hotel database", _database);
+        panel.Children.Add(grid);
+        panel.Children.Add(_rootWarning);
+        _emulatorAccount.TextChanged += (_, _) => ShowRootWarning();
+
+        var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
+        save.Click += (_, _) => SaveLayout();
+        var reset = new Button { Content = "Defaults", Padding = new Thickness(18, 9), Classes = { "secondary" } };
+        reset.Click += (_, _) =>
+        {
+            ShowLayout(new ServerLayout());
+            _layoutResult.Show(ResultKind.Info, "The defaults are filled in", "Save to use them.");
+        };
+        _layoutRestart.Click += (_, _) => RestartRequested?.Invoke();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(save);
+        buttons.Children.Add(reset);
+        buttons.Children.Add(_layoutRestart);
+        panel.Children.Add(buttons);
+        panel.Children.Add(_layoutResult);
+        ShowLayout(InstallerSettings.Load().Layout ?? new ServerLayout());
+        return panel;
+    }
+
+    private void ShowLayout(ServerLayout layout)
+    {
+        _emulatorPath.Text = layout.EmulatorRepository;
+        _emulatorAccount.Text = layout.EmulatorAccount;
+        _emulatorLogs.Text = layout.EmulatorLogs;
+        _octanePath.Text = layout.Octane;
+        _rendererPath.Text = layout.Renderer;
+        _gamedataPath.Text = layout.Gamedata;
+        _atomPath.Text = layout.AtomCms;
+        _atomInstalled.SelectedIndex = (int)layout.AtomCmsInstalled;
+        _backupsPath.Text = layout.Backups;
+        _database.Text = layout.Database;
+        ShowRootWarning();
+    }
+
+    // root works, but the emulator then has every right on the server.
+    private void ShowRootWarning()
+    {
+        if ((_emulatorAccount.Text ?? "").Trim() == ServerLayout.RootAccount)
+            _rootWarning.Show(ResultKind.Warning, "Use a normal account for the emulator, not root",
+                "As root the emulator (and every plugin in it) can change anything on the server: a bug, or someone who finds a hole in it, " +
+                "can take over the whole machine. A normal account such as emulator can only touch the hotel's files. The installer creates the account for you.");
+        else
+            _rootWarning.Hide();
+    }
+
+    private void SaveLayout()
+    {
+        var layout = new ServerLayout
+        {
+            EmulatorRepository = _emulatorPath.Text ?? "",
+            EmulatorAccount = _emulatorAccount.Text ?? "",
+            EmulatorLogs = _emulatorLogs.Text ?? "",
+            Octane = _octanePath.Text ?? "",
+            Renderer = _rendererPath.Text ?? "",
+            Gamedata = _gamedataPath.Text ?? "",
+            AtomCms = _atomPath.Text ?? "",
+            AtomCmsInstalled = (AtomCmsPresence)Math.Max(0, _atomInstalled.SelectedIndex),
+            Backups = _backupsPath.Text ?? "",
+            Database = _database.Text ?? ""
+        };
+        layout.Normalize();
+        if (layout.Validate() is { } problem)
+        {
+            _layoutResult.Show(ResultKind.Error, "Not saved", problem);
+            return;
+        }
+        InstallerSettings settings = InstallerSettings.Load();
+        settings.Layout = layout;
+        settings.Save();
+        ShowLayout(layout);
+        // Like the look, the layout is read once at startup.
+        bool changed = System.Text.Json.JsonSerializer.Serialize(layout) != System.Text.Json.JsonSerializer.Serialize(ServerLayout.Current);
+        _layoutRestart.IsVisible = changed;
+        _layoutResult.Show(changed ? ResultKind.Info : ResultKind.Success, "Saved",
+            changed ? "The installer uses the new layout from its next start: Restart now, or later." : "This is the layout the installer uses now.");
     }
 
     private Control BuildBranches()

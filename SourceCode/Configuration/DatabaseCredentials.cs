@@ -13,7 +13,7 @@ public sealed record DatabaseCredentials(string Host, int Port, string Database,
     public static string NewPassword() => RandomNumberGenerator.GetString(Alphabet, PasswordLength);
 
     public static DatabaseCredentials Generate(string host) =>
-        new(host, 3306, "habbo", "root", NewPassword(), "cms", NewPassword());
+        new(host, 3306, ServerLayout.Current.Database, "root", NewPassword(), "cms", NewPassword());
 
     public string ToFileText() => $"""
         # MariaDB accounts on {Host}, created by All-in-1 Installer.
@@ -41,7 +41,7 @@ public sealed record DatabaseCredentials(string Host, int Port, string Database,
         string? Get(string key) => values.TryGetValue(key, out string? v) && v.Length > 0 ? v : null;
         if (Get("host") is not { } host || Get("root_password") is not { } rootPassword || Get("cms_password") is not { } cmsPassword)
             return null;
-        return new DatabaseCredentials(host, int.TryParse(Get("port"), out int port) ? port : 3306, Get("database") ?? "habbo",
+        return new DatabaseCredentials(host, int.TryParse(Get("port"), out int port) ? port : 3306, Get("database") ?? ServerLayout.Current.Database,
             Get("root_user") ?? "root", rootPassword, Get("cms_user") ?? "cms", cmsPassword,
             Get("emulator_user") ?? "emulator", Get("emulator_password") ?? "");
     }

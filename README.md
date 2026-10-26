@@ -870,9 +870,31 @@ port; **Log in to MariaDB** asks again.
 
 **Settings** (sidebar, under GENERAL):
 
-- **Default server** and **SSH key**: Install New Server, the addons and Tools fill in the server; the key is selected
-  for "My own SSH key" (which is then chosen) and is tried first by the addons and Tools. Stored in
-  `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Look**: Hotel or Professional (see the top of this page).
+- **Default server** and **SSH key**: the login at startup fills in the server, and selects the key when you log in
+  with an SSH key. Stored in `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Server layout**: where the hotel lives on the server and who the emulator runs as. The installer installs to these
+  places, and the tools, the addons, the Asset Explorer and the dashboard look for everything there:
+
+  | Setting | Default |
+  |---|---|
+  | Emulator (Polaris clone; it runs from `Emulator/` in it) | `/var/www/emulator` |
+  | Emulator account | `emulator` |
+  | Emulator logs | `/var/log/emu` |
+  | Octane / Octane-Renderer | `/var/www/Octane`, `/var/www/Octane-Renderer` |
+  | Gamedata (served on `/gamedata`) | `/var/www/gamedata` |
+  | AtomCMS, and **AtomCMS installed**: Detect / Installed / Not installed | `/var/www/atomcms`, Detect |
+  | Database backups | `/var/backups/all-in-1` |
+  | Hotel database (for new MariaDB passwords files) | `habbo` |
+
+  **Emulator account `root`** works but gets a warning: the emulator, and every plugin in it, could then change
+  anything on the server. A normal account (created by the Emulator step) can only touch the hotel's files.
+  **AtomCMS installed** decides whether AtomCMS is on the dashboard, in the update check and in **Update AtomCMS**:
+  Detect looks for the clone, Installed always lists it (as NOT FOUND when the folder is missing), Not installed leaves it out.
+  The values go into scripts that run as root, so only plain absolute paths (letters, digits, `.`, `_`, `-`, `/`),
+  Linux user names and simple database names are accepted; system folders such as `/var/www` itself and two parts
+  in one folder are refused. A change does not move anything on the server (move the folder yourself, or install
+  again) and applies at the next start (**Restart now**). Stored in `configuration/settings.json` under `Layout`.
 - **Repository branches**: the branch for Polaris, Octane and Octane-Renderer: **main** or **dev**. This is the
   one choice the whole program follows: the clone steps of Install New Server, **Tools → Update emulator** and
   **Tools → Update Octane**, and the update check that counts new commits. A clone that is on another branch is
@@ -1052,7 +1074,8 @@ SourceCode/
   Configuration/ClientConfiguration.cs    The configuration/ directory on the client
   Configuration/DatabaseCredentials.cs    Generated MariaDB passwords and their file format
   Configuration/SettingsBackup.cs         Encrypted export / import of the configuration directory
-  Configuration/InstallerSettings.cs      Default server and key, downloader path (configuration/settings.json)
+  Configuration/InstallerSettings.cs      Default server and key, downloader path, branches, look, layout (configuration/settings.json)
+  Configuration/ServerLayout.cs           Paths on the server, the emulator's account and the database name, with their checks
   Remote/ServerConnection.cs              SSH login, OS check, sudo -> root, RunAsRootAsync
   Remote/SshKeys.cs                       Key generation (encrypted OpenSSH format) and public key parsing
   Remote/BcryptPbkdf.cs                   bcrypt_pbkdf: turns the key password into the encryption key
