@@ -181,6 +181,9 @@ or **Abort installation**. If nginx.org's NGINX is already there, the step upgra
 ![NGINX installed](docs/screenshots/nginx-installed.png)
 
 Long commands stream their output live into the log (`ServerConnection.RunAsRootStreamingAsync`).
+**Copy log** in the top right corner of the log puts it on the clipboard, so a failure can be pasted into a
+message instead of screenshotted. Select lines first to copy only those; Ctrl+C does the same. The button is
+on every log in the program: the install steps, the connect page and the Tools.
 
 Before every `apt-get update` the installer checks the **server clock** against the `Date` header of
 `deb.debian.org`. A clock that is more than 2 minutes off is corrected and automatic time sync (NTP) is switched
@@ -316,10 +319,18 @@ does not delete them itself.
 Each step clones the full history (so `git pull` can update it later) and installs git first when needed. The
 log keeps only the readable progress lines.
 
-- **Folder missing or empty**: `git clone`.
+Every step has a **Branch** choice: **main** (stable, the version the hotel runs on) or **dev** (the newest
+changes, not always stable). The choice is remembered per repository in `configuration/settings.json`, so the
+next installation starts with it, and **Settings → Repository branches** sets the same thing for all three
+without logging in to a server. The name is matched without case against the branches the repository really
+has, because Polaris writes it as `dev` and Octane and the Renderer as `Dev`.
+
+- **Folder missing or empty**: `git clone --branch <the branch you picked>`.
 - **Folder already holds that repository** (`origin` matches, also as `git@github.com:...`): the step shows the
   branch, commit, locally changed files and new commits, and offers **Skip** or **Update (git pull)**. The update
   is `git pull --ff-only`, and it is refused when files tracked by git were changed, so local work is never lost.
+  Is the clone on another branch than the one you picked? Then the step says so and switches to it
+  (`git fetch` + `git checkout`) before pulling.
 - **Folder holds something else** (other files, or a clone of another repository): **Move it aside and clone**
   renames it to `<folder>.bak-<date>` (nothing is deleted), or **Abort installation**.
 
@@ -604,7 +615,7 @@ Every install step first checks the server and shows what it found:
 | PHP | all packages installed, PHP ≥ 8.5.12 and PHP-FPM running | **Skip (already installed)** · Reinstall / upgrade |
 | MariaDB | 12.3 from mariadb.org running on 0.0.0.0, users and `habbo` exist, and the saved cms password works | **Skip (already installed)** · Reinstall / upgrade |
 | Node.js | Node.js 26 from NodeSource, Yarn and Composer in `/usr/bin` | **Skip (already installed)** · Reinstall / upgrade |
-| Polaris / Octane / Renderer | the folder is a clone of that repository | **Skip (already installed)** · Update (git pull) |
+| Polaris / Octane / Renderer | the folder is a clone of that repository, on the branch picked under **Branch** | **Skip (already installed)** · Update (git pull) |
 | Emulator | JDK 25, the `emulator` account, a built JAR, `config.ini`, and the emulator running | **Skip (already installed)** · Rebuild and restart |
 | Web access | Docker from download.docker.com running, the Traefik container running, the hotel site on 127.0.0.1:85 | **Skip (already installed)** · Set up again |
 | Harden | ufw active with deny incoming and no 3306 rule, the TCP settings in `/etc/sysctl.conf`, `ws.whitelist` = the hotel's address and `ws.ip.header` = `X-Forwarded-For` | **Skip (already installed)** · Apply again |
@@ -837,6 +848,12 @@ port; **Log in to MariaDB** asks again.
 - **Default server** and **SSH key**: Install New Server, the addons and Tools fill in the server; the key is selected
   for "My own SSH key" (which is then chosen) and is tried first by the addons and Tools. Stored in
   `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Repository branches**: the branch for Polaris, Octane and Octane-Renderer: **main** or **dev**. This is the
+  one choice the whole program follows: the clone steps of Install New Server, **Tools → Update emulator** and
+  **Tools → Update Octane**, and the update check that counts new commits. A clone that is on another branch is
+  switched over (`git fetch` + `git checkout`) the next time it is updated, never silently: the clone step and the
+  update check both say so first. A change made on a clone step is saved back here, so the two always agree.
+  Stored in `configuration/settings.json` under `Branches`; a repository left on main is not written.
 - **SSH keys**: every key in `configuration/keys`, and **Import a key** for a server: a key file, or paste it. A private
   key (OpenSSH, PEM or PuTTY `.ppk`; it asks for the key's password once to read its public key) is stored as
   `keys/<server>/imported_<type>` with its `.pub`, still protected by its own password. A public key alone is stored as
@@ -860,7 +877,7 @@ the server address and the SSH key's password, then root with the saved key.
 
 | Tool | What it does |
 |---|---|
-| **Server status** | opens a page with only the live dashboard (**Back to the tools** at the bottom, or click **Tools** in the sidebar), refreshed every 2 seconds while it is on screen: CPU (with load and cores), memory (and swap), network in/out with a graph that scales between B/s, KB/s and MB/s, uptime, emulator running and players online, disks with how full they are, the users logged in on the server (`who`), and the git branch, commit, date and last change of the emulator, Octane, Octane-Renderer (and AtomCMS), with the emulator's JAR version and the Octane / Renderer package versions. Everything is read from `/proc` in one short command per sample; nothing is installed on the server |
+| **Server status** | opens a page with only the live dashboard (**Back to the tools** at the bottom, or click **Tools** in the sidebar), refreshed every 2 seconds while it is on screen: CPU (with load and cores), memory (and swap), network in/out with a graph that scales between B/s, KB/s and MB/s, uptime, emulator running and players online, disks with how full they are, the users logged in on the server (`who`), and the git branch, commit, date and last change of the emulator, Octane, Octane-Renderer (and AtomCMS), with the emulator's JAR version and the Octane / Renderer package versions. The **Versions** panel also has an **Updates** column: when the page opens (and on **Check for updates**) every clone is fetched and the column says `up to date` or `3 new`, with the newest commit in the tooltip. Everything else is read from `/proc` in one short command per sample; nothing is installed on the server |
 | **Emulator & wired** | a live page about the emulator itself, without changing it: its CPU (% of one core and of the server), JVM memory against `-Xmx`, threads and uptime; the CPU of every wired thread (the coordinator that ticks every 50 ms, shards 0–5 that run the rooms' wired, and the heavy-rooms worker); where the emulator's CPU goes per thread group (wired, game logic, game connections, database, garbage collector, JIT, logging, RCON); and the rooms in the log's `Slow wired task: shard=, room=, took=ms` and "wired tasks waiting" warnings since the last start, with room names, slowest and total time, and the latest warnings. CPU comes from `/proc/<pid>/task/*/stat`; the full thread names from `jcmd Thread.print`, read only when new threads appear (a thread dump briefly pauses the JVM) |
 | **SSH terminal** | a command line on the server in the window, as the Tools login (root with your key): an xterm-compatible terminal (256 colours and truecolor, UTF-8, the alternate screen), so full-screen programs like `nano`, `vim` and `top` work. The terminal follows the window's size, keeps 5,000 lines of scrollback (wheel or Shift+PgUp), and selecting with the mouse + **Ctrl+Shift+C** copies; **Ctrl+Shift+V**, Shift+Insert or the middle button pastes (bracketed, so a pasted script does not run line by line); right-click has Copy / Paste / Select all / Clear scrollback; Ctrl + / − or **A− / A+** change the text size. The session keeps running while you look at other pages; `exit` ends it, **New session** starts another. Under it is the `ssh` command for an SSH client of your own (OpenSSH needs the key in OpenSSH format, PuTTY the `.ppk`) |
 | **Restart emulator** | `systemctl restart emulator` and waits until Polaris has loaded (asks first: everyone is disconnected) |
@@ -873,9 +890,10 @@ the server address and the SSH key's password, then root with the saved key.
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |
 | **Import full database** | uploads a `.sql` or `.sql.gz`, makes a safety backup (`<db>-before-import-<time>.sql.gz`), stops the emulator, recreates the database with its character set and imports (database names in `CREATE DATABASE` / `USE` lines become the hotel's), clears AtomCMS' cache, and starts the emulator, which updates the database to its version. A file that is not a SQL dump is refused before anything changes |
 | **Recover SQL password** | gives MariaDB's root a new random 32-character password (asks first) and saves it in `configuration/database/<server>/mariadb.txt`; a changed file is kept as `mariadb.txt.bak-<time>`. Changes `root@localhost` (its socket login stays) and `root@'%'` when it exists. When root cannot log in through the socket any more, MariaDB is restarted for a moment with `--skip-grant-tables --skip-networking` to change it and then started normally. Then it tests the new password over 127.0.0.1 and the socket. Without a saved file, the CMS and emulator accounts are read from AtomCMS' `.env` and the emulator's `config.ini`, so the new file is complete. The emulator and AtomCMS use their own accounts and are not affected |
+| **Check for updates** | `git fetch` of the emulator, Octane, Octane-Renderer and AtomCMS, and per clone how many commits a `git pull` would bring in, with the newest one. The commits are counted against the branch chosen in **Settings → Repository branches**, not against the branch the clone happens to be on, so a clone still on `main` while `dev` is chosen reports what `dev` has and says `main → dev`. AtomCMS has no choice and is counted against its own branch. A fetch only fills the remote branches: no file on the server is changed and the hotel keeps running. The same check runs by itself right after you log in here, and again after an update, so **Update emulator** and **Update Octane** say `3 new commit(s)` or `up to date` before you press them |
 | **Update system** | `apt-get update`, `upgrade` and `dist-upgrade` (changed configuration files are kept); says when a reboot is needed |
-| **Update emulator** | `git pull` in `/var/www/emulator` and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
-| **Update Octane** | `git pull` of Octane-Renderer and Octane, then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
+| **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
+| **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
 
 **Settings backup** (no server needed): **Export encrypted settings** writes the whole configuration directory
 (SSH keys, .ppk files, MariaDB passwords of every server) to one `.aio-settings` file, encrypted with AES-256-GCM
@@ -897,6 +915,23 @@ password or a damaged file changes nothing.
 
 ![Restart all](docs/screenshots/tools-restart-all.png)
 
+## Updating the installer itself
+
+The published program checks at startup whether a newer release of
+<https://github.com/duckietm/All-in-1-installer> is out. When there is one, it says what is new and offers
+**Update and restart**: the release file is downloaded next to the running program, the running one is renamed
+to `<name>.old`, the new one takes its place under the same name, and the program starts again. **Later** keeps
+the version you have; the question comes back at the next start. The `.old` file is removed at that next start.
+
+The check is quiet when there is nothing to do: no internet, a release that is not newer, a draft or
+pre-release, or a repository without releases all mean no question is asked. It also leaves development builds
+alone: only the self-contained single-file program (`publish-win.bat` / `publish-linux.sh`) can replace itself
+with one file, so `dotnet run` never offers an update.
+
+The version it compares is `<Version>` in `SourceCode/All-in-1 Installer.csproj` against the release's tag
+(`v1.2.0` and `1.2.0` both work). The file it downloads is the release asset for your system: the `.exe` on
+Windows, the Linux one otherwise, preferring the one whose name matches your architecture.
+
 ## Building
 
 Requires the .NET 11 SDK (see [Requirements](#requirements)).
@@ -915,6 +950,31 @@ publish-win.bat         # publish\win-x64\All-in-1 Installer.exe
 
 The installer runs on your own Windows or Linux desktop and connects to the server, so the
 server itself needs no GUI.
+
+### On GitHub
+
+`.github/workflows/build.yml` builds both single-file programs on every push to `main` and on every pull
+request, on `windows-latest` and `ubuntu-latest`, so a build that does not compile is caught before it is
+merged. Each one is kept as a workflow artifact:
+
+| File | Platform |
+|------|----------|
+| `All-in-1 Installer win-x64.exe` | Windows |
+| `All-in-1 Installer linux-x64` | Linux |
+
+Pushing a tag that starts with `v` does the same and then publishes a release with both files attached:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The tag is also the version the program reports: `-p:Version=` is set from it, so the release and the program
+inside agree. That matters, because the startup update check compares the newest release tag with the version
+of the running program — without it a released build would keep offering itself as an update. The file names
+are what that check looks for: the `.exe` on Windows, the one with `linux` in the name otherwise.
+
+**Run it by hand** from the Actions tab (`workflow_dispatch`) to get the two files without tagging anything.
 
 ## Project layout
 
@@ -957,8 +1017,10 @@ SourceCode/
   App/Professional/Views/FinishedView.cs  Completed pages: summary, WinSCP and where the assets go; AtomCMS' web installer
   App/Professional/Views/RunPanel.cs      Progress, check list, result and live log of an install step
   App/Professional/Views/ChoiceDialog.cs  Question with described answers
+  App/Professional/Views/UpdateDialog.cs  "A new version is available" at startup, with the download
   App/Professional/Views/ProgressControls.cs    Check list and result banner
-  App/Professional/Views/LogView.cs       Console output panel
+  App/Professional/Views/LogView.cs       Console output panel, with Copy log
+  Update/AppUpdate.cs                     Checks GitHub releases at startup and replaces the program with a newer one
   Configuration/ClientConfiguration.cs    The configuration/ directory on the client
   Configuration/DatabaseCredentials.cs    Generated MariaDB passwords and their file format
   Configuration/SettingsBackup.cs         Encrypted export / import of the configuration directory
@@ -993,3 +1055,12 @@ SourceCode/
   Terminal/TerminalSession.cs             SSH shell (xterm-256color) feeding the terminal
   Remote/RemoteScript.cs                  Runs an install script as root with live output
 ```
+
+## Credits
+
+**About** in the sidebar shows the version and the same list.
+
+| | |
+|---|---|
+| **DuckieTM** | The installer, and the [All-in-1 Converter](https://github.com/duckietm/all-in-1-converter) this look and feel comes from. |
+| **Life** | The branch choice (main / dev) for the clone steps and in Settings, the update check for the hotel's repositories, and the installer's own update at startup. |
