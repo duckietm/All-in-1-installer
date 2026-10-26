@@ -1,10 +1,7 @@
 using Avalonia;
-using Avalonia.Collections;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using AllInOneInstaller.Configuration;
 using AllInOneInstaller.Remote;
@@ -17,46 +14,16 @@ public delegate Control FinishPage(string host, int sshPort, WebAccessSettings? 
     IReadOnlyList<(string Title, StepSummary Result)> steps);
 
 /// <summary>
-/// "Install New Server" asks host, account and password one at a time, logs in over SSH, switches to root (sudo
-/// when the account is not root) and installs an SSH key for root. The addons log in as root with that saved key
-/// instead. Then the install steps run.
+/// Runs install steps one after the other on the server of the login at startup. "Install New Server" starts with the
+/// SSH key step (an SSH key for root); the addons start with their own steps. Back returns to the dashboard and keeps
+/// both the login and where the wizard was.
 /// </summary>
-public sealed class ServerWizard : IAsyncDisposable
+public sealed class ServerWizard
 {
-    private sealed record Step(string Title, string Caption, string Icon, string Heading, string Help, TextBox? Input, Control? Extra = null);
-
-    // ToString is what the key list shows.
-    private sealed record KeyChoice(string Path)
-    {
-        public override string ToString()
-        {
-            string folder = System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(Path)) ?? "";
-            return Path.StartsWith(ClientConfiguration.Directory, StringComparison.Ordinal) ? $"{System.IO.Path.GetFileName(Path)}   (keys/{folder})" : Path;
-        }
-    }
-
-    private readonly TextBox _host = new() { PlaceholderText = "192.168.1.10 or hotel.example.com (add :2222 for another SSH port)" };
-    private readonly TextBox _user = new() { PlaceholderText = "root or a user with sudo rights" };
-    private readonly TextBox _password = new() { PlaceholderText = "Password of the account", PasswordChar = '•', RevealPassword = false };
-    private readonly TextBox _keyPassword = new() { PlaceholderText = "Leave empty when the key has no password", PasswordChar = '•', RevealPassword = false };
-    // Log in as root with the key the SSH key step saved, instead of account + password + SSH key step.
-    private readonly bool _keyLogin;
-    // Install New Server: log in with a password, or with your own SSH key (servers deployed with a key).
-    private readonly RadioButton _usePassword = new() { GroupName = "loginmethod", Content = "Password", IsChecked = true };
-    private readonly RadioButton _useKey = new() { GroupName = "loginmethod", Content = "My own SSH key (the server was set up with a key)" };
-    private readonly ComboBox _keyChoice = new() { MinWidth = 520 };
-    private readonly Button _browseKey = new() { Content = "Browse ...", Padding = new Thickness(14, 7), Classes = { "secondary" } };
-    private readonly TextBlock _credentialsHeading = Text("Password", 19, weight: FontWeight.SemiBold);
-    private readonly TextBlock _credentialsHelp = Text("", 13, "Pro.Muted");
-    private readonly ContentControl _credentials = new();
-    private Control? _passwordPanel, _keyPanel;
-    private bool UseKey => _keyLogin || _useKey.IsChecked == true;
-    // The question with the password or the key: third for Install New Server, second for the key-login wizards.
-    private int CredentialsIndex => _keyLogin ? 1 : 2;
-    // The key list follows the server until you pick a key yourself.
-    private bool _keyPickedByUser, _settingKeys;
-    private readonly Step[] _steps;
-    private readonly Control[] _questions;
+    private readonly Func<ServerConnection?> _session;
+    // The login this wizard's progress belongs to; a new login starts it over.
+    private ServerConnection? _startedFor;
+    private readonly bool _hasKeyStep;
     private int _index;
 
     // Steps in Auto columns, the lines between them in star columns, so the row shrinks to the card width.
@@ -64,12 +31,13 @@ public sealed class ServerWizard : IAsyncDisposable
     private bool _compactStepper;
     private readonly ContentControl _body = new();
     private readonly TextBlock _validation = Text("", 12.5, "Pro.ErrorText");
-    private readonly Button _back = new() { Content = "Back", Padding = new Thickness(18, 9), Classes = { "secondary" } };
     private readonly Button _next = new() { Padding = new Thickness(22, 9), Classes = { "primary" } };
-    private readonly Button _disconnect = new() { Content = "Disconnect", Padding = new Thickness(18, 9), Classes = { "secondary" } };
+    // Leaves the wizard for the dashboard; the login stays open and the wizard keeps its place.
+    private readonly Button _leave = new() { Content = "Back", Padding = new Thickness(18, 9), Classes = { "secondary" } };
     private readonly Button _abort = new() { Content = "Abort", Padding = new Thickness(18, 9), Classes = { "secondary" } };
     private readonly Button _anotherKey = new() { Content = "Install another key", Padding = new Thickness(18, 9), Classes = { "secondary" } };
     private readonly Button _skip = new() { Content = "Skip", Padding = new Thickness(18, 9), Classes = { "secondary" } };
+    private readonly Button _login = new() { Content = "Log in", Padding = new Thickness(22, 9), Classes = { "primary" } };
     // What the check found when the step opened: already installed means Skip is the main action.
     private bool _keyAlreadyInstalled;
     private readonly Button _continue = new() { Padding = new Thickness(22, 9), Classes = { "primary" } };
@@ -77,13 +45,7 @@ public sealed class ServerWizard : IAsyncDisposable
     private Control? _finishView;
     private string? _siteUrl;
     private readonly StackPanel _buttons = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-
-    private readonly AvaloniaList<string> _logLines = [];
-    private readonly LogView _log;
-    private readonly ProgressBar _progress = new() { IsIndeterminate = true, Height = 3, MinHeight = 3, Foreground = Solid(Brand) };
-    private readonly CheckList _checks = new("Log in over SSH", "Check operating system", "Switch to root");
-    private readonly ResultBanner _result = new();
-    private readonly Control _connectBody;
+    private readonly Control _notConnected;
 
     private readonly SshKeyStep _keyStep = new();
     private KeyStepOutcome? _keyOutcome;
@@ -112,87 +74,47 @@ public sealed class ServerWizard : IAsyncDisposable
     private readonly bool[] _installAlreadyDone;
 
     public Control View { get; }
-    public ServerConnection? Connection { get; private set; }
+    /// <summary>The login at startup while it is connected.</summary>
+    public ServerConnection? Connection => _session() is { IsConnected: true } connection ? connection : null;
     public bool IsBusy { get; private set; }
     public string StatusMessage { get; private set; } = "Ready.";
     public event Action? StateChanged;
-    /// <summary>The user left the installation (Abort after an aborted run); the window shows the dashboard.</summary>
+    /// <summary>Back, or Abort after an aborted run: the window shows the dashboard.</summary>
     public event Action? Exited;
+    /// <summary>"Log in" while there is no login: the window opens the login.</summary>
+    public event Action? LoginRequested;
 
-    private int ConnectIndex => _steps.Length;
-    // With a key login there is no SSH key step.
-    private int KeyIndex => _keyLogin ? -1 : _steps.Length + 1;
-    private bool OnConnectStep => _index == ConnectIndex;
+    private int KeyIndex => _hasKeyStep ? 0 : -1;
     private bool OnKeyStep => _index == KeyIndex;
-    private int FirstInstallIndex => _steps.Length + (_keyLogin ? 1 : 2);
+    private int FirstInstallIndex => _hasKeyStep ? 1 : 0;
     private bool OnInstallStep => _index >= FirstInstallIndex && _index < FirstInstallIndex + _installSteps.Length;
     private int FinishIndex => FirstInstallIndex + _installSteps.Length;
     private bool OnFinishStep => _index == FinishIndex;
     // Only meaningful while OnInstallStep.
     private int InstallStepIndex => _index - FirstInstallIndex;
-    private bool OnQuestion => _index < _steps.Length;
 
-    public ServerWizard() : this(ServerSteps(), FinishedView.Build, "Upload assets", keyLogin: false)
+    /// <summary>Install New Server: the SSH key step, then the full installation.</summary>
+    public ServerWizard(Func<ServerConnection?> session) : this(session, ServerSteps(), FinishedView.Build, "Upload assets", keyStep: true)
     {
     }
 
-    public ServerWizard(InstallStep[] installSteps, FinishPage finishPage, string finishCaption, bool keyLogin,
+    public ServerWizard(Func<ServerConnection?> session, InstallStep[] installSteps, FinishPage finishPage, string finishCaption, bool keyStep,
         string finishTitle = "Completed")
     {
+        _session = session;
         _finishTitle = finishTitle;
         _installSteps = installSteps;
         _finishPage = finishPage;
         _finishCaption = finishCaption;
-        _keyLogin = keyLogin;
-        _steps = keyLogin ?
-        [
-            new("Server", "IP / Hostname", Icons.Server, "Server IP / Hostname",
-                "The server you installed with Install New Server (with :port for another SSH port). The installer logs in as root with your SSH key.", _host),
-            new("Key", "Your SSH key", Icons.Key, "Your SSH key", "", _keyPassword)
-        ] :
-        [
-            new("Server", "IP / Hostname", Icons.Server, "Server IP / Hostname",
-                "The address of the Ubuntu Server or Debian machine. SSH must be reachable (port 22 unless you add another one).", _host),
-            new("Account", "User & login", Icons.Account, "User account and login",
-                "How do you log in to this server? With a password, or with your own SSH key when the server was deployed with one (no password needed). " +
-                "When the account is not root, the installer switches to root with sudo.", _user, LoginMethodChoice()),
-            new("Password", "Login password", Icons.Key, "Password", "", _password)
-        ];
-        // Built once: a TextBox can only have one parent, so the panels are reused when the user steps back.
-        _questions = _steps.Select((step, i) => i == (keyLogin ? 1 : 2) ? BuildCredentialsQuestion() : BuildQuestion(step)).ToArray();
-        UpdateLoginMethod();
-        _usePassword.IsCheckedChanged += (_, _) => UpdateLoginMethod();
-        _useKey.IsCheckedChanged += (_, _) => UpdateLoginMethod();
-        _browseKey.Click += async (_, _) => await BrowseKeyAsync();
-        _log = new LogView(_logLines) { Height = 220 };
-        _connectBody = BuildConnectBody();
+        _hasKeyStep = keyStep;
+        _notConnected = BuildNotConnected();
 
-        _keyChoice.SelectionChanged += (_, _) =>
-        {
-            _validation.Text = "";
-            if (!_settingKeys) _keyPickedByUser = true;
-        };
-        foreach (TextBox box in new[] { _host, _user, _password, _keyPassword })
-        {
-            box.FontSize = 14;
-            box.Padding = new Thickness(12, 9);
-            box.KeyDown += async (_, e) =>
-            {
-                if (e.Key != Key.Enter) return;
-                e.Handled = true;
-                await NextAsync();
-            };
-            box.TextChanged += (_, _) => _validation.Text = "";
-        }
-        _back.Click += (_, _) => Back();
         _next.Click += async (_, _) => await NextAsync();
-        _disconnect.Click += async (_, _) =>
+        _leave.Click += (_, _) =>
         {
-            if (IsBusy) return;
-            await DisconnectAsync();
-            _index = 0;
-            Render();
+            if (!IsBusy) Exited?.Invoke();
         };
+        _login.Click += (_, _) => LoginRequested?.Invoke();
         _keyStep.Status += SetStatus;
         _installOutcomes = new StepOutcome?[_installSteps.Length];
         _installAlreadyDone = new bool[_installSteps.Length];
@@ -216,16 +138,9 @@ public sealed class ServerWizard : IAsyncDisposable
             {
                 int i = InstallStepIndex;
                 _installOutcomes[i] = StepOutcome.Skipped;
-                if (i + 1 < _installSteps.Length)
-                {
-                    SetStatus($"{_installSteps[i].Title} step skipped.");
-                    await EnterInstallStepAsync(i + 1);
-                }
-                else
-                {
-                    SetStatus($"{_installSteps[i].Title} step skipped.");
-                    await EnterFinishAsync();
-                }
+                SetStatus($"{_installSteps[i].Title} step skipped.");
+                if (i + 1 < _installSteps.Length) await EnterInstallStepAsync(i + 1);
+                else await EnterFinishAsync();
             }
         };
         _openSite.Click += async (_, _) =>
@@ -238,17 +153,11 @@ public sealed class ServerWizard : IAsyncDisposable
             if (IsBusy || Connection is null) return;
             await EnterKeyStepAsync();
         };
-        _abort.Click += async (_, _) =>
+        _abort.Click += (_, _) =>
         {
             if (IsBusy) return;
-            await DisconnectAsync();
-            // Start clean next time; the passwords are not kept.
-            _password.Text = "";
-            _keyPassword.Text = "";
-            _keyOutcome = null;
-            Array.Clear(_installOutcomes);
-            _index = 0;
-            Render();
+            // Start over next time; the login stays.
+            _startedFor = null;
             SetStatus("Installation aborted.");
             Exited?.Invoke();
         };
@@ -267,8 +176,7 @@ public sealed class ServerWizard : IAsyncDisposable
         // When the captions of all steps do not fit (about 115 px each), only the current step keeps its caption.
         View.SizeChanged += (_, e) =>
         {
-            int count = FirstInstallIndex + _installSteps.Length + 1;
-            bool compact = e.NewSize.Width < count * 115;
+            bool compact = e.NewSize.Width < (FinishIndex + 1) * 115;
             if (compact == _compactStepper) return;
             _compactStepper = compact;
             RenderStepper();
@@ -277,111 +185,47 @@ public sealed class ServerWizard : IAsyncDisposable
         Render();
     }
 
-    /// <summary>Fills in the default server and key from Settings while nothing is typed yet. Called each time the page is shown.</summary>
-    public void ApplySettings()
+    /// <summary>
+    /// Called each time the page is shown: asks for a login when there is none, starts the first step for a new
+    /// login, or shows the step where the wizard was.
+    /// </summary>
+    public async Task OpenAsync()
     {
-        if (IsBusy || Connection is not null || _index > ConnectIndex) return;
-        InstallerSettings settings = InstallerSettings.Load();
-        if (string.IsNullOrWhiteSpace(_host.Text) && settings.DefaultServer is { Length: > 0 } server) _host.Text = server;
-        // With a default key, the key is the likely way in. Both buttons are set because radio groups only
-        // switch each other while they are on screen.
-        if (!_keyLogin && settings.DefaultKeyPath is not null && string.IsNullOrEmpty(_password.Text))
+        if (IsBusy) return;
+        ServerConnection? connection = Connection;
+        if (connection is null)
         {
-            _usePassword.IsChecked = false;
-            _useKey.IsChecked = true;
+            Render();
+            return;
         }
-        UpdateLoginMethod();
+        if (ReferenceEquals(_startedFor, connection))
+        {
+            Render();
+            return;
+        }
+        _startedFor = connection;
+        _keyOutcome = null;
+        _finishView = null;
+        Array.Clear(_installOutcomes);
+        Array.Clear(_installFailed);
+        Array.Clear(_installAlreadyDone);
+        await StartAsync();
     }
+
+    private Task StartAsync() =>
+        _hasKeyStep ? EnterKeyStepAsync() : _installSteps.Length > 0 ? EnterInstallStepAsync(0) : EnterFinishAsync();
 
     public void FocusCurrentStep() =>
         Dispatcher.UIThread.Post(() =>
         {
-            if (OnQuestion) _steps[_index].Input?.Focus();
-            else if (OnKeyStep && !_keyStep.ShowingRun) _keyStep.FocusInput();
+            if (OnKeyStep && !_keyStep.ShowingRun) _keyStep.FocusInput();
         }, DispatcherPriority.Background);
-
-    private void Back()
-    {
-        if (IsBusy || _index == 0 || _index > ConnectIndex) return;
-        _index--;
-        Render();
-    }
 
     private async Task NextAsync()
     {
         if (IsBusy) return;
-        if (OnConnectStep)
-        {
-            if (Connection is null)
-            {
-                // "Try again" after a failure starts over from the first question.
-                _index = 0;
-                Render();
-                return;
-            }
-            if (!_keyLogin) await EnterKeyStepAsync();
-            else if (_installSteps.Length > 0) await EnterInstallStepAsync(0);
-            // No install steps (Tools): the last page is the workspace.
-            else await EnterFinishAsync();
-            return;
-        }
-        if (OnKeyStep)
-        {
-            await KeyStepNextAsync();
-            return;
-        }
-        if (OnInstallStep)
-        {
-            await InstallStepNextAsync();
-            return;
-        }
-
-        string? error = Validate(_index);
-        if (error is not null)
-        {
-            _validation.Text = error;
-            _steps[_index].Input?.Focus();
-            return;
-        }
-
-        _index++;
-        Render();
-        if (OnConnectStep) await ConnectAsync();
-    }
-
-    private string? Validate(int index)
-    {
-        TextBox? input = _steps[index].Input;
-        if (input == _host)
-        {
-            if (string.IsNullOrWhiteSpace(_host.Text)) return "Enter the server IP address or hostname.";
-            (string host, int port) = ServerLogin.ParseHost(_host.Text);
-            if (host.Length == 0 || host.Any(char.IsWhiteSpace)) return "That is not a valid IP address or hostname.";
-            if (port is < 1 or > 65535) return "The SSH port must be between 1 and 65535.";
-            if (Uri.CheckHostName(host) == UriHostNameType.Unknown) return "That is not a valid IP address or hostname.";
-            return null;
-        }
-        if (input == _user)
-        {
-            string user = _user.Text?.Trim() ?? "";
-            if (user.Length == 0) return "Enter the user account to log in with.";
-            if (user.Any(c => char.IsWhiteSpace(c) || c == ':' || c == '@')) return "A user name cannot contain spaces, ':' or '@'.";
-            return null;
-        }
-        if (input == _password) return string.IsNullOrEmpty(_password.Text) ? "Enter the password." : null;
-        if (input == _keyPassword && UseKey)
-        {
-            if (_keyChoice.SelectedItem is not KeyChoice key) return "Choose your private key, or Browse for it.";
-            try
-            {
-                SshKeys.PublicKeyOf(File.ReadAllText(key.Path), _keyPassword.Text ?? "", "");
-            }
-            catch (Exception ex) when (ex is SshKeys.KeyPasswordException or FormatException or IOException or UnauthorizedAccessException)
-            {
-                return ex.Message;
-            }
-        }
-        return null;
+        if (OnKeyStep) await KeyStepNextAsync();
+        else if (OnInstallStep) await InstallStepNextAsync();
     }
 
     private void Render()
@@ -390,10 +234,10 @@ public sealed class ServerWizard : IAsyncDisposable
         RenderStepper();
         _buttons.Children.Clear();
 
-        if (OnConnectStep)
+        if (Connection is null && !IsBusy)
         {
-            _body.Content = _connectBody;
-            UpdateConnectButtons();
+            _body.Content = _notConnected;
+            _buttons.Children.Add(_login);
             return;
         }
         if (OnKeyStep)
@@ -414,40 +258,53 @@ public sealed class ServerWizard : IAsyncDisposable
             _body.Content = _finishView;
             if (!IsBusy)
             {
-                _buttons.Children.Add(_disconnect);
+                _buttons.Children.Add(_leave);
                 if (_siteUrl is not null)
                 {
                     _openSite.Content = $"Open {_siteUrl}";
                     _buttons.Children.Add(_openSite);
                 }
             }
-            return;
         }
+    }
 
-        // The key list follows the server typed on the first page.
-        if (_index == CredentialsIndex && UseKey) RefreshKeyChoices();
-        _body.Content = _questions[_index];
-        if (_index > 0) _buttons.Children.Add(_back);
-        _next.Content = _index == _steps.Length - 1 ? "Connect" : "Next";
-        _next.IsEnabled = true;
-        _buttons.Children.Add(_next);
-        FocusCurrentStep();
+    private static Control BuildNotConnected()
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 18 };
+        var icon = Icon(Icons.Server, 22);
+        icon.Foreground = Solid(Brand);
+        grid.Children.Add(new Border
+        {
+            Width = 46,
+            Height = 46,
+            CornerRadius = new CornerRadius(12),
+            VerticalAlignment = VerticalAlignment.Top,
+            Background = Solid(Color.FromArgb(0x26, Brand.R, Brand.G, Brand.B)),
+            Child = icon
+        });
+        var panel = new StackPanel { Spacing = 8, MaxWidth = 620, HorizontalAlignment = HorizontalAlignment.Left };
+        panel.Children.Add(Text("Not connected", 19, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("Log in to the server first. The login is used for everything (installing, the addons and the tools) " +
+                                "and stays open until you close the program.", 13, "Pro.Muted"));
+        Grid.SetColumn(panel, 1);
+        grid.Children.Add(panel);
+        return grid;
     }
 
     private void RenderStepper()
     {
         _stepper.Children.Clear();
         _stepper.ColumnDefinitions.Clear();
-        var titles = _steps.Select(s => (s.Title, s.Caption))
-            .Append((Title: "Connect", Caption: _keyLogin ? "Root with SSH key" : "Login & root"))
-            .Concat(_keyLogin ? [] : [(Title: "SSH key", Caption: "authorized_keys")])
+        var titles = (_hasKeyStep ? [(Title: "SSH key", Caption: "authorized_keys")] : Array.Empty<(string Title, string Caption)>())
             .Concat(_installSteps.Select(s => (s.Title, s.Caption)))
             .Append((Title: _finishTitle, Caption: _finishCaption))
             .ToArray();
+        // Without a login nothing has started yet.
+        int index = Connection is null && !IsBusy ? -1 : _index;
         for (int i = 0; i < titles.Length; i++)
         {
-            bool done = i < _index;
-            bool current = i == _index;
+            bool done = i < index;
+            bool current = i == index;
             var number = new Border
             {
                 Width = 30,
@@ -494,170 +351,6 @@ public sealed class ServerWizard : IAsyncDisposable
         }
     }
 
-    private static Control BuildQuestion(Step step)
-    {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 18 };
-        var icon = Icon(step.Icon, 22);
-        icon.Foreground = Solid(Brand);
-        grid.Children.Add(new Border
-        {
-            Width = 46,
-            Height = 46,
-            CornerRadius = new CornerRadius(12),
-            VerticalAlignment = VerticalAlignment.Top,
-            Background = Solid(Color.FromArgb(0x26, Brand.R, Brand.G, Brand.B)),
-            Child = icon
-        });
-        var panel = new StackPanel { Spacing = 8, MaxWidth = 620, HorizontalAlignment = HorizontalAlignment.Left };
-        panel.Children.Add(Text(step.Heading, 19, weight: FontWeight.SemiBold));
-        panel.Children.Add(Text(step.Help, 13, "Pro.Muted"));
-        if (step.Extra is not null) panel.Children.Add(step.Extra);
-        if (step.Input is not null)
-        {
-            step.Input.Margin = new Thickness(0, 8, 0, 0);
-            panel.Children.Add(step.Input);
-        }
-        Grid.SetColumn(panel, 1);
-        grid.Children.Add(panel);
-        return grid;
-    }
-
-    private Control LoginMethodChoice()
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18, Margin = new Thickness(0, 6, 0, 0) };
-        row.Children.Add(_usePassword);
-        row.Children.Add(_useKey);
-        return row;
-    }
-
-    // The third question: the password, or the SSH key and its password, depending on the login method.
-    private Control BuildCredentialsQuestion()
-    {
-        _password.Margin = new Thickness(0, 8, 0, 0);
-        _passwordPanel = _password;
-        var keyRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
-        keyRow.Children.Add(_keyChoice);
-        keyRow.Children.Add(_browseKey);
-        var keyPanel = new StackPanel { Spacing = 8 };
-        keyPanel.Children.Add(keyRow);
-        keyPanel.Children.Add(Text("Password of the key (empty when it has none)", 12, "Pro.Muted", FontWeight.SemiBold));
-        keyPanel.Children.Add(_keyPassword);
-        _keyPanel = keyPanel;
-
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 18 };
-        var icon = Icon(Icons.Key, 22);
-        icon.Foreground = Solid(Brand);
-        grid.Children.Add(new Border
-        {
-            Width = 46,
-            Height = 46,
-            CornerRadius = new CornerRadius(12),
-            VerticalAlignment = VerticalAlignment.Top,
-            Background = Solid(Color.FromArgb(0x26, Brand.R, Brand.G, Brand.B)),
-            Child = icon
-        });
-        var panel = new StackPanel { Spacing = 8, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
-        panel.Children.Add(_credentialsHeading);
-        panel.Children.Add(_credentialsHelp);
-        panel.Children.Add(_credentials);
-        Grid.SetColumn(panel, 1);
-        grid.Children.Add(panel);
-        return grid;
-    }
-
-    private void UpdateLoginMethod()
-    {
-        int i = CredentialsIndex;
-        if (UseKey)
-        {
-            _steps[i] = _steps[i] with { Title = _keyLogin ? "Key" : "SSH key", Caption = "Your private key", Input = _keyPassword };
-            _credentialsHeading.Text = "Your SSH key";
-            _credentialsHelp.Text = (_keyLogin ? "The private key to log in as root. " : "The private key whose public key is on the server (for this account). ") +
-                                    "All keys in configuration/keys are listed (the SSH key step and Settings put them there): the default key from Settings, " +
-                                    "or else one in the folder of this server, is selected. Browse picks another file (OpenSSH, PEM or PuTTY .ppk). It never leaves this computer.";
-            _credentials.Content = _keyPanel;
-            RefreshKeyChoices();
-        }
-        else
-        {
-            _steps[i] = _steps[i] with { Title = "Password", Caption = "Login password", Input = _password };
-            _credentialsHeading.Text = "Password";
-            _credentialsHelp.Text = "Used for the SSH login and, for a non-root account, for sudo. It is only kept in memory while the installer runs.";
-            _credentials.Content = _passwordPanel;
-        }
-        RenderStepper();
-    }
-
-    // Keeps a browsed key in the list.
-    private readonly List<string> _browsedKeys = [];
-
-    // Selects, in order: the key you picked, the default key from Settings, a key in a folder named after the
-    // server (keys/192.168.0.8, or keys/Server-192.168.0.8), the newest key.
-    private void RefreshKeyChoices()
-    {
-        string? picked = _keyPickedByUser ? (_keyChoice.SelectedItem as KeyChoice)?.Path : null;
-        string? preset = InstallerSettings.Load().DefaultKeyPath;
-        var paths = _browsedKeys.Concat(ClientConfiguration.AllPrivateKeys()).Distinct().ToList();
-        if (preset is not null && !paths.Contains(preset)) paths.Insert(0, preset);
-
-        string host = ServerLogin.ParseHost(_host.Text ?? "").Host;
-        string Folder(string path) => Path.GetFileName(Path.GetDirectoryName(path)) ?? "";
-        string? forHost = host.Length == 0 ? null
-            : paths.FirstOrDefault(p => Folder(p).Equals(host, StringComparison.OrdinalIgnoreCase))
-              ?? paths.FirstOrDefault(p => Folder(p).Contains(host, StringComparison.OrdinalIgnoreCase));
-
-        var items = paths.Select(p => new KeyChoice(p)).ToList();
-        string? choose = picked ?? preset ?? forHost;
-        _settingKeys = true;
-        _keyChoice.ItemsSource = items;
-        _keyChoice.SelectedItem = items.FirstOrDefault(k => k.Path == choose) ?? items.FirstOrDefault();
-        _settingKeys = false;
-        _keyChoice.PlaceholderText = items.Count == 0 ? "No keys in configuration/keys: Browse for your private key" : null;
-    }
-
-    private async Task BrowseKeyAsync()
-    {
-        if (TopLevel.GetTopLevel(View) is not { } top) return;
-        var options = new FilePickerOpenOptions { Title = "Select your private SSH key", AllowMultiple = false };
-        string sshFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh");
-        if (Directory.Exists(sshFolder)) options.SuggestedStartLocation = await top.StorageProvider.TryGetFolderFromPathAsync(sshFolder);
-        IReadOnlyList<IStorageFile> files = await top.StorageProvider.OpenFilePickerAsync(options);
-        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path) return;
-        _browsedKeys.Remove(path);
-        _browsedKeys.Insert(0, path);
-        RefreshKeyChoices();
-        _keyChoice.SelectedItem = (_keyChoice.ItemsSource as IEnumerable<KeyChoice>)?.FirstOrDefault(k => k.Path == path);
-        _keyPickedByUser = true;
-    }
-
-    private Control BuildConnectBody()
-    {
-        var panel = new StackPanel { Spacing = 14 };
-        panel.Children.Add(_progress);
-        panel.Children.Add(_checks);
-        panel.Children.Add(_result);
-        panel.Children.Add(_log);
-        return panel;
-    }
-
-    private void UpdateConnectButtons()
-    {
-        _buttons.Children.Clear();
-        _progress.IsVisible = IsBusy;
-        if (IsBusy) return;
-        if (Connection is null)
-        {
-            _buttons.Children.Add(_back);
-            _next.Content = "Try again";
-        }
-        else
-        {
-            _buttons.Children.Add(_disconnect);
-            _next.Content = !_keyLogin ? "Next: SSH key" : _installSteps.Length > 0 ? $"Next: {_installSteps[0].Title}" : $"Next: {_finishTitle}";
-        }
-        _buttons.Children.Add(_next);
-    }
-
     private void UpdateKeyButtons()
     {
         _buttons.Children.Clear();
@@ -666,16 +359,16 @@ public sealed class ServerWizard : IAsyncDisposable
         switch (_keyOutcome)
         {
             case null:
-                _buttons.Children.Add(_disconnect);
+                _buttons.Children.Add(_leave);
                 AddInstallOrSkip(_keyAlreadyInstalled ? "Install another key" : "Install key", _keyAlreadyInstalled);
                 return;
             case KeyStepOutcome.Installed:
-                _buttons.Children.Add(_disconnect);
+                _buttons.Children.Add(_leave);
                 _buttons.Children.Add(_anotherKey);
                 _next.Content = $"Next: {_installSteps[0].Title}";
                 break;
             case KeyStepOutcome.Failed:
-                _buttons.Children.Add(_disconnect);
+                _buttons.Children.Add(_leave);
                 _next.Content = "Try again";
                 break;
             case KeyStepOutcome.Aborted:
@@ -688,9 +381,8 @@ public sealed class ServerWizard : IAsyncDisposable
 
     private async Task KeyStepNextAsync()
     {
-        if (_keyOutcome is KeyStepOutcome.Aborted || Connection is null)
+        if (Connection is not { } connection)
         {
-            _index = 0;
             Render();
             return;
         }
@@ -701,7 +393,7 @@ public sealed class ServerWizard : IAsyncDisposable
         }
         if (_keyOutcome is not null)
         {
-            // "Try again": back to the choices, with a fresh look at the server.
+            // "Try again" or "Start over": back to the choices, with a fresh look at the server.
             await EnterKeyStepAsync();
             return;
         }
@@ -720,12 +412,8 @@ public sealed class ServerWizard : IAsyncDisposable
         StateChanged?.Invoke();
         try
         {
-            _keyOutcome = await _keyStep.RunAsync(Connection, owner);
-            if (_keyOutcome == KeyStepOutcome.Aborted)
-            {
-                await DisconnectAsync();
-                SetStatus("Installation aborted. Nothing was changed on the server.");
-            }
+            _keyOutcome = await _keyStep.RunAsync(connection, owner);
+            if (_keyOutcome == KeyStepOutcome.Aborted) SetStatus("Installation aborted. Nothing was changed on the server.");
         }
         finally
         {
@@ -763,21 +451,21 @@ public sealed class ServerWizard : IAsyncDisposable
 
     private async Task EnterKeyStepAsync()
     {
-        if (Connection is null) return;
+        if (Connection is not { } connection) return;
         _index = KeyIndex;
         _keyOutcome = null;
-        _keyStep.ShowOptions(Connection.Login.Host);
-        await CheckAsync("Checking the installed SSH keys ...", () => _keyStep.DetectAsync(Connection), found => _keyAlreadyInstalled = found);
+        _keyStep.ShowOptions(connection.Login.Host);
+        await CheckAsync("Checking the installed SSH keys ...", () => _keyStep.DetectAsync(connection), found => _keyAlreadyInstalled = found);
     }
 
     private async Task EnterInstallStepAsync(int i)
     {
-        if (Connection is null) return;
+        if (Connection is not { } connection) return;
         InstallStep step = _installSteps[i];
         _index = FirstInstallIndex + i;
         _installOutcomes[i] = null;
         step.ShowIntro();
-        await CheckAsync($"Checking {step.Title} on the server ...", () => step.DetectAsync(Connection), found => _installAlreadyDone[i] = found);
+        await CheckAsync($"Checking {step.Title} on the server ...", () => step.DetectAsync(connection), found => _installAlreadyDone[i] = found);
     }
 
     // Title plus caption when another step shares the title (Octane clone / build).
@@ -786,8 +474,7 @@ public sealed class ServerWizard : IAsyncDisposable
 
     private async Task EnterFinishAsync()
     {
-        if (Connection is null) return;
-        ServerConnection connection = Connection;
+        if (Connection is not { } connection) return;
         _index = FinishIndex;
         _finishView = null;
         IsBusy = true;
@@ -803,7 +490,7 @@ public sealed class ServerWizard : IAsyncDisposable
                 : null;
 
             var steps = new List<(string, StepSummary)>();
-            if (!_keyLogin)
+            if (_hasKeyStep)
                 steps.Add(("SSH key", _keyOutcome == KeyStepOutcome.Installed ? StepSummary.Done
                     : _keyAlreadyInstalled ? StepSummary.AlreadyInstalled
                     : _keyOutcome == KeyStepOutcome.Failed ? StepSummary.Failed : StepSummary.Skipped));
@@ -817,7 +504,12 @@ public sealed class ServerWizard : IAsyncDisposable
                     _ => StepSummary.NotRun
                 }));
             _finishView = _finishPage(host, connection.Login.Port, web.Configured, ppk, steps);
-            SetStatus(_installSteps.Length > 0 ? "Installation completed." : "Ready.");
+            SetStatus("Installation completed.");
+        }
+        catch (Exception ex)
+        {
+            _finishView = Text($"Collecting the summary failed: {(ex is ServerConnectionException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}")}", 13, "Pro.ErrorText");
+            SetStatus("Collecting the summary failed.");
         }
         finally
         {
@@ -856,7 +548,7 @@ public sealed class ServerWizard : IAsyncDisposable
         bool hasNext = i + 1 < _installSteps.Length;
         _continue.Content = hasNext ? $"Next: {_installSteps[i + 1].Title}" : "Finish";
         SetPrimary(_next, true);
-        _buttons.Children.Add(_installOutcomes[i] == StepOutcome.Aborted ? _abort : _disconnect);
+        _buttons.Children.Add(_installOutcomes[i] == StepOutcome.Aborted ? _abort : _leave);
         switch (_installOutcomes[i])
         {
             case null:
@@ -889,10 +581,14 @@ public sealed class ServerWizard : IAsyncDisposable
     private async Task InstallStepNextAsync()
     {
         int i = InstallStepIndex;
-        if (_installOutcomes[i] is StepOutcome.Aborted || Connection is null)
+        if (Connection is not { } connection)
         {
-            _index = 0;
             Render();
+            return;
+        }
+        if (_installOutcomes[i] is StepOutcome.Aborted)
+        {
+            await StartAsync();
             return;
         }
         if (TopLevel.GetTopLevel(View) is not Window owner) return;
@@ -908,13 +604,9 @@ public sealed class ServerWizard : IAsyncDisposable
         StateChanged?.Invoke();
         try
         {
-            _installOutcomes[i] = await _installSteps[i].RunAsync(Connection, owner);
+            _installOutcomes[i] = await _installSteps[i].RunAsync(connection, owner);
             _installFailed[i] = _installOutcomes[i] == StepOutcome.Failed;
-            if (_installOutcomes[i] == StepOutcome.Aborted)
-            {
-                await DisconnectAsync();
-                SetStatus("Installation aborted. Nothing was changed on the server.");
-            }
+            if (_installOutcomes[i] == StepOutcome.Aborted) SetStatus("Installation aborted. Nothing was changed on the server.");
         }
         finally
         {
@@ -925,104 +617,9 @@ public sealed class ServerWizard : IAsyncDisposable
         }
     }
 
-    private async Task ConnectAsync()
-    {
-        (string host, int port) = ServerLogin.ParseHost(_host.Text ?? "");
-        var login = _keyLogin
-            ? new ServerLogin(host, port, "root", "", [((KeyChoice)_keyChoice.SelectedItem!).Path], _keyPassword.Text ?? "")
-            : UseKey
-                ? new ServerLogin(host, port, _user.Text!.Trim(), "", [((KeyChoice)_keyChoice.SelectedItem!).Path], _keyPassword.Text ?? "")
-                : new ServerLogin(host, port, _user.Text!.Trim(), _password.Text ?? "");
-
-        IsBusy = true;
-        _logLines.Clear();
-        _log.ResetFollow();
-        _result.Hide();
-        _checks.Reset();
-        int stage = 0;
-        UpdateConnectButtons();
-        SetStatus($"Connecting to {host}:{port} ...");
-
-        void Log(string line) => Dispatcher.UIThread.Post(() =>
-        {
-            _logLines.Add(line);
-            _log.FollowOutput();
-        });
-        void Stage(ConnectStage reached) => Dispatcher.UIThread.Post(() =>
-        {
-            if ((int)reached <= stage) return;
-            stage = (int)reached;
-            _checks.Update(stage, failed: false);
-        });
-
-        try
-        {
-            // SSH.NET does blocking work while connecting; keep it off the UI thread.
-            Connection = await Task.Run(() => ServerConnection.ConnectAsync(login, Log, Stage));
-            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            _checks.SetDetail(0, $"{Connection.LoginUser}@{host}:{port}");
-            _checks.SetDetail(1, Connection.Os?.PrettyName ?? "");
-            _checks.SetDetail(2, login.UsesKey ? "SSH key" : Connection.LoginUser == "root" ? "logged in as root" : "through sudo");
-            stage = _checks.Count;
-            _checks.Update(stage, failed: false);
-            _result.Show(ResultKind.Success, $"Connected to {host} as root",
-                _keyLogin ? $"{Connection.Os?.PrettyName}, logged in with the saved SSH key." : $"{Connection.Os?.PrettyName}. Next, install an SSH key for root.");
-            SetStatus($"Connected to {host} as root.");
-        }
-        catch (Exception ex)
-        {
-            string message = ex is ServerConnectionException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
-            // Log lines and stages are posted; let them land before the failed stage is painted.
-            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            _logLines.Add("! " + message);
-            _log.FollowOutput();
-            _checks.Update(stage, failed: true);
-            _result.Show(ResultKind.Error, "Connection failed", message);
-            SetStatus("Connection failed.");
-        }
-        finally
-        {
-            IsBusy = false;
-            UpdateConnectButtons();
-            StateChanged?.Invoke();
-        }
-    }
-
-    private async Task DisconnectAsync()
-    {
-        if (Connection is null) return;
-        string host = Connection.Login.Host;
-        await Connection.DisposeAsync();
-        Connection = null;
-        SetStatus($"Disconnected from {host}.");
-    }
-
-    /// <summary>Disconnects and goes back to the first page (like the Disconnect button), for a workspace outside the wizard.</summary>
-    public async Task DisconnectAndResetAsync()
-    {
-        if (IsBusy) return;
-        await DisconnectAsync();
-        _index = 0;
-        Render();
-    }
-
-    /// <summary>For a workspace on the last page (Tools): busy hides the buttons and blocks leaving the page.</summary>
-    public void SetExternalBusy(bool busy, string status)
-    {
-        IsBusy = busy;
-        Render();
-        SetStatus(status);
-    }
-
     private void SetStatus(string message)
     {
         StatusMessage = message;
         StateChanged?.Invoke();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (Connection is not null) await Connection.DisposeAsync();
-        Connection = null;
     }
 }

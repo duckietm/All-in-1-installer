@@ -27,7 +27,7 @@ public sealed class SqlEditorView : Grid
     private const string NullText = "(NULL)";
 
     private readonly Func<ServerConnection?> _connection;
-    private readonly Func<Task> _disconnect;
+    private readonly Action _back;
     private SqlSession? _session;
     private ServerConnection? _sessionFor;
     private bool _opening;
@@ -79,10 +79,11 @@ public sealed class SqlEditorView : Grid
     private readonly Button _stop = SmallButton("■ Stop");
     private CancellationTokenSource? _queryCancel;
 
-    public SqlEditorView(Func<ServerConnection?> connection, Func<Task> disconnect)
+    /// <param name="back">Back to the dashboard. The database connections stay open, like the SSH login.</param>
+    public SqlEditorView(Func<ServerConnection?> connection, Action back)
     {
         _connection = connection;
-        _disconnect = disconnect;
+        _back = back;
         RowDefinitions = new RowDefinitions("Auto,*");
         RowSpacing = 10;
         Margin = new Thickness(32, 0, 32, 18);
@@ -99,14 +100,9 @@ public sealed class SqlEditorView : Grid
         Button refresh = SmallButton("Refresh");
         refresh.Click += async (_, _) => await LoadDatabasesAsync();
         buttons.Children.Add(refresh);
-        var disconnectButton = new Button { Content = "Disconnect", Padding = new Thickness(14, 7), Classes = { "secondary" } };
-        disconnectButton.Click += async (_, _) =>
-        {
-            if (_queryCancel is not null) return;
-            await CloseSessionAsync();
-            await _disconnect();
-        };
-        buttons.Children.Add(disconnectButton);
+        var backButton = new Button { Content = "Back", Padding = new Thickness(14, 7), Classes = { "secondary" } };
+        backButton.Click += (_, _) => _back();
+        buttons.Children.Add(backButton);
         Grid.SetColumn(buttons, 1);
         bar.Children.Add(buttons);
         Children.Add(bar);

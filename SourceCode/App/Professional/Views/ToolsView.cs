@@ -26,8 +26,7 @@ public sealed class ToolsView
     private string _runTitle = "";
     private bool _running;
 
-    private readonly TextBlock _hint = Text("Log in to a server above to use these tools.", 12.5, "Pro.WarningText");
-    private readonly TextBlock _connectedText = Text("", 13);
+    private readonly Control _hint;
     // What the update check found, under the Updates tools; the captions of those tools say it per component.
     private readonly TextBlock _updates = Text("", 12, "Pro.Subtle");
     private readonly Dictionary<string, TextBlock> _toolCaptions = [];
@@ -35,8 +34,8 @@ public sealed class ToolsView
     private ServerConnection? _updatesCheckedFor;
 
     public Control Workspace { get; }
-    /// <summary>The login wizard's last page.</summary>
-    public Control Connected { get; }
+    /// <summary>"Log in" while there is no login.</summary>
+    public event Action? LoginRequested;
     public Control Settings { get; }
 
     /// <param name="busy">Marks the page busy with a status line, which hides the buttons and blocks navigation.</param>
@@ -44,12 +43,16 @@ public sealed class ToolsView
     {
         _connection = connection;
         _busy = busy;
+        var hint = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        TextBlock hintText = Text("Not connected: log in to the server to use these tools.", 12.5, "Pro.WarningText");
+        hintText.VerticalAlignment = VerticalAlignment.Center;
+        hint.Children.Add(hintText);
+        var login = new Button { Content = "Log in", Padding = new Thickness(16, 6), Classes = { "primary" } };
+        login.Click += (_, _) => LoginRequested?.Invoke();
+        hint.Children.Add(login);
+        _hint = hint;
         Workspace = BuildWorkspace();
         Settings = BuildSettings();
-        var connected = new StackPanel { Spacing = 6 };
-        connected.Children.Add(Text("Connected", 15, weight: FontWeight.SemiBold));
-        connected.Children.Add(_connectedText);
-        Connected = connected;
         Refresh();
     }
 
@@ -86,7 +89,7 @@ public sealed class ToolsView
         return Card(page, new Thickness(24, 20));
     }
 
-    /// <summary>Enables the server tools while the wizard is connected; call when its state changes.</summary>
+    /// <summary>Enables the server tools while the login is connected; call when it changes.</summary>
     public void Refresh()
     {
         ServerConnection? connection = _connection();
@@ -98,7 +101,6 @@ public sealed class ToolsView
         }
         foreach (Button button in _settingsButtons) button.IsEnabled = !_running;
         if (connection is null) return;
-        _connectedText.Text = $"Root on {connection.Login.Host}:{connection.Login.Port} ({connection.Os?.PrettyName}). Pick a tool below.";
         // Once per login, and not while a tool is busy: the Updates tools then say what is new before you press anything.
         if (_running || ReferenceEquals(_updatesCheckedFor, connection)) return;
         _updatesCheckedFor = connection;

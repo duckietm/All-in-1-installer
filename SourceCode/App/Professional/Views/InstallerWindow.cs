@@ -5,6 +5,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Input;
+using Avalonia.Threading;
 using AllInOneInstaller.Remote;
 using AllInOneInstaller.Update;
 using static AllInOneInstaller.App.Professional.ProfessionalTheme;
@@ -46,20 +48,25 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _wizard;
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _deployWizard;
-    private readonly ServerWizard _explorerWizard;
     private readonly AssetExplorerView _explorer;
-    // The explorer is shown instead of its login wizard while that is connected.
-    private bool _explorerShown;
-    private readonly ServerWizard _sqlWizard;
     private readonly SqlEditorView _sqlEditor;
-    // Like the explorer: the editor replaces its login wizard while that is connected.
-    private bool _sqlShown;
-    private readonly ServerWizard _toolsWizard;
     private readonly ToolsView _tools;
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _deployWizard, _explorerWizard, _sqlWizard, _toolsWizard];
-    private bool AnyBusy => Wizards.Any(w => w.IsBusy);
-    // The wizard on screen; the header and footer show its connection.
-    private ServerWizard Current => _page switch { Page.AtomCms => _atomWizard, Page.DeployAssets => _deployWizard, Page.AssetExplorer => _explorerWizard, Page.SqlEditor => _sqlWizard, Page.Tools or Page.ServerStatus or Page.EmulatorMonitor or Page.Terminal => _toolsWizard, _ => _wizard };
+    private bool _toolsBusy;
+    private string _statusMessage = "Ready.";
+
+    // The login at startup, shared by every page until the program closes or the server goes away.
+    private ServerConnection? _session;
+    private LoginDialog.Prefill? _lastLogin;
+    private bool _loginOpen;
+    // The connection was lost: the login opens again as soon as nothing runs any more.
+    private bool _loginPending;
+    private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
+    private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
+
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _deployWizard];
+    private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
+    // The wizard on screen, whose status line the footer shows.
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -73,37 +80,28 @@ public sealed class InstallerWindow : Window
         RequestedThemeVariant = ThemeVariant.Default;
         this.Bind(BackgroundProperty, "Pro.Surface");
 
-        _wizard = new ServerWizard();
+        _wizard = new ServerWizard(() => Session);
         var atomStep = new AtomCmsStep();
-        _atomWizard = new ServerWizard([atomStep],
+        _atomWizard = new ServerWizard(() => Session, [atomStep],
             (_, _, site, _, steps) => FinishedView.BuildAtomCms(site, atomStep.InstallationKey, atomStep.InstallationCompleted, steps),
-            "Web installer", keyLogin: true);
+            "Web installer", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
-        _deployWizard = new ServerWizard([syncStep, textsStep, emulatorAssetsStep],
+        _deployWizard = new ServerWizard(() => Session, [syncStep, textsStep, emulatorAssetsStep],
             (_, _, site, _, steps) => FinishedView.BuildDeploy(site, [syncStep.Summary, textsStep.Summary, emulatorAssetsStep.Summary], steps),
-            "Assets on the server", keyLogin: true);
-        // Asset Explorer: the wizard only logs in, then the explorer takes the page.
-        _explorerWizard = new ServerWizard([], (_, _, _, _, _) => Text("Opening the explorer ...", 13), "Asset Explorer", keyLogin: true, finishTitle: "Explorer");
-        _explorer = new AssetExplorerView(() => _explorerWizard.Connection, () => _explorerWizard.DisconnectAndResetAsync());
-        _explorerWizard.StateChanged += () => { if (_page == Page.AssetExplorer) ShowAssetExplorer(); };
-        _sqlWizard = new ServerWizard([], (_, _, _, _, _) => Text("Opening the SQL editor ...", 13), "SQL Editor", keyLogin: true, finishTitle: "Editor");
-        _sqlEditor = new SqlEditorView(() => _sqlWizard.Connection, () => _sqlWizard.DisconnectAndResetAsync());
-        _sqlWizard.StateChanged += async () =>
+            "Assets on the server", keyStep: false);
+        _explorer = new AssetExplorerView(() => Session, ShowDashboard);
+        _sqlEditor = new SqlEditorView(() => Session, ShowDashboard);
+        _tools = new ToolsView(() => Session, (busy, status) =>
         {
-            if (_sqlWizard.Connection is null) await _sqlEditor.CloseSessionAsync();
-            if (_page == Page.SqlEditor) ShowSqlEditor();
-        };
-        // No install steps: the wizard only logs in; the tools above it work while it is connected.
-        ToolsView? tools = null;
-        _toolsWizard = new ServerWizard([], (_, _, _, _, _) => tools!.Connected, "Use the tools", keyLogin: true, finishTitle: "Connected");
-        tools = new ToolsView(() => _toolsWizard.Connection, (busy, status) => _toolsWizard.SetExternalBusy(busy, status));
-        _tools = tools;
-        _toolsWizard.StateChanged += _tools.Refresh;
+            _toolsBusy = busy;
+            SetStatus(status);
+        });
         _tools.MonitorRequested += ShowMonitor;
         _tools.TerminalRequested += ShowTerminal;
         _tools.BackRequested += ShowTools;
+        _tools.LoginRequested += async () => await ShowLoginAsync();
         foreach (ServerWizard wizard in Wizards)
         {
             wizard.StateChanged += () =>
@@ -112,21 +110,107 @@ public sealed class InstallerWindow : Window
                 RefreshFooter();
             };
             wizard.Exited += ShowDashboard;
+            wizard.LoginRequested += async () => await ShowLoginAsync();
         }
         Content = BuildLayout();
         Closing += (_, e) =>
         {
             if (!AnyBusy) return;
             e.Cancel = true;
-            _status.Text = "Wait until the running step has finished before closing.";
+            SetStatus("Wait until the running step has finished before closing.");
         };
         Closed += async (_, _) =>
         {
+            _watch.Stop();
             await _sqlEditor.CloseSessionAsync();
-            foreach (ServerWizard wizard in Wizards) await wizard.DisposeAsync();
+            if (_session is not null) await _session.DisposeAsync();
+            _session = null;
         };
-        Opened += async (_, _) => await CheckForUpdateAsync();
+        // The update check first: when the installer replaces itself there is nothing to log in to.
+        Opened += async (_, _) =>
+        {
+            if (await CheckForUpdateAsync()) return;
+            await ShowLoginAsync();
+            _watch.Start();
+        };
+        _watch.Tick += async (_, _) => await WatchSessionAsync();
         ShowDashboard();
+    }
+
+    /// <summary>Opens the login (at startup, from a Log in button, or after a lost connection) and makes it the session.</summary>
+    private async Task ShowLoginAsync(string? notice = null)
+    {
+        if (_loginOpen || AnyBusy || Session is not null) return;
+        _loginOpen = true;
+        RefreshHeader();
+        try
+        {
+            ServerConnection? connection = await LoginDialog.ShowAsync(this, _lastLogin, notice);
+            if (connection is null)
+            {
+                SetStatus("Not connected. Log in with the button at the top right.");
+                return;
+            }
+            ServerConnection? old = _session;
+            _session = connection;
+            ServerLogin login = connection.Login;
+            string host = login.Port == 22 ? login.Host : login.Host.Contains(':') ? $"[{login.Host}]:{login.Port}" : $"{login.Host}:{login.Port}";
+            _lastLogin = new LoginDialog.Prefill(host, login.User, login.UsesKey, login.PrivateKeys?.FirstOrDefault());
+            if (old is not null) await old.DisposeAsync();
+            SetStatus($"Connected to {login.Host} as {(connection.LoginUser == "root" ? "root" : $"{connection.LoginUser} (root through sudo)")}.");
+            await SessionChangedAsync();
+        }
+        finally
+        {
+            _loginOpen = false;
+            RefreshHeader();
+            RefreshFooter();
+        }
+    }
+
+    // Notices a connection the server dropped, and opens the login again once nothing runs any more.
+    private async Task WatchSessionAsync()
+    {
+        if (_session is { IsConnected: false } lost)
+        {
+            _session = null;
+            try { await lost.DisposeAsync(); } catch (Exception) { }
+            SetStatus($"The connection to {lost.Login.Host} was lost.");
+            _loginPending = true;
+            await SessionChangedAsync();
+        }
+        if (_loginPending && !AnyBusy && !_loginOpen)
+        {
+            _loginPending = false;
+            await ShowLoginAsync($"The connection to {_lastLogin?.Host ?? "the server"} was lost");
+        }
+    }
+
+    // Shows the page on screen again, so it follows the new login (or the lack of one).
+    private async Task SessionChangedAsync()
+    {
+        if (Session is null) await _sqlEditor.CloseSessionAsync();
+        _tools.Refresh();
+        switch (_page)
+        {
+            case Page.Install: ShowInstallNewServer(); break;
+            case Page.AtomCms: ShowAtomCms(); break;
+            case Page.DeployAssets: ShowDeployAssets(); break;
+            case Page.AssetExplorer: ShowAssetExplorer(); break;
+            case Page.SqlEditor: ShowSqlEditor(); break;
+            case Page.Tools or Page.ServerStatus or Page.EmulatorMonitor or Page.Terminal: ShowTools(); break;
+            case Page.Dashboard: ShowDashboard(); break;
+            default:
+                RefreshHeader();
+                RefreshFooter();
+                break;
+        }
+    }
+
+    private void SetStatus(string message)
+    {
+        _statusMessage = message;
+        RefreshFooter();
     }
 
     /// <summary>
@@ -134,14 +218,16 @@ public sealed class InstallerWindow : Window
     /// replace this program with it. Only the published single-file program updates itself; a repository
     /// without releases, or no internet, means nothing is shown.
     /// </summary>
-    private async Task CheckForUpdateAsync()
+    /// <returns>True when the installer restarts as the new version.</returns>
+    private async Task<bool> CheckForUpdateAsync()
     {
         AppUpdate.CleanUp();
-        if (await AppUpdate.CheckAsync() is not { } update) return;
-        _status.Text = $"Version {update.Version} of the installer is available.";
-        if (!await UpdateDialog.ShowAsync(this, update)) return;
+        if (await AppUpdate.CheckAsync() is not { } update) return false;
+        SetStatus($"Version {update.Version} of the installer is available.");
+        if (!await UpdateDialog.ShowAsync(this, update)) return false;
         AppUpdate.Restart();
         (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+        return true;
     }
 
     private Control BuildLayout()
@@ -161,6 +247,8 @@ public sealed class InstallerWindow : Window
         pill.Children.Add(_statusDot);
         pill.Children.Add(_statusPillText);
         _statusPill.Child = pill;
+        // Not connected: the pill is the way to log in.
+        _statusPill.PointerPressed += async (_, _) => await ShowLoginAsync();
         Grid.SetColumn(_statusPill, 1);
         header.Children.Add(_statusPill);
         main.Children.Add(header);
@@ -225,9 +313,9 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(_atomNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
-        _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, () => { _explorerShown = false; ShowAssetExplorer(); });
+        _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, ShowAssetExplorer);
         nav.Children.Add(_explorerNavigation);
-        _sqlNavigation = NavButton("SQL Editor", Icons.Database, () => { _sqlShown = false; ShowSqlEditor(); });
+        _sqlNavigation = NavButton("SQL Editor", Icons.Database, ShowSqlEditor);
         nav.Children.Add(_sqlNavigation);
         nav.Children.Add(SidebarLabel("TOOLS"));
         _toolsNavigation = NavButton("Tools", Icons.Wrench, ShowTools);
@@ -318,52 +406,63 @@ public sealed class InstallerWindow : Window
 
     private void RefreshHeader()
     {
+        ServerConnection? session = Session;
+        string host = session?.Login.Host ?? "the server";
         (_title.Text, _subtitle.Text) = _page switch
         {
-            Page.Install => ("Install New Server", "Log in to the Ubuntu / Debian server that will run the hotel."),
+            Page.Install => ("Install New Server", session is null
+                ? "Log in to the Ubuntu / Debian server that will run the hotel."
+                : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
-            Page.AssetExplorer => ("Asset Explorer", _explorerWizard.Connection is { } explorerConnection
-                ? $"This computer on the left, {explorerConnection.Login.Host}:{GamedataFiles.Root} on the right."
-                : "Addon: manage the files in /var/www/gamedata, with this computer next to it."),
-            Page.SqlEditor => ("SQL Editor", _sqlWizard.Connection is { } sqlConnection
-                ? $"The databases of {sqlConnection.Login.Host}: browse and edit tables, run queries."
-                : "Addon: a database client like HeidiSQL, through the SSH login (no open MariaDB port needed)."),
+            Page.AssetExplorer => ("Asset Explorer", session is null
+                ? "Addon: manage the files in /var/www/gamedata, with this computer next to it."
+                : $"This computer on the left, {host}:{GamedataFiles.Root} on the right."),
+            Page.SqlEditor => ("SQL Editor", session is null
+                ? "Addon: a database client like HeidiSQL, through the SSH login (no open MariaDB port needed)."
+                : $"The databases of {host}: browse and edit tables, run queries."),
             Page.DeployAssets => ("Deploy Assets", "Addon: copy the hotel's assets, the client's UI texts and the emulator's images to /var/www/gamedata on the server."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
-            Page.ServerStatus => ("Server status", $"Live figures of {_toolsWizard.Connection?.Login.Host ?? "the server"}, every 2 seconds."),
-            Page.Terminal => ("SSH terminal", $"A shell on {_toolsWizard.Connection?.Login.Host ?? "the server"}, logged in like Tools ({_toolsWizard.Connection?.Login.User ?? "root"})."),
-            Page.EmulatorMonitor => ("Emulator & wired", $"The emulator on {_toolsWizard.Connection?.Login.Host ?? "the server"}: CPU per thread, the wired engine and slow wired rooms."),
+            Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
+            Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
+            Page.EmulatorMonitor => ("Emulator & wired", $"The emulator on {host}: CPU per thread, the wired engine and slow wired rooms."),
             Page.About => ("About", "All-in-1 Installer"),
             Page.Settings => ("Settings", "Default server and SSH key, your own SSH keys, and the All-in-1 downloader."),
             _ => ("Dashboard", "Set up a complete hotel server over SSH.")
         };
 
-        (string text, string back, string fore) = Current.Connection is { } c
-            ? ($"Root on {c.Login.Host}", "Pro.SuccessBack", "Pro.SuccessText")
-            : Current.IsBusy
-                ? ("Connecting", "Pro.InfoBack", "Pro.InfoText")
-                : ("Not connected", "Pro.Hover", "Pro.Muted");
+        (string text, string back, string fore) = session is not null
+            ? (session.LoginUser == "root" ? $"Root on {host}" : $"{session.LoginUser} (sudo) on {host}", "Pro.SuccessBack", "Pro.SuccessText")
+            : _loginOpen
+                ? ("Logging in", "Pro.InfoBack", "Pro.InfoText")
+                : ("Not connected · Log in", "Pro.WarningBack", "Pro.WarningText");
         _statusPillText.Text = text;
         _statusPillText.Bind(TextBlock.ForegroundProperty, fore);
         _statusDot.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, fore);
         _statusPill.Bind(Border.BackgroundProperty, back);
+        _statusPill.Cursor = session is null ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
+        ToolTip.SetTip(_statusPill, session is null ? "Log in to your server" : null);
     }
 
     private void RefreshFooter()
     {
-        ServerConnection? connection = Current.Connection;
+        ServerConnection? connection = Session;
         _connectionFooter.Text = connection is null
             ? "No server connected"
             : $"{connection.LoginUser}@{connection.Login.Host}:{connection.Login.Port}  ·  {connection.Os?.PrettyName}";
-        _status.Text = Current.StatusMessage;
+        _status.Text = CurrentWizard?.StatusMessage is { } wizardStatus && wizardStatus != "Ready." ? wizardStatus : _statusMessage;
     }
 
     private void ShowDashboard()
     {
         _page = Page.Dashboard;
         ActivateNavigation(_dashboardNavigation);
-        ShowScrollPage(
-            Tile("Install New Server", "Connect to a fresh Ubuntu Server / Debian machine and install the full hotel stack.",
+        var tiles = new List<Control>();
+        if (Session is null)
+            tiles.Add(Tile("Log in", "Log in to your server: with a password or your SSH key. The login is used for everything below and stays open until you close the program.",
+                Icons.Account, Color.Parse("#16A34A"), async () => await ShowLoginAsync()));
+        tiles.AddRange(
+        [
+            Tile("Install New Server", "Install the full hotel stack on the server you are logged in to: a fresh Ubuntu Server / Debian machine.",
                 Icons.ServerPlus, Brand, ShowInstallNewServer),
             BuildComponentsCard(),
             Text("ADDONS", 11, "Pro.Muted", FontWeight.SemiBold),
@@ -372,34 +471,47 @@ public sealed class InstallerWindow : Window
             Tile("Deploy Assets", "Sync the furniture, clothes, badges and game data of the All-in-1 downloader to /var/www/gamedata (only new and changed files), and the client's UI texts in your language.",
                 Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
             Tile("Asset Explorer", "Two panes like Norton Commander: this computer and /var/www/gamedata on the server. Upload, download, rename, delete; uploads get the right owner and rights.",
-                Icons.FolderSync, Color.Parse("#2563EB"), () => { _explorerShown = false; ShowAssetExplorer(); }),
+                Icons.FolderSync, Color.Parse("#2563EB"), ShowAssetExplorer),
             Tile("SQL Editor", "A database client like HeidiSQL: databases and tables, browse, filter and edit rows, run queries and scripts, export to CSV. MariaDB is reached through the SSH login.",
-                Icons.Database, Color.Parse("#0891B2"), () => { _sqlShown = false; ShowSqlEditor(); }),
+                Icons.Database, Color.Parse("#0891B2"), ShowSqlEditor),
             Text("TOOLS", 11, "Pro.Muted", FontWeight.SemiBold),
             Tile("Tools", "Restart services, database backup and import, system / emulator / Octane updates, encrypted settings backup.",
-                Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools));
+                Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools)
+        ]);
+        ShowScrollPage([.. tiles]);
         RefreshHeader();
         RefreshFooter();
     }
 
-    private void ShowInstallNewServer()
+    private void ShowInstallNewServer() => ShowWizard(Page.Install, _installNavigation, _wizard);
+    private void ShowAtomCms() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
+    private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
+
+    // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.
+    private async void ShowWizard(Page page, Button? navigation, ServerWizard wizard)
     {
-        _page = Page.Install;
-        ActivateNavigation(_installNavigation);
-        _wizard.ApplySettings();
-        ShowScrollPage(_wizard.View);
-        _wizard.FocusCurrentStep();
+        _page = page;
+        ActivateNavigation(navigation);
+        ShowScrollPage(wizard.View);
         RefreshHeader();
         RefreshFooter();
+        try
+        {
+            await wizard.OpenAsync();
+            wizard.FocusCurrentStep();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Checking the server failed: {(ex is ServerConnectionException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}")}");
+        }
     }
 
     private void ShowTools()
     {
         _page = Page.Tools;
         ActivateNavigation(_toolsNavigation);
-        _toolsWizard.ApplySettings();
-        ShowScrollPage(_toolsWizard.View, _tools.Workspace, _tools.Settings);
-        _toolsWizard.FocusCurrentStep();
+        _tools.Refresh();
+        ShowScrollPage(_tools.Workspace, _tools.Settings);
         RefreshHeader();
         RefreshFooter();
     }
@@ -425,78 +537,41 @@ public sealed class InstallerWindow : Window
         RefreshFooter();
     }
 
-    // The login wizard until it is connected, then the explorer filling the page (no scrolling around it).
-    private void ShowAssetExplorer()
+    private void ShowAssetExplorer() => ShowWorkspace(Page.AssetExplorer, _explorerNavigation, _explorer,
+        "The Asset Explorer works on /var/www/gamedata of the server you are logged in to.");
+
+    private void ShowSqlEditor() => ShowWorkspace(Page.SqlEditor, _sqlNavigation, _sqlEditor,
+        "The SQL Editor reaches MariaDB through the login to the server.");
+
+    // A page that fills the window (no scrolling around it) while logged in; otherwise a Log in card.
+    private void ShowWorkspace(Page page, Button? navigation, Control workspace, string needsLogin)
     {
-        bool connected = _explorerWizard.Connection is { IsConnected: true } && !_explorerWizard.IsBusy;
-        bool switching = _page != Page.AssetExplorer || connected != _explorerShown;
-        _page = Page.AssetExplorer;
-        ActivateNavigation(_explorerNavigation);
-        if (switching)
+        _page = page;
+        ActivateNavigation(navigation);
+        if (Session is null)
         {
-            _explorerShown = connected;
-            if (connected)
-            {
-                _content.Children.Clear();
-                _pageHost.Content = _explorer;
-            }
-            else
-            {
-                _explorerWizard.ApplySettings();
-                ShowScrollPage(_explorerWizard.View);
-                _explorerWizard.FocusCurrentStep();
-            }
+            ShowScrollPage(NotConnectedCard(needsLogin));
+        }
+        else
+        {
+            _content.Children.Clear();
+            // Attached again, so it notices a new login.
+            _pageHost.Content = null;
+            _pageHost.Content = workspace;
         }
         RefreshHeader();
         RefreshFooter();
     }
 
-    // The login wizard until it is connected, then the editor filling the page (no scrolling around it).
-    private void ShowSqlEditor()
+    private Control NotConnectedCard(string message)
     {
-        bool connected = _sqlWizard.Connection is { IsConnected: true } && !_sqlWizard.IsBusy;
-        bool switching = _page != Page.SqlEditor || connected != _sqlShown;
-        _page = Page.SqlEditor;
-        ActivateNavigation(_sqlNavigation);
-        if (switching)
-        {
-            _sqlShown = connected;
-            if (connected)
-            {
-                _content.Children.Clear();
-                _pageHost.Content = _sqlEditor;
-            }
-            else
-            {
-                _sqlWizard.ApplySettings();
-                ShowScrollPage(_sqlWizard.View);
-                _sqlWizard.FocusCurrentStep();
-            }
-        }
-        RefreshHeader();
-        RefreshFooter();
-    }
-
-    private void ShowDeployAssets()
-    {
-        _page = Page.DeployAssets;
-        ActivateNavigation(_deployNavigation);
-        _deployWizard.ApplySettings();
-        ShowScrollPage(_deployWizard.View);
-        _deployWizard.FocusCurrentStep();
-        RefreshHeader();
-        RefreshFooter();
-    }
-
-    private void ShowAtomCms()
-    {
-        _page = Page.AtomCms;
-        ActivateNavigation(_atomNavigation);
-        _atomWizard.ApplySettings();
-        ShowScrollPage(_atomWizard.View);
-        _atomWizard.FocusCurrentStep();
-        RefreshHeader();
-        RefreshFooter();
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(Text("Not connected", 17, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text(message + " Log in first: the login stays open until you close the program.", 13, "Pro.Muted"));
+        var login = new Button { Content = "Log in", Padding = new Thickness(22, 9), Classes = { "primary" }, HorizontalAlignment = HorizontalAlignment.Left };
+        login.Click += async (_, _) => await ShowLoginAsync();
+        panel.Children.Add(login);
+        return Card(panel, new Thickness(28, 24));
     }
 
     private void ShowSettings()

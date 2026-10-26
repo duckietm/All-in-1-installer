@@ -4,14 +4,14 @@ using System.Text.Json.Serialization;
 namespace AllInOneInstaller.Configuration;
 
 /// <summary>
-/// Defaults from the Settings page that every wizard fills in. Stored in configuration/settings.json so the
+/// Defaults from the Settings page that the login fills in. Stored in configuration/settings.json so the
 /// settings backup includes them.
 /// </summary>
 public sealed class InstallerSettings
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
-    /// <summary>"host" or "host:port", as typed in the wizards.</summary>
+    /// <summary>"host" or "host:port", as typed in the login.</summary>
     public string? DefaultServer { get; set; }
     /// <summary>Private key path relative to the configuration folder.</summary>
     public string? DefaultKey { get; set; }
