@@ -32,6 +32,35 @@ public sealed class ToolsView
     private readonly Dictionary<string, TextBlock> _toolCaptions = [];
     // The connection the update check already ran for, so it runs once per login and not on every Refresh.
     private ServerConnection? _updatesCheckedFor;
+    private ServerConnection? _lastUpdatesFor;
+    private IReadOnlyList<RepositoryUpdate>? _lastUpdates;
+
+    /// <summary>A check for updates finished (after logging in, the Check for updates tool, or an update).</summary>
+    public event Action<IReadOnlyList<RepositoryUpdate>>? UpdatesChecked;
+
+    /// <summary>What the last check found for this login, or null when it has not finished yet.</summary>
+    public IReadOnlyList<RepositoryUpdate>? LastUpdates(ServerConnection connection) =>
+        ReferenceEquals(_lastUpdatesFor, connection) ? _lastUpdates : null;
+
+    /// <summary>A tool runs: nothing else can start.</summary>
+    public bool IsRunning => _running;
+
+    /// <summary>What the dashboard's Update buttons update.</summary>
+    public enum Component { Emulator, Octane, AtomCms }
+
+    /// <summary>Runs the update tool of a component, with its question and progress on the Tools page.</summary>
+    public Task UpdateAsync(Component component) => component switch
+    {
+        Component.Emulator => RunToolAsync("Update emulator", UpdateEmulatorAsync),
+        Component.Octane => RunToolAsync("Update Octane", UpdateOctaneAsync),
+        _ => RunToolAsync("Update AtomCMS", UpdateAtomCmsAsync)
+    };
+
+    /// <summary>Checks for updates again, without a run panel.</summary>
+    public async Task CheckUpdatesAgainAsync()
+    {
+        if (!_running && _connection() is { } connection) await CheckUpdatesQuietlyAsync(connection);
+    }
 
     public Control Workspace { get; }
     /// <summary>"Log in" while there is no login.</summary>
@@ -82,7 +111,8 @@ public sealed class ToolsView
             Tool("Check for updates", "git fetch: what is new for the emulator, Octane and AtomCMS", Icons.Download, CheckUpdatesAsync),
             Tool("Update system", "apt update, upgrade and dist-upgrade", Icons.Cog, UpdateSystemAsync),
             Tool("Update emulator", "git pull, build.sh, start the new version", Icons.Server, UpdateEmulatorAsync),
-            Tool("Update Octane", "Renderer and Octane: git pull, fresh yarn install, build", Icons.Cube, UpdateOctaneAsync));
+            Tool("Update Octane", "Renderer and Octane: git pull, fresh yarn install, build", Icons.Cube, UpdateOctaneAsync),
+            Tool("Update AtomCMS", "git pull, composer install, migrations, theme build", Icons.Puzzle, UpdateAtomCmsAsync));
         updates.Children.Add(_updates);
         page.Children.Add(updates);
         page.Children.Add(_runHost);
@@ -577,11 +607,15 @@ public sealed class ToolsView
     /// <summary>Puts what the check found on the update tools and on the line under them.</summary>
     private void ShowUpdates(IReadOnlyList<RepositoryUpdate> updates)
     {
+        _lastUpdates = updates;
+        _lastUpdatesFor = _connection();
+        UpdatesChecked?.Invoke(updates);
         RepositoryUpdate[] For(params string[] directories) => updates.Where(u => directories.Contains(u.Directory)).ToArray();
 
         Caption("Update emulator", "git pull, build.sh, start the new version", For(EmulatorInstaller.Repository));
         Caption("Update Octane", "Renderer and Octane: git pull, fresh yarn install, build",
             For(OctaneInstaller.Octane, OctaneInstaller.Renderer));
+        Caption("Update AtomCMS", "git pull, composer install, migrations, theme build", For(AtomCmsInstaller.Directory));
 
         RepositoryUpdate[] behind = updates.Where(u => u.HasUpdate).ToArray();
         RepositoryUpdate[] switching = updates.Where(u => u.SwitchesBranch).ToArray();
@@ -694,6 +728,29 @@ public sealed class ToolsView
         run.Done(site.ClientUrl);
         await FinishAsync(run, ResultKind.Success, $"Octane is updated on {site.ClientUrl}",
             $"Octane-Renderer {renderer}, Octane {octane}. Players get the new client when they reload the page.");
+        await CheckUpdatesQuietlyAsync(connection);
+    }
+
+    private async Task UpdateAtomCmsAsync(Window owner, ServerConnection connection)
+    {
+        AtomCmsState state = await Task.Run(() => AtomCmsInstaller.InspectAsync(connection));
+        if (!state.VendorPresent || !state.Migrated)
+            throw new ServerConnectionException($"AtomCMS is not installed on this server ({AtomCmsInstaller.Directory}): install it with Addons → AtomCMS.");
+        if (!await ConfirmAsync(owner, "Update AtomCMS?",
+                $"git pull in {AtomCmsInstaller.Directory}, then composer install, the new database migrations and the theme build. " +
+                "The site keeps running; visitors may see an error for a moment while the files change. Octane is not changed.",
+                "Update AtomCMS")) return;
+        RunPanel run = StartRun("git pull", "composer install", "Database migrations", "Theme build");
+        string commit = await Task.Run(() => GitCloneInstaller.UpdateAsync(connection, AtomCmsInstaller.Directory, null, run.Log));
+        run.Done(commit);
+        await Task.Run(() => AtomCmsInstaller.ComposerInstallAsync(connection, run.Log));
+        run.Done("vendor/");
+        // An installed AtomCMS only runs the new migrations; its settings and the hotel name stay as they are.
+        await Task.Run(() => AtomCmsInstaller.MigrateAsync(connection, state.HotelName ?? "", run.Log));
+        run.Done("up to date");
+        await Task.Run(() => AtomCmsInstaller.BuildThemeAsync(connection, run.Log));
+        run.Done("public/build");
+        await FinishAsync(run, ResultKind.Success, "AtomCMS is updated", $"{commit} is live{(state.Site is { } site ? $" on {site.Url}" : "")}.");
         await CheckUpdatesQuietlyAsync(connection);
     }
 

@@ -52,6 +52,11 @@ public sealed class InstallerWindow : Window
     private readonly SqlEditorView _sqlEditor;
     private readonly ToolsView _tools;
     private bool _toolsBusy;
+    // The dashboard's components card, with the versions on the server and what the update check found.
+    private readonly ContentControl _componentsHost = new();
+    private IReadOnlyList<RepositoryVersion>? _versions;
+    private ServerConnection? _versionsFor;
+    private bool _loadingVersions;
     private string _statusMessage = "Ready.";
 
     // The login at startup, shared by every page until the program closes or the server goes away.
@@ -102,6 +107,12 @@ public sealed class InstallerWindow : Window
         _tools.TerminalRequested += ShowTerminal;
         _tools.BackRequested += ShowTools;
         _tools.LoginRequested += async () => await ShowLoginAsync();
+        // A finished check (also after an update, which changes the versions) refreshes the dashboard's card.
+        _tools.UpdatesChecked += async _ =>
+        {
+            RefreshComponents();
+            await LoadVersionsAsync();
+        };
         foreach (ServerWizard wizard in Wizards)
         {
             wizard.StateChanged += () =>
@@ -464,7 +475,7 @@ public sealed class InstallerWindow : Window
         [
             Tile("Install New Server", "Install the full hotel stack on the server you are logged in to: a fresh Ubuntu Server / Debian machine.",
                 Icons.ServerPlus, Brand, ShowInstallNewServer),
-            BuildComponentsCard(),
+            _componentsHost,
             Text("ADDONS", 11, "Pro.Muted", FontWeight.SemiBold),
             Tile("AtomCMS", "After the installation: AtomCMS (github.com/ObjectRetros/atomcms) as the hotel's website, Octane moves to /client.",
                 Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
@@ -478,9 +489,11 @@ public sealed class InstallerWindow : Window
             Tile("Tools", "Restart services, database backup and import, system / emulator / Octane updates, encrypted settings backup.",
                 Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools)
         ]);
+        _componentsHost.Content = BuildComponentsCard();
         ShowScrollPage([.. tiles]);
         RefreshHeader();
         RefreshFooter();
+        if (Session is { } session && !ReferenceEquals(_versionsFor, session)) _ = LoadVersionsAsync();
     }
 
     private void ShowInstallNewServer() => ShowWizard(Page.Install, _installNavigation, _wizard);
@@ -658,15 +671,88 @@ public sealed class InstallerWindow : Window
         return tile;
     }
 
-    private static Control BuildComponentsCard()
+    // The rows of the dashboard card: the full installation, plus AtomCMS once it is installed.
+    private static readonly (string Name, string Description, string Repository, string Icon, string Color, string Directory, ToolsView.Component Update)[] Rows =
+    [
+        (Components[0].Name, Components[0].Description, Components[0].Repository, Components[0].Icon, Components[0].Color, EmulatorInstaller.Repository, ToolsView.Component.Emulator),
+        (Components[1].Name, Components[1].Description, Components[1].Repository, Components[1].Icon, Components[1].Color, OctaneInstaller.Octane, ToolsView.Component.Octane),
+        (Components[2].Name, Components[2].Description, Components[2].Repository, Components[2].Icon, Components[2].Color, OctaneInstaller.Renderer, ToolsView.Component.Octane),
+        ("AtomCMS", "The hotel's website (addon), Octane on /client", "ObjectRetros/atomcms", Icons.Puzzle, "#E8590C", AtomCmsInstaller.Directory, ToolsView.Component.AtomCms)
+    ];
+
+    // Loads the installed versions (no network) once per login and after every update check.
+    private async Task LoadVersionsAsync()
     {
-        var list = new StackPanel { Spacing = 2 };
-        var heading = new StackPanel { Spacing = 2, Margin = new Thickness(12, 8, 12, 10) };
-        heading.Children.Add(Text("Full server installation", 15, weight: FontWeight.SemiBold));
-        heading.Children.Add(Text("Components the installer sets up", 12, "Pro.Muted"));
-        list.Children.Add(heading);
-        foreach (var component in Components)
+        if (Session is not { } connection || _loadingVersions) return;
+        _loadingVersions = true;
+        try
         {
+            _versions = await Task.Run(() => ServerStatus.VersionsAsync(connection));
+            _versionsFor = connection;
+        }
+        catch (Exception ex)
+        {
+            _versions = null;
+            _versionsFor = connection;
+            SetStatus($"Reading the installed versions failed: {ex.Message}");
+        }
+        finally
+        {
+            _loadingVersions = false;
+            RefreshComponents();
+        }
+    }
+
+    private void RefreshComponents()
+    {
+        if (_page == Page.Dashboard) _componentsHost.Content = BuildComponentsCard();
+    }
+
+    // Shows the Tools page and runs the update there, so its question and progress are on screen.
+    private async Task UpdateComponentAsync(ToolsView.Component component)
+    {
+        if (AnyBusy || Session is null) return;
+        ShowTools();
+        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+        await _tools.UpdateAsync(component);
+    }
+
+    private Control BuildComponentsCard()
+    {
+        ServerConnection? session = Session;
+        IReadOnlyList<RepositoryVersion>? versions = ReferenceEquals(_versionsFor, session) ? _versions : null;
+        IReadOnlyList<RepositoryUpdate>? updates = session is null ? null : _tools.LastUpdates(session);
+
+        var list = new StackPanel { Spacing = 2 };
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(12, 8, 12, 10) };
+        var heading = new StackPanel { Spacing = 2 };
+        heading.Children.Add(Text("Full server installation", 15, weight: FontWeight.SemiBold));
+        heading.Children.Add(Text(session is null ? "Components the installer sets up. Log in to see the installed versions and updates."
+            : updates is null ? $"The versions on {session.Login.Host}; checking GitHub for updates ..."
+            : $"The versions on {session.Login.Host}, compared with GitHub (the branches chosen in Settings).", 12, "Pro.Muted"));
+        top.Children.Add(heading);
+        if (session is not null && updates is not null)
+        {
+            var again = new Button { Content = "Check again", Padding = new Thickness(12, 5), FontSize = 12, Classes = { "secondary" }, VerticalAlignment = VerticalAlignment.Center };
+            again.Click += async (_, _) =>
+            {
+                if (AnyBusy) return;
+                again.IsEnabled = false;
+                again.Content = "Checking ...";
+                await _tools.CheckUpdatesAgainAsync();
+            };
+            Grid.SetColumn(again, 1);
+            top.Children.Add(again);
+        }
+        list.Children.Add(top);
+
+        foreach (var component in Rows)
+        {
+            RepositoryVersion? version = versions?.FirstOrDefault(v => v.Directory == component.Directory);
+            // AtomCMS is an addon: listed once it is installed.
+            if (component.Update == ToolsView.Component.AtomCms && version is null) continue;
+            RepositoryUpdate? update = updates?.FirstOrDefault(u => u.Directory == component.Directory);
+
             Color color = Color.Parse(component.Color);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(12, 8) };
             var icon = Icon(component.Icon, 17);
@@ -682,11 +768,49 @@ public sealed class InstallerWindow : Window
             var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(Text(component.Name, 13.5, weight: FontWeight.SemiBold));
             text.Children.Add(Text($"{component.Description}  ·  github.com/{component.Repository}", 12, "Pro.Muted"));
+            if (version is not null)
+            {
+                string installed = string.Join("  ·  ", new[]
+                {
+                    version.Build,
+                    version.Branch is null ? null : $"{version.Branch} @ {version.Commit}",
+                    version.Date
+                }.Where(p => p is not null));
+                TextBlock line = Text(installed, 11.5, "Pro.Subtle");
+                line.FontFamily = Mono;
+                text.Children.Add(line);
+            }
             Grid.SetColumn(text, 1);
             row.Children.Add(text);
-            var chip = Chip("INCLUDED", "Pro.SuccessBack", "Pro.SuccessText");
-            Grid.SetColumn(chip, 2);
-            row.Children.Add(chip);
+
+            var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+            if (session is null)
+                state.Children.Add(Chip("INCLUDED", "Pro.SuccessBack", "Pro.SuccessText"));
+            else if (versions is null)
+                state.Children.Add(Chip("READING ...", "Pro.InfoBack", "Pro.InfoText"));
+            else if (version is null)
+                state.Children.Add(Chip("NOT INSTALLED", "Pro.Hover", "Pro.Muted"));
+            else if (updates is null)
+                state.Children.Add(Chip("CHECKING GITHUB ...", "Pro.InfoBack", "Pro.InfoText"));
+            else if (update is { HasUpdate: true } or { SwitchesBranch: true })
+            {
+                Border chip = Chip(update.HasUpdate ? $"{update.Behind} NEW COMMIT{(update.Behind == 1 ? "" : "S")}" : $"TO {update.Target}".ToUpperInvariant(),
+                    "Pro.WarningBack", "Pro.WarningText");
+                ToolTip.SetTip(chip, (update.SwitchesBranch ? $"Updating switches {update.Branch} to {update.Target}. " : "") +
+                                     (update.Newest is null ? "" : $"Newest on GitHub: {update.Newest}"));
+                state.Children.Add(chip);
+                var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
+                // Octane and its renderer are built together, so both rows run the same update.
+                if (component.Update == ToolsView.Component.Octane) ToolTip.SetTip(button, "Updates Octane-Renderer and Octane together, then builds the client.");
+                button.Click += async (_, _) => await UpdateComponentAsync(component.Update);
+                state.Children.Add(button);
+            }
+            else if (update is not null)
+                state.Children.Add(Chip("UP TO DATE", "Pro.SuccessBack", "Pro.SuccessText"));
+            else
+                state.Children.Add(Chip("NOT CHECKED", "Pro.Hover", "Pro.Muted"));
+            Grid.SetColumn(state, 2);
+            row.Children.Add(state);
             list.Children.Add(row);
         }
         return Card(list, new Thickness(12));

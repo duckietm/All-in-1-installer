@@ -16,6 +16,17 @@ status pill and console log, in light and dark mode.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
+Once you are logged in, the dashboard's **Full server installation** card shows what is on the server: per component
+the build version (the emulator's JAR, Octane's and the renderer's `package.json`), the branch, commit and date of
+its clone, and whether GitHub has something new. That comes from the same `git fetch` as **Tools → Check for
+updates** (right after logging in, and again after every update; **Check again** fetches once more), counted
+against the branches chosen in **Settings → Repository branches**. A component that is behind gets
+**N NEW COMMITS** and an **Update** button, which opens Tools and runs that update (Update emulator, Update Octane,
+or Update AtomCMS) with its question and progress there. Octane and Octane-Renderer are updated and built together,
+so both rows run Update Octane. AtomCMS gets a row of its own once it is installed.
+
+![Dashboard with versions and updates](docs/screenshots/dashboard-versions.png)
+
 ## Requirements
 
 **On your computer** (Windows 10/11 x64 or Linux x64), the installer needs **.NET 11**:
@@ -899,6 +910,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Update system** | `apt-get update`, `upgrade` and `dist-upgrade` (changed configuration files are kept); says when a reboot is needed |
 | **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
 | **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
+| **Update AtomCMS** | `git pull` in `/var/www/atomcms`, `composer install`, `php artisan migrate` (an installed AtomCMS only runs the new migrations; its settings and the hotel name stay) and the theme build. Octane is not touched |
 
 **Settings backup** (no server needed): **Export encrypted settings** writes the whole configuration directory
 (SSH keys, .ppk files, MariaDB passwords of every server) to one `.aio-settings` file, encrypted with AES-256-GCM
