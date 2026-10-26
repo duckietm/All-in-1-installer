@@ -819,7 +819,7 @@ public sealed class InstallerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left
         });
         layout.Children.Add(words);
-        hotel.Margin = new Thickness(0, 0, 26, 8);
+        hotel.Margin = new Thickness(0, 0, 26, 3);
         Grid.SetColumn(hotel, 1);
         layout.Children.Add(hotel);
 
@@ -885,19 +885,27 @@ public sealed class InstallerWindow : Window
         return speck;
     }
 
-    // The hotel scene on the right of the banner (App/Images/hotel-view.png), 1.5 times its size with hard pixels.
+    // The hotel scene on the right of the banner (App/Images/hotel-view.png). Pixel art only stays sharp when every
+    // pixel of the picture becomes the same whole number of screen pixels, so the size follows the screen's scaling:
+    // the largest whole factor that keeps it at most 160 high (1x at 100 %, 2x at 125-175 %, 3x at 200 %).
     private static Control HotelPicture()
     {
         var bitmap = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(new Uri("avares://All-in-1 Installer/App/Images/hotel-view.png")));
-        var picture = new Image
-        {
-            Source = bitmap,
-            Width = bitmap.PixelSize.Width * 1.5,
-            Height = bitmap.PixelSize.Height * 1.5,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Stretch = Stretch.Uniform
-        };
+        var picture = new Image { Source = bitmap, VerticalAlignment = VerticalAlignment.Bottom, Stretch = Stretch.Fill };
         RenderOptions.SetBitmapInterpolationMode(picture, Avalonia.Media.Imaging.BitmapInterpolationMode.None);
+        void Fit(double scaling)
+        {
+            int factor = Math.Max(1, (int)Math.Floor(160 * scaling / bitmap.PixelSize.Height));
+            picture.Width = bitmap.PixelSize.Width * factor / scaling;
+            picture.Height = bitmap.PixelSize.Height * factor / scaling;
+        }
+        Fit(1);
+        picture.AttachedToVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(picture) is not { } top) return;
+            Fit(top.RenderScaling);
+            top.ScalingChanged += (_, _) => Fit(top.RenderScaling);
+        };
         return picture;
     }
 
