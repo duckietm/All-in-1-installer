@@ -40,9 +40,18 @@ public sealed class SettingsView
 
     public Control View { get; }
 
+    /// <summary>"Restart now" after changing the look: the window closes and the installer starts again.</summary>
+    public event Action? RestartRequested;
+
+    private readonly RadioButton _hotelLook = new() { GroupName = "look", Content = "Hotel: the look of a Habbo hotel (blue, yellow, pixel titles, a hotel view on the dashboard)" };
+    private readonly RadioButton _professionalLook = new() { GroupName = "look", Content = "Professional: the calm look of the All-in-1 Converter (indigo, soft cards)" };
+    private readonly ResultBanner _lookResult = new();
+    private readonly Button _restart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
+
     public SettingsView()
     {
         var page = new StackPanel { Spacing = 18 };
+        page.Children.Add(Card(BuildLook(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDefaults(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildBranches(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildKeys(), new Thickness(24, 20)));
@@ -72,8 +81,7 @@ public sealed class SettingsView
     {
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(Text("Default server", 15, weight: FontWeight.SemiBold));
-        panel.Children.Add(Text("Install New Server, AtomCMS and Tools fill in this server. The default key is selected for \"My own SSH key\" " +
-                                "and is tried first by AtomCMS and Tools.", 12.5, "Pro.Muted"));
+        panel.Children.Add(Text("The login at startup fills in this server, and selects the default key when you log in with an SSH key.", 12.5, "Pro.Muted"));
         panel.Children.Add(Label("Server (IP or hostname, with :port for another SSH port)"));
         panel.Children.Add(_server);
         panel.Children.Add(Label("SSH key (from configuration/keys)"));
@@ -119,6 +127,41 @@ public sealed class SettingsView
             (server.Length > 0 ? $"The login fills in {server}" : "No default server") + (key is null ? "." : $", with the key {Path.GetFileName(key)}."));
     }
 
+    private Control BuildLook()
+    {
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(Text("Look", 15, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("How the installer looks. Light or dark follows your system in both. A change applies when the installer starts again.", 12.5, "Pro.Muted"));
+        bool hotel = InstallerSettings.Load().Look != InstallerSettings.ProfessionalLook;
+        _hotelLook.IsChecked = hotel;
+        _professionalLook.IsChecked = !hotel;
+        panel.Children.Add(_hotelLook);
+        panel.Children.Add(_professionalLook);
+        var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
+        save.Click += (_, _) => SaveLook();
+        _restart.Click += (_, _) => RestartRequested?.Invoke();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(save);
+        buttons.Children.Add(_restart);
+        panel.Children.Add(buttons);
+        panel.Children.Add(_lookResult);
+        return panel;
+    }
+
+    private void SaveLook()
+    {
+        InstallerSettings settings = InstallerSettings.Load();
+        bool hotel = _hotelLook.IsChecked == true;
+        settings.Look = hotel ? InstallerSettings.HotelLook : InstallerSettings.ProfessionalLook;
+        settings.Save();
+        // The theme is read once at startup, so a different choice waits for a restart.
+        bool changed = hotel != ProfessionalTheme.Hotel;
+        _restart.IsVisible = changed;
+        _lookResult.Show(changed ? ResultKind.Info : ResultKind.Success, "Saved",
+            changed ? $"The {(hotel ? "hotel" : "professional")} look starts with the next start of the installer: Restart now, or later."
+                    : $"The {(hotel ? "hotel" : "professional")} look is the one you see now.");
+    }
+
     private Control BuildBranches()
     {
         var panel = new StackPanel { Spacing = 10 };
@@ -156,7 +199,7 @@ public sealed class SettingsView
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(Text("SSH keys", 15, weight: FontWeight.SemiBold));
         panel.Children.Add(Text($"Keys in {Path.Combine(ClientConfiguration.Directory, "keys")}: the ones the SSH key step generated, and the ones you import here. " +
-                                "Import your own private key to log in with it (\"My own SSH key\"); a public key alone can be installed for root in the SSH key step.",
+                                "Import your own private key to log in with it (\"SSH key\" in the login); a public key alone can be installed for root in the SSH key step.",
             12.5, "Pro.Muted"));
         panel.Children.Add(_keyList);
 

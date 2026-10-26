@@ -163,6 +163,33 @@ public static class AppUpdate
         Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
     }
 
+    /// <summary>
+    /// Starts this program once more, for a setting that applies at startup (Settings → Look). Also works for a build
+    /// started through dotnet. The caller closes the window right after; false when it could not be started.
+    /// </summary>
+    public static bool StartAgain()
+    {
+        try
+        {
+            if (ExecutablePath is { } exe)
+            {
+                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" });
+                return true;
+            }
+            if (Environment.ProcessPath is { } dotnet && System.Reflection.Assembly.GetEntryAssembly()?.Location is { Length: > 0 } dll)
+            {
+                var start = new ProcessStartInfo(dotnet) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(dll) ?? "" };
+                start.ArgumentList.Add(dll);
+                Process.Start(start);
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+        }
+        return false;
+    }
+
     private static HttpClient Client()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };

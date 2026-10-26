@@ -17,6 +17,6 @@ internal static class Program
     private static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<AvaloniaApp>()
             .UsePlatformDetect()
-            .WithHotelFonts()
+            .WithLookFonts()
             .LogToTrace();
 }

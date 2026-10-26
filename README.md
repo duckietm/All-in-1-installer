@@ -18,6 +18,10 @@ the hotel's pixel font. Both fonts are free (Ubuntu Font Licence, SIL Open Font 
 built into the program. The layout (sidebar, cards, status pill, console log) comes from the
 [All-in-1 Converter](https://github.com/duckietm/all-in-1-converter).
 
+**Settings → Look** switches between this **Hotel** look and the **Professional** look of the All-in-1 Converter
+(indigo, soft cards, Inter). It is stored in `configuration/settings.json` and applies at the next start; **Restart
+now** starts the installer again right away (it waits while a step runs). Light or dark follows the system in both.
+
 ![Dashboard](docs/screenshots/dashboard.png)
 
 Once you are logged in, the dashboard's **Full server installation** card shows what is on the server: per component

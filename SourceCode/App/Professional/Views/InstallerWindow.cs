@@ -103,6 +103,7 @@ public sealed class InstallerWindow : Window
             _toolsBusy = busy;
             SetStatus(status);
         });
+        _settings.RestartRequested += RestartForLook;
         _tools.MonitorRequested += ShowMonitor;
         _tools.TerminalRequested += ShowTerminal;
         _tools.BackRequested += ShowTools;
@@ -229,6 +230,22 @@ public sealed class InstallerWindow : Window
     /// replace this program with it. Only the published single-file program updates itself; a repository
     /// without releases, or no internet, means nothing is shown.
     /// </summary>
+    // Settings → Look applies at startup: start a new installer and close this one (which closes the login).
+    private void RestartForLook()
+    {
+        if (AnyBusy)
+        {
+            SetStatus("Wait until the running step has finished, then restart.");
+            return;
+        }
+        if (!AppUpdate.StartAgain())
+        {
+            SetStatus("The installer could not start itself again: close it and start it yourself to see the new look.");
+            return;
+        }
+        Close();
+    }
+
     /// <returns>True when the installer restarts as the new version.</returns>
     private async Task<bool> CheckForUpdateAsync()
     {
@@ -292,30 +309,19 @@ public sealed class InstallerWindow : Window
         var sidebar = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
 
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 11, Margin = new Thickness(6, 0, 0, 26) };
-        // The hotel logo's yellow, with a dark edge and a hard shadow.
-        var logoIcon = Icon(Icons.Server, 19);
-        logoIcon.Foreground = Solid(Outline);
-        brand.Children.Add(new Border
-        {
-            Width = 38,
-            Height = 38,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
-            BorderBrush = Solid(Outline),
-            Background = Solid(HotelYellow),
-            BoxShadow = BoxShadows.Parse("0 3 0 0 #66000000"),
-            Child = logoIcon
-        });
+        brand.Children.Add(Logo());
         var brandText = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
-        brandText.Children.Add(new TextBlock
-        {
-            Text = "All-in-1 Installer",
-            Foreground = Solid(HotelYellow),
-            FontFamily = Pixel,
-            FontSize = 17,
-            FontWeight = FontWeight.Bold,
-            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Color.Parse("#B0000000") }
-        });
+        brandText.Children.Add(Hotel
+            ? new TextBlock
+            {
+                Text = "All-in-1 Installer",
+                Foreground = Solid(HotelYellow),
+                FontFamily = Pixel,
+                FontSize = 17,
+                FontWeight = FontWeight.Bold,
+                Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Color.Parse("#B0000000") }
+            }
+            : new TextBlock { Text = "All-in-1 Installer", Foreground = Brushes.White, FontSize = 15, FontWeight = FontWeight.SemiBold });
         brandText.Children.Add(new TextBlock { Text = "Hotel server setup", Foreground = Solid(SidebarMuted), FontSize = 11.5 });
         brand.Children.Add(brandText);
         sidebar.Children.Add(brand);
@@ -474,7 +480,8 @@ public sealed class InstallerWindow : Window
     {
         _page = Page.Dashboard;
         ActivateNavigation(_dashboardNavigation);
-        var tiles = new List<Control> { HotelBanner() };
+        var tiles = new List<Control>();
+        if (Hotel) tiles.Add(HotelBanner());
         if (Session is null)
             tiles.Add(Tile("Log in", "Log in to your server: with a password or your SSH key. The login is used for everything below and stays open until you close the program.",
                 Icons.Account, Color.Parse("#16A34A"), async () => await ShowLoginAsync()));
@@ -672,8 +679,8 @@ public sealed class InstallerWindow : Window
             Padding = new Thickness(22, 20),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
+            CornerRadius = CardCorners,
+            BorderThickness = CardEdge,
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
@@ -682,6 +689,38 @@ public sealed class InstallerWindow : Window
             open();
         };
         return tile;
+    }
+
+    // Hotel look: the hotel logo's yellow with a dark edge and a hard shadow. Professional look: the converter's indigo.
+    private static Control Logo()
+    {
+        var icon = Icon(Icons.Server, 19);
+        icon.Foreground = Hotel ? Solid(Outline) : Brushes.White;
+        if (Hotel)
+            return new Border
+            {
+                Width = 38,
+                Height = 38,
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(2),
+                BorderBrush = Solid(Outline),
+                Background = Solid(HotelYellow),
+                BoxShadow = BoxShadows.Parse("0 3 0 0 #66000000"),
+                Child = icon
+            };
+        return new Border
+        {
+            Width = 36,
+            Height = 36,
+            CornerRadius = new CornerRadius(10),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Color.Parse("#6D7BFF"), 0), new GradientStop(Color.Parse("#4352D4"), 1) }
+            },
+            Child = icon
+        };
     }
 
     // The top of the dashboard: a hotel view (sky, clouds, an isometric hotel) drawn here, by day or by night.
@@ -880,8 +919,8 @@ public sealed class InstallerWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Top,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
+            CornerRadius = CardCorners,
+            BorderThickness = CardEdge,
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
