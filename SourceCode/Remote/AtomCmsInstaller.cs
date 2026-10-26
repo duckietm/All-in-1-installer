@@ -28,8 +28,8 @@ public sealed record AtomCmsState(
 public static class AtomCmsInstaller
 {
     public const string Repository = "https://github.com/ObjectRetros/atomcms.git";
-    public const string Directory = "/var/www/atomcms";
-    public const string Public = Directory + "/public";
+    public static readonly string Directory = ServerLayout.Current.AtomCms;
+    public static readonly string Public = Directory + "/public";
 
     // Node.js 26 comes from /usr/bin. Composer and artisan run without prompts.
     private const string Environment =

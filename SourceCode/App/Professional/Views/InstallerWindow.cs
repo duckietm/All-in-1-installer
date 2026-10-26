@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Input;
 using Avalonia.Threading;
+using AllInOneInstaller.Configuration;
 using AllInOneInstaller.Remote;
 using AllInOneInstaller.Update;
 using static AllInOneInstaller.App.Professional.ProfessionalTheme;
@@ -42,14 +43,16 @@ public sealed class InstallerWindow : Window
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
     private Button? _toolsNavigation;
+    private Button? _debugNavigation;
     private Button? _settingsNavigation;
     private Button? _aboutNavigation;
-    private readonly SettingsView _settings = new();
+    private readonly SettingsView _settings;
     private readonly ServerWizard _wizard;
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
+    private readonly DebugView _debug;
     private readonly ToolsView _tools;
     private bool _toolsBusy;
     // The dashboard's components card, with the versions on the server and what the update check found.
@@ -98,11 +101,14 @@ public sealed class InstallerWindow : Window
             "Assets on the server", keyStep: false);
         _explorer = new AssetExplorerView(() => Session, ShowDashboard);
         _sqlEditor = new SqlEditorView(() => Session, ShowDashboard);
+        _debug = new DebugView(() => Session);
         _tools = new ToolsView(() => Session, (busy, status) =>
         {
             _toolsBusy = busy;
             SetStatus(status);
         });
+        _settings = new SettingsView(() => Session);
+        _settings.RestartRequested += RestartForLook;
         _tools.MonitorRequested += ShowMonitor;
         _tools.TerminalRequested += ShowTerminal;
         _tools.BackRequested += ShowTools;
@@ -209,8 +215,10 @@ public sealed class InstallerWindow : Window
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
+            case Page.Debug: ShowDebug(); break;
             case Page.Tools or Page.ServerStatus or Page.EmulatorMonitor or Page.Terminal: ShowTools(); break;
             case Page.Dashboard: ShowDashboard(); break;
+            case Page.Settings: ShowSettings(); break;
             default:
                 RefreshHeader();
                 RefreshFooter();
@@ -229,6 +237,22 @@ public sealed class InstallerWindow : Window
     /// replace this program with it. Only the published single-file program updates itself; a repository
     /// without releases, or no internet, means nothing is shown.
     /// </summary>
+    // Settings → Look applies at startup: start a new installer and close this one (which closes the login).
+    private void RestartForLook()
+    {
+        if (AnyBusy)
+        {
+            SetStatus("Wait until the running step has finished, then restart.");
+            return;
+        }
+        if (!AppUpdate.StartAgain())
+        {
+            SetStatus("The installer could not start itself again: close it and start it yourself to see the new look.");
+            return;
+        }
+        Close();
+    }
+
     /// <returns>True when the installer restarts as the new version.</returns>
     private async Task<bool> CheckForUpdateAsync()
     {
@@ -292,30 +316,19 @@ public sealed class InstallerWindow : Window
         var sidebar = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
 
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 11, Margin = new Thickness(6, 0, 0, 26) };
-        // The hotel logo's yellow, with a dark edge and a hard shadow.
-        var logoIcon = Icon(Icons.Server, 19);
-        logoIcon.Foreground = Solid(Outline);
-        brand.Children.Add(new Border
-        {
-            Width = 38,
-            Height = 38,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
-            BorderBrush = Solid(Outline),
-            Background = Solid(HotelYellow),
-            BoxShadow = BoxShadows.Parse("0 3 0 0 #66000000"),
-            Child = logoIcon
-        });
+        brand.Children.Add(Logo());
         var brandText = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
-        brandText.Children.Add(new TextBlock
-        {
-            Text = "All-in-1 Installer",
-            Foreground = Solid(HotelYellow),
-            FontFamily = Pixel,
-            FontSize = 17,
-            FontWeight = FontWeight.Bold,
-            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Color.Parse("#B0000000") }
-        });
+        brandText.Children.Add(Hotel
+            ? new TextBlock
+            {
+                Text = "All-in-1 Installer",
+                Foreground = Solid(HotelYellow),
+                FontFamily = Pixel,
+                FontSize = 17,
+                FontWeight = FontWeight.Bold,
+                Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Color.Parse("#B0000000") }
+            }
+            : new TextBlock { Text = "All-in-1 Installer", Foreground = Brushes.White, FontSize = 15, FontWeight = FontWeight.SemiBold });
         brandText.Children.Add(new TextBlock { Text = "Hotel server setup", Foreground = Solid(SidebarMuted), FontSize = 11.5 });
         brand.Children.Add(brandText);
         sidebar.Children.Add(brand);
@@ -338,6 +351,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(SidebarLabel("TOOLS"));
         _toolsNavigation = NavButton("Tools", Icons.Wrench, ShowTools);
         nav.Children.Add(_toolsNavigation);
+        _debugNavigation = NavButton("Debug", Icons.Bug, ShowDebug);
+        nav.Children.Add(_debugNavigation);
         nav.Children.Add(SidebarLabel("GENERAL"));
         _settingsNavigation = NavButton("Settings", Icons.Cog, ShowSettings);
         nav.Children.Add(_settingsNavigation);
@@ -419,7 +434,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, DeployAssets, AssetExplorer, SqlEditor, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -433,12 +448,15 @@ public sealed class InstallerWindow : Window
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.AssetExplorer => ("Asset Explorer", session is null
-                ? "Addon: manage the files in /var/www/gamedata, with this computer next to it."
+                ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
                 : $"This computer on the left, {host}:{GamedataFiles.Root} on the right."),
             Page.SqlEditor => ("SQL Editor", session is null
                 ? "Addon: a database client like HeidiSQL, through the SSH login (no open MariaDB port needed)."
                 : $"The databases of {host}: browse and edit tables, run queries."),
-            Page.DeployAssets => ("Deploy Assets", "Addon: copy the hotel's assets, the client's UI texts and the emulator's images to /var/www/gamedata on the server."),
+            Page.DeployAssets => ("Deploy Assets", $"Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {OctaneInstaller.Gamedata} on the server."),
+            Page.Debug => ("Debug", session is null
+                ? "Live logs of the emulator, NGINX, Traefik and the firewall."
+                : $"Live logs on {host}: the emulator, NGINX, Traefik and the firewall."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
             Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
@@ -474,7 +492,8 @@ public sealed class InstallerWindow : Window
     {
         _page = Page.Dashboard;
         ActivateNavigation(_dashboardNavigation);
-        var tiles = new List<Control> { HotelBanner() };
+        var tiles = new List<Control>();
+        if (Hotel) tiles.Add(HotelBanner());
         if (Session is null)
             tiles.Add(Tile("Log in", "Log in to your server: with a password or your SSH key. The login is used for everything below and stays open until you close the program.",
                 Icons.Account, Color.Parse("#16A34A"), async () => await ShowLoginAsync()));
@@ -487,16 +506,18 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("AtomCMS", "AtomCMS as the hotel's website; Octane moves to /client.",
                     Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
-                SmallTile("Deploy Assets", "The All-in-1 downloader's assets and the UI texts to /var/www/gamedata.",
+                SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
-                SmallTile("Asset Explorer", "Two panes: this computer and /var/www/gamedata. Upload, download, rename.",
+                SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
                     Icons.FolderSync, Color.Parse("#2563EB"), ShowAssetExplorer),
                 SmallTile("SQL Editor", "Like HeidiSQL: browse and edit tables, run queries, export to CSV.",
                     Icons.Database, Color.Parse("#0891B2"), ShowSqlEditor)),
             Text("TOOLS", 11, "Pro.Muted", FontWeight.SemiBold),
             TileGrid(
                 SmallTile("Tools", "Restarts, database backup and import, updates, settings backup.",
-                    Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools))
+                    Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools),
+                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik and the firewall.",
+                    Icons.Bug, Color.Parse("#DC2626"), ShowDebug))
         ]);
         _componentsHost.Content = BuildComponentsCard();
         ShowScrollPage([.. tiles]);
@@ -560,7 +581,10 @@ public sealed class InstallerWindow : Window
     }
 
     private void ShowAssetExplorer() => ShowWorkspace(Page.AssetExplorer, _explorerNavigation, _explorer,
-        "The Asset Explorer works on /var/www/gamedata of the server you are logged in to.");
+        $"The Asset Explorer works on {OctaneInstaller.Gamedata} of the server you are logged in to.");
+
+    private void ShowDebug() => ShowWorkspace(Page.Debug, _debugNavigation, _debug,
+        "Debug follows the logs on the server you are logged in to.");
 
     private void ShowSqlEditor() => ShowWorkspace(Page.SqlEditor, _sqlNavigation, _sqlEditor,
         "The SQL Editor reaches MariaDB through the login to the server.");
@@ -672,8 +696,8 @@ public sealed class InstallerWindow : Window
             Padding = new Thickness(22, 20),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
+            CornerRadius = CardCorners,
+            BorderThickness = CardEdge,
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
@@ -684,7 +708,40 @@ public sealed class InstallerWindow : Window
         return tile;
     }
 
-    // The top of the dashboard: a hotel view (sky, clouds, an isometric hotel) drawn here, by day or by night.
+    // Hotel look: the hotel logo's yellow with a dark edge and a hard shadow. Professional look: the converter's indigo.
+    private static Control Logo()
+    {
+        var icon = Icon(Icons.Server, 19);
+        icon.Foreground = Hotel ? Solid(Outline) : Brushes.White;
+        if (Hotel)
+            return new Border
+            {
+                Width = 38,
+                Height = 38,
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(2),
+                BorderBrush = Solid(Outline),
+                Background = Solid(HotelYellow),
+                BoxShadow = BoxShadows.Parse("0 3 0 0 #66000000"),
+                Child = icon
+            };
+        return new Border
+        {
+            Width = 36,
+            Height = 36,
+            CornerRadius = new CornerRadius(10),
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Color.Parse("#6D7BFF"), 0), new GradientStop(Color.Parse("#4352D4"), 1) }
+            },
+            Child = icon
+        };
+    }
+
+    // The top of the dashboard: a hotel view (the hotel's blue sky and outlined clouds, by day or by night) with the
+    // hotel scene picture on the right.
     private Control HotelBanner()
     {
         bool night = ActualThemeVariant == ThemeVariant.Dark;
@@ -693,9 +750,11 @@ public sealed class InstallerWindow : Window
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
             EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative)
         };
-        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#071C30" : "#4FB3E6"), 0));
-        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#1D4A6E" : "#BDE7F8"), 1));
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#071C30" : "#65A1D7"), 0));
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#1D4A6E" : "#78B0E0"), 1));
         var scene = new Canvas { Height = 170, ClipToBounds = true };
+        // Hard pixel edges, like the hotel view.
+        RenderOptions.SetEdgeMode(scene, EdgeMode.Aliased);
         if (night)
         {
             // Stars at fixed places, so the banner looks the same every time.
@@ -709,33 +768,50 @@ public sealed class InstallerWindow : Window
                 scene.Children.Add(star);
             }
         }
-        // Clouds of stacked blocks, pixel style, around the words rather than behind them.
-        foreach ((double x, double y, double scale) in new[] { (640.0, 20.0, 1.0), (860.0, 104.0, 0.75), (36.0, 140.0, 0.6), (1060.0, 34.0, 0.85), (1300.0, 120.0, 0.7) })
+        // Clouds around the words rather than behind them, and the small specks the hotel view has between them.
+        foreach ((double x, double y, double scale) in new[]
+                 { (620.0, 22.0, 1.25), (930.0, 96.0, 1.0), (1180.0, 30.0, 0.8), (450.0, 12.0, 0.5), (760.0, 128.0, 0.5), (1420.0, 110.0, 0.6) })
             scene.Children.Add(Cloud(x, y, scale, night));
+        foreach ((double x, double y) in new[] { (590.0, 92.0), (720.0, 70.0), (880.0, 40.0), (1080.0, 136.0), (1110.0, 62.0), (470.0, 148.0) })
+            scene.Children.Add(Speck(x, y, night));
 
-        var hotel = HotelDrawing(night);
+        var hotel = HotelPicture();
         var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         layout.Children.Add(scene);
         Grid.SetColumnSpan(scene, 2);
 
-        var words = new StackPanel { Spacing = 6, Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        var welcome = new TextBlock
+        // Plain bold letters with a dark edge read well on the sky; the pixel font made the server's address hard to read.
+        IBrush text = night ? Brushes.White : Solid(Outline);
+        var words = new StackPanel { Spacing = 8, Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        words.Children.Add(new TextBlock
         {
-            Text = Session is null ? "Welcome to your hotel" : $"Welcome back to {Session.Login.Host}",
-            FontFamily = Pixel,
+            Text = Session is null ? "Welcome to your hotel!" : "Welcome back!",
             FontSize = 30,
             FontWeight = FontWeight.Bold,
-            Foreground = Solid(HotelYellow),
-            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 3, BlurRadius = 0, Color = Outline }
-        };
-        words.Children.Add(welcome);
+            Foreground = Brushes.White,
+            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Outline }
+        });
+        if (Session is { } session)
+        {
+            var address = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            address.Children.Add(new Avalonia.Controls.Shapes.Ellipse { Width = 8, Height = 8, Fill = Solid(Color.Parse("#5BD15B")), VerticalAlignment = VerticalAlignment.Center });
+            address.Children.Add(new TextBlock { Text = "Connected to", FontSize = 13, Foreground = Solid(Color.Parse("#CFE6F5")), VerticalAlignment = VerticalAlignment.Center });
+            address.Children.Add(new TextBlock { Text = session.Login.Host, FontFamily = Mono, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+            words.Children.Add(new Border
+            {
+                Background = Solid(Color.FromArgb(0xD0, Outline.R, Outline.G, Outline.B)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(10, 4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = address
+            });
+        }
         words.Children.Add(new TextBlock
         {
             Text = Session is null
                 ? "Log in to your server, then install, run and update your Habbo retro: Polaris, Octane and AtomCMS."
                 : "Install, run and update your Habbo retro: Polaris, Octane and AtomCMS.",
-            // Dark on the day sky, white on the night sky.
-            Foreground = night ? Brushes.White : Solid(Outline),
+            Foreground = text,
             FontSize = 14,
             FontWeight = FontWeight.Medium,
             TextWrapping = TextWrapping.Wrap,
@@ -760,76 +836,77 @@ public sealed class InstallerWindow : Window
         };
     }
 
+    // A hotel view cloud: round white puffs on a flat base, one dark outline around the whole, a pale band underneath.
     private static Control Cloud(double x, double y, double scale, bool night)
     {
         var cloud = new Canvas();
-        IBrush white = Solid(night ? Color.FromArgb(0x30, 255, 255, 255) : Color.FromArgb(0xE6, 255, 255, 255));
-        foreach ((double bx, double by, double bw, double bh) in new[] { (0.0, 12.0, 96.0, 14.0), (14.0, 4.0, 64.0, 10.0), (30.0, -2.0, 30.0, 8.0) })
+        // Opaque by night too, so the puffs do not show through each other.
+        Color white = Color.Parse(night ? "#3A5A78" : "#FFFFFF");
+        Color under = Color.Parse(night ? "#2B4763" : "#D3E3F2");
+        Color edge = night ? Color.Parse("#06121D") : Outline;
+        // Base from 0 to 80 wide at the bottom, puffs (centre x, centre y, radius) on top of it.
+        (double X, double Y, double R)[] puffs = [(20, 24, 11), (42, 17, 17), (62, 24, 10)];
+        const double baseTop = 22, baseBottom = 34, width = 80;
+        double outline = 2 / scale;
+
+        void Round(double left, double top, double w, double h, double corner, Color color)
         {
-            var block = new Avalonia.Controls.Shapes.Rectangle { Width = bw * scale, Height = bh * scale, Fill = white };
-            Canvas.SetLeft(block, bx * scale);
-            Canvas.SetTop(block, by * scale);
-            cloud.Children.Add(block);
+            var shape = new Border { Width = w * scale, Height = h * scale, CornerRadius = new CornerRadius(corner * scale), Background = Solid(color) };
+            Canvas.SetLeft(shape, left * scale);
+            Canvas.SetTop(shape, top * scale);
+            cloud.Children.Add(shape);
         }
+
+        // The outline first, a little larger than the cloud, then the cloud on top of it, so no lines show inside.
+        Round(-outline, baseTop - outline, width + 2 * outline, baseBottom - baseTop + 2 * outline, (baseBottom - baseTop) / 2 + outline, edge);
+        foreach ((double px, double py, double r) in puffs) Round(px - r - outline, py - r - outline, 2 * (r + outline), 2 * (r + outline), r + outline, edge);
+        Round(0, baseTop, width, baseBottom - baseTop, (baseBottom - baseTop) / 2, under);
+        foreach ((double px, double py, double r) in puffs) Round(px - r, py - r, 2 * r, 2 * r, r, white);
+        Round(4, baseTop, width - 8, baseBottom - baseTop - 4, 4, white);
         Canvas.SetLeft(cloud, x);
         Canvas.SetTop(cloud, y);
         return cloud;
     }
 
-    // Two isometric blocks with windows and a HOTEL sign on the roof. Lit windows by night.
-    private static Control HotelDrawing(bool night)
+    // The tiny outlined dots between the clouds.
+    private static Control Speck(double x, double y, bool night)
     {
-        var canvas = new Canvas { Width = 270, Height = 166 };
-        IBrush edge = Solid(Outline);
-        Color lit = Color.Parse("#FFD45E"), glass = night ? Color.Parse("#25475F") : Color.Parse("#8FD0EE");
-
-        void Block(double fx, double fy, double a, double b, double h, Color front, Color side, Color top, int seed)
+        var speck = new Border
         {
-            Point F = new(fx, fy);
-            Point P(double u, double v, bool left) => left ? new Point(F.X - u, F.Y - u / 2 - v) : new Point(F.X + u, F.Y - u / 2 - v);
-            void Face(IEnumerable<Point> points, Color color) => canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
-            {
-                Points = points.ToList(), Fill = Solid(color), Stroke = edge, StrokeThickness = 1.5, StrokeJoin = PenLineJoin.Round
-            });
-            Face([P(0, 0, true), P(a, 0, true), P(a, h, true), P(0, h, true)], front);
-            Face([P(0, 0, false), P(b, 0, false), P(b, h, false), P(0, h, false)], side);
-            Face([P(0, h, true), P(a, h, true), new Point(F.X - a + b, F.Y - a / 2 - b / 2 - h), P(b, h, false)], top);
-            var random = new Random(seed);
-            foreach (bool left in new[] { true, false })
-            {
-                double width = left ? a : b;
-                for (double v = 10; v + 12 < h; v += 18)
-                    for (double u = 8; u + 9 < width; u += 15)
-                    {
-                        Color color = night ? (random.Next(3) > 0 ? lit : glass) : (random.Next(6) == 0 ? lit : glass);
-                        canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
-                        {
-                            Points = [P(u, v, left), P(u + 8, v, left), P(u + 8, v + 10, left), P(u, v + 10, left)],
-                            Fill = Solid(color),
-                            Stroke = Solid(Color.FromArgb(0x80, Outline.R, Outline.G, Outline.B)),
-                            StrokeThickness = 1
-                        });
-                    }
-            }
-        }
-
-        // A low wing on the left, the tower behind it on the right.
-        // The tower's roof is at 166 - 32 - 25 - 76 = 33, under the sign.
-        Block(190, 166, 64, 50, 76, Color.Parse("#F2EBD8"), Color.Parse("#CFC4A6"), Color.Parse("#FBF7EC"), 3);
-        Block(100, 170, 62, 40, 44, Color.Parse("#E9E1CB"), Color.Parse("#C6BA99"), Color.Parse("#F7F2E4"), 5);
-        var sign = new Border
-        {
-            Background = Solid(Color.Parse("#D8352A")),
-            BorderBrush = edge,
-            BorderThickness = new Thickness(1.5),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 1),
-            Child = new TextBlock { Text = "HOTEL", FontFamily = Pixel, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = Solid(HotelYellow) }
+            Width = 7,
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = Solid(Color.Parse(night ? "#3A5A78" : "#FFFFFF")),
+            BorderBrush = Solid(night ? Color.Parse("#06121D") : Outline),
+            BorderThickness = new Thickness(1)
         };
-        Canvas.SetLeft(sign, 150);
-        Canvas.SetTop(sign, 10);
-        canvas.Children.Add(sign);
-        return canvas;
+        Canvas.SetLeft(speck, x);
+        Canvas.SetTop(speck, y);
+        return speck;
+    }
+
+    // The hotel scene on the right of the banner (App/Images/hotel-view.png). Pixel art only stays sharp when every
+    // pixel of the picture becomes the same whole number of screen pixels, so the size follows the screen's scaling:
+    // the largest whole factor that keeps it at most 160 high (for the 154 high picture: 1x up to 175 %, 2x at 200 %).
+    private static Control HotelPicture()
+    {
+        var bitmap = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(new Uri("avares://All-in-1 Installer/App/Images/hotel-view.png")));
+        var picture = new Image { Source = bitmap, VerticalAlignment = VerticalAlignment.Center, Stretch = Stretch.Fill };
+        RenderOptions.SetBitmapInterpolationMode(picture, Avalonia.Media.Imaging.BitmapInterpolationMode.None);
+        void Fit(double scaling)
+        {
+            int factor = Math.Max(1, (int)Math.Floor(160 * scaling / bitmap.PixelSize.Height));
+            picture.Width = bitmap.PixelSize.Width * factor / scaling;
+            picture.Height = bitmap.PixelSize.Height * factor / scaling;
+        }
+        Fit(1);
+        picture.AttachedToVisualTree += (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(picture) is not { } top) return;
+            Fit(top.RenderScaling);
+            top.ScalingChanged += (_, _) => Fit(top.RenderScaling);
+        };
+        return picture;
     }
 
     // Small tiles side by side: as many columns of at least 250 px as fit, at most four, all the same width. Three
@@ -880,8 +957,8 @@ public sealed class InstallerWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Top,
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
+            CornerRadius = CardCorners,
+            BorderThickness = CardEdge,
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
@@ -970,8 +1047,10 @@ public sealed class InstallerWindow : Window
         foreach (var component in Rows)
         {
             RepositoryVersion? version = versions?.FirstOrDefault(v => v.Directory == component.Directory);
-            // AtomCMS is an addon: listed once it is installed.
-            if (component.Update == ToolsView.Component.AtomCms && version is null) continue;
+            // AtomCMS is an addon: listed once it is installed, or always / never when Settings say so.
+            AtomCmsPresence presence = ServerLayout.Current.AtomCmsInstalled;
+            if (component.Update == ToolsView.Component.AtomCms &&
+                (presence == AtomCmsPresence.NotInstalled || (presence == AtomCmsPresence.Detect && version is null))) continue;
             RepositoryUpdate? update = updates?.FirstOrDefault(u => u.Directory == component.Directory);
 
             Color color = Color.Parse(component.Color);
@@ -1009,6 +1088,12 @@ public sealed class InstallerWindow : Window
                 state.Children.Add(Chip("INCLUDED", "Pro.SuccessBack", "Pro.SuccessText"));
             else if (versions is null)
                 state.Children.Add(Chip("READING ...", "Pro.InfoBack", "Pro.InfoText"));
+            else if (version is null && component.Update == ToolsView.Component.AtomCms)
+            {
+                Border missing = Chip("NOT FOUND", "Pro.WarningBack", "Pro.WarningText");
+                ToolTip.SetTip(missing, $"Settings say AtomCMS is installed, but {component.Directory} is not a git clone.");
+                state.Children.Add(missing);
+            }
             else if (version is null)
                 state.Children.Add(Chip("NOT INSTALLED", "Pro.Hover", "Pro.Muted"));
             else if (updates is null)

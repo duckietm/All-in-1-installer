@@ -326,12 +326,159 @@ public static class WebAccessInstaller
     }
 
     /// <summary>
-    /// Adds the hotel to ws.whitelist (websocket and CORS origin) and reads the visitor IP from X-Forwarded-For.
-    /// Returns false when the emulator is not installed.
+    /// NGINX's trusted proxies (<see cref="HotelSite.RealIpFile"/>): 127.0.0.1, and Cloudflare's ranges behind Cloudflare.
+    /// Points an older hotel site at the file, then checks and reloads NGINX (no connection is dropped).
+    /// </summary>
+    public static Task ConfigureNginxRealIpAsync(ServerConnection connection, WebAccessSettings settings, Action<string> log,
+        CancellationToken token = default)
+    {
+        string script = RemoteScript.Prelude + HotelSite.RealIpScript(settings) + $$"""
+
+            nginx -t 2>&1 | sed 's/^/  /'
+            nginx -t >/dev/null 2>&1 || fail "nginx -t refuses the configuration (see above)."
+            if [ -d /run/systemd/system ]; then systemctl reload nginx; else nginx -s reload; fi
+            echo "  NGINX reloaded"
+            """;
+        return RemoteScript.RunAsync(connection, script, log, "Setting NGINX's visitor address failed", token);
+    }
+
+    /// <summary>The weekly refresh of Cloudflare's ranges, at the place and with the name the hotel guides use.</summary>
+    public const string CloudflareRefreshScript = "/var/scripts/CF_Refresh.sh";
+    public const string CloudflareRefreshCron = "/etc/cron.d/cf-refresh";
+
+    /// <summary>
+    /// The refresh script: downloads Cloudflare's ranges and gives them to NGINX (reloaded gracefully), Traefik and
+    /// Polaris. Traefik and Polaris only restart when the ranges changed, because a restart briefly drops the players;
+    /// Polaris only when it was set up for Cloudflare before (Web access, Harden, or Tools → Fix visitor IPs).
+    /// </summary>
+    private static string CloudflareRefreshContent() => $$"""
+        #!/bin/bash
+        # Keeps Cloudflare's IP ranges current for the hotel (written by All-in-1 Installer; weekly from {{CloudflareRefreshCron}}).
+        # NGINX, Traefik and Polaris read the visitor's address from X-Forwarded-For past Cloudflare, instead of seeing Cloudflare's.
+        set -u
+        fail() { echo "ERROR: $*"; exit 1; }
+        v4=$(curl -fsS --max-time 20 https://www.cloudflare.com/ips-v4) || fail "Could not download Cloudflare's IPv4 ranges: nothing changed."
+        v6=$(curl -fsS --max-time 20 https://www.cloudflare.com/ips-v6) || fail "Could not download Cloudflare's IPv6 ranges: nothing changed."
+        ranges=$(printf '%s\n%s\n' "$v4" "$v6" | grep -E '^[0-9a-f.:]+/[0-9]+$')
+        [ "$(echo "$ranges" | grep -c .)" -ge 10 ] || fail "Cloudflare's ranges look wrong: nothing changed."
+        echo "$(date '+%F %T') $(echo "$ranges" | grep -c .) Cloudflare ranges"
+
+        # NGINX: the hotel site's trusted proxies. A reload keeps every connection.
+        realip={{HotelSite.RealIpFile}}
+        { echo "# Proxies NGINX takes the visitor's address from (written by All-in-1 Installer): Traefik and Cloudflare."
+          echo "set_real_ip_from 127.0.0.1;"
+          echo "$ranges" | sed 's/.*/set_real_ip_from &;/'; } > "$realip.new"
+        if ! cmp -s "$realip.new" "$realip"; then
+          cp "$realip" "$realip.old" 2>/dev/null || true
+          mv "$realip.new" "$realip"
+          if nginx -t >/dev/null 2>&1; then
+            { [ -d /run/systemd/system ] && systemctl reload nginx; } || nginx -s reload
+            echo "  NGINX: updated and reloaded"
+          else
+            [ -f "$realip.old" ] && mv "$realip.old" "$realip"
+            echo "  NGINX: nginx -t refused the new list, the old one is back"
+          fi
+        else
+          rm -f "$realip.new"
+          echo "  NGINX: up to date"
+        fi
+
+        # Traefik: the entry points trust X-Forwarded-For only from Cloudflare. A restart drops the players for a moment.
+        traefik={{TraefikDirectory}}/traefik.yml
+        if [ -f "$traefik" ]; then
+          list=$(echo "$ranges" | sed 's/.*/"&"/' | paste -sd, -)
+          sed -E "s#^([[:space:]]*trustedIPs:).*#\1 [$list]#" "$traefik" > "$traefik.new"
+          if ! cmp -s "$traefik.new" "$traefik"; then
+            mv "$traefik.new" "$traefik"
+            docker restart traefik >/dev/null && echo "  Traefik: updated and restarted"
+          else
+            rm -f "$traefik.new"
+            echo "  Traefik: up to date"
+          fi
+        fi
+
+        # Polaris: the proxies it reads X-Forwarded-For past. Only stopped (and started again) when the list changed:
+        # it writes its settings back when it stops, so they cannot be changed while it runs.
+        d={{EmulatorInstaller.Directory}}
+        log={{EmulatorInstaller.LogDirectory}}/emulator.log
+        db=$(grep -sE '^db.database=' "$d/config.ini" | cut -d= -f2)
+        if [ -n "$db" ]; then
+          want=$(echo "$ranges" | paste -sd, -)
+          current=$(mariadb -N "$db" -e "SELECT \`value\` FROM emulator_settings WHERE \`key\` = 'ws.ip.header.trusted'" 2>/dev/null)
+          if [ -z "$current" ]; then
+            echo "  Polaris: not set up for Cloudflare (Tools → Fix visitor IPs does that)"
+          elif [ "$current" = "$want" ]; then
+            echo "  Polaris: up to date"
+          else
+        {{EmulatorInstaller.ControlFunctions}}
+            was_running=
+            if emulator_running; then was_running=yes; stop_emulator; fi
+            mariadb "$db" -e "UPDATE emulator_settings SET \`value\` = '$want' WHERE \`key\` = 'ws.ip.header.trusted'"
+            if [ -n "$was_running" ]; then start_emulator; wait_loaded; fi
+            echo "  Polaris: updated${was_running:+ and restarted}"
+          fi
+        fi
+        """;
+
+    /// <summary>
+    /// Behind Cloudflare: writes <see cref="CloudflareRefreshScript"/> and its weekly cron job (Sunday 04:00) and runs
+    /// it once. Without Cloudflare: removes both when this installer wrote them.
+    /// </summary>
+    public static Task InstallCloudflareRefreshAsync(ServerConnection connection, WebAccessSettings settings, Action<string> log,
+        CancellationToken token = default)
+    {
+        string script = settings.Cloudflare
+            ? RemoteScript.Prelude + $$"""
+                echo "> {{CloudflareRefreshScript}}: Cloudflare's ranges for NGINX, Traefik and Polaris, weekly from {{CloudflareRefreshCron}}"
+                install -d -m 755 /var/scripts
+                cat > {{CloudflareRefreshScript}} <<'REFRESH'
+                {{CloudflareRefreshContent()}}
+                REFRESH
+                chmod 755 {{CloudflareRefreshScript}}
+                printf '# Cloudflare IP ranges for the hotel (All-in-1 Installer)\n0 4 * * 0 root {{CloudflareRefreshScript}} >> /var/log/cf-refresh.log 2>&1\n' > {{CloudflareRefreshCron}}
+                chmod 644 {{CloudflareRefreshCron}}
+                echo "  {{CloudflareRefreshCron}}: every Sunday at 04:00, output in /var/log/cf-refresh.log"
+                echo "> Running it now"
+                {{CloudflareRefreshScript}} | sed 's/^/  /'
+                [ "${PIPESTATUS[0]}" = 0 ] || fail "The refresh script failed (see above)."
+                """
+            : RemoteScript.Prelude + $$"""
+                if grep -qs 'All-in-1 Installer' {{CloudflareRefreshScript}}; then
+                  rm -f {{CloudflareRefreshScript}} {{CloudflareRefreshCron}}
+                  echo "  No Cloudflare: the weekly refresh of Cloudflare's ranges is removed"
+                fi
+                """;
+        return RemoteScript.RunAsync(connection, script, log, "Setting up the Cloudflare refresh failed", token);
+    }
+
+    /// <summary>Cloudflare's published IP ranges (IPv4 and IPv6), downloaded on the server.</summary>
+    public static async Task<IReadOnlyList<string>> CloudflareRangesAsync(ServerConnection connection, CancellationToken token = default)
+    {
+        string script = RemoteScript.Prelude + """
+            load_cloudflare_ranges >/dev/null
+            echo "RANGES=$(echo "$ranges" | paste -sd, -)"
+            """;
+        ScriptValues values = await RemoteScript.RunCapturingAsync(connection, script, _ => { }, "Downloading Cloudflare's IP ranges failed", ["RANGES"], token);
+        return (values["RANGES"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    /// <summary>
+    /// Polaris reads X-Forwarded-For from right to left and skips only the proxies it trusts. Behind Cloudflare the
+    /// header is "visitor, Cloudflare edge" (Traefik adds the edge it saw), so Cloudflare's ranges must be trusted too,
+    /// or every player gets a Cloudflare address. Without Cloudflare nothing extra is trusted (127.0.0.1 always is).
+    /// </summary>
+    public static async Task<string> PolarisTrustedProxiesAsync(ServerConnection connection, WebAccessSettings settings,
+        CancellationToken token = default) =>
+        settings.Cloudflare ? string.Join(",", await CloudflareRangesAsync(connection, token)) : "";
+
+    /// <summary>
+    /// Adds the hotel to ws.whitelist (websocket and CORS origin) and reads the visitor IP from X-Forwarded-For,
+    /// trusting Cloudflare's ranges when the site uses Cloudflare. Returns false when the emulator is not installed.
     /// </summary>
     public static async Task<bool> ConfigurePolarisAsync(ServerConnection connection, WebAccessSettings settings, Action<string> log,
         CancellationToken token = default)
     {
+        string trusted = await PolarisTrustedProxiesAsync(connection, settings, token);
         string host = HardenInstaller.WhitelistHost(settings);
         string current = await EmulatorInstaller.ReadSettingAsync(connection, "ws.whitelist", token) ?? "";
         var hosts = current.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
@@ -341,7 +488,8 @@ public static class WebAccessInstaller
         [
             ("ws.whitelist", whitelist),
             ("websockets.whitelist", whitelist),
-            ("ws.ip.header", "X-Forwarded-For")
+            ("ws.ip.header", "X-Forwarded-For"),
+            ("ws.ip.header.trusted", trusted)
         ], "websocket whitelist and visitor IP", log, token: token);
     }
 

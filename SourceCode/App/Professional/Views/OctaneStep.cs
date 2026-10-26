@@ -16,14 +16,14 @@ public sealed class OctaneStep : InstallStep
         "Set up the Octane client",
         "Configures Octane for the hotel's address (from the web access step), builds it and serves it with NGINX.",
         [
-            "Runs yarn install in /var/www/Octane-Renderer and /var/www/Octane.",
+            $"Runs yarn install in {OctaneInstaller.Renderer} and {OctaneInstaller.Octane}.",
             "Creates client-mode, hotlooks, infostand_backgrounds, news, renderer-config and ui-config .json from the .example files, with the hotel's URLs (wss:// for https, ws:// for http).",
             $"Creates the asset folders those files point to in {OctaneInstaller.Gamedata}, ready for the files from the All-in-1 download tool, and a welcome message in news/news.json.",
-            "Runs yarn build and points the hotel site at /var/www/Octane/dist; /var/www/Octane/build.sh builds it again later.",
+            $"Runs yarn build and points the hotel site at {OctaneInstaller.Dist}; {OctaneInstaller.Octane}/build.sh builds it again later.",
             $"Camera: photos in {HotelSite.Camera} and generated badges in c_images/album1584 and groupbadge/ (the emulator's camera and imager settings; the emulator is stopped while they are set).",
             $"Copies the emulator's Assets/images (Octane's preload images: without them the client does not start) and Assets/badgeparts into {OctaneInstaller.Gamedata}; files already there are kept."
         ],
-        "The Habbo game assets are not copied: put them in /var/www/gamedata with Addons → Deploy Assets (the All-in-1 downloader). Existing configuration files are kept; only their URLs are updated.",
+        $"The Habbo game assets are not copied: put them in {OctaneInstaller.Gamedata} with Addons → Deploy Assets (the All-in-1 downloader). Existing configuration files are kept; only their URLs are updated.",
         [
             "Check the server",
             "Octane-Renderer: yarn install",

@@ -8,20 +8,25 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Fonts;
 using Avalonia.Styling;
+using AllInOneInstaller.Configuration;
 
 namespace AllInOneInstaller.App.Professional;
 
 /// <summary>
-/// Colours, fonts, button styles and icons, in the look of a Habbo hotel: hotel blue, the yellow of the logo, green
-/// "go" buttons, chunky outlines with hard shadows, Ubuntu text and pixel titles. Theme-dependent colours are "Pro.*"
-/// resources bound with <see cref="Bind"/>, so switching between light (day) and dark (night) repaints them.
+/// Colours, fonts, button styles and icons in one of two looks (Settings → Look). The hotel look is a Habbo hotel:
+/// hotel blue, the yellow of the logo, green "go" buttons, chunky outlines with hard shadows, Ubuntu text and pixel
+/// titles. The professional look is the All-in-1 Converter's: indigo, soft cards and Inter. Theme-dependent colours
+/// are "Pro.*" resources bound with <see cref="Bind"/>, so switching between light and dark repaints them.
 /// </summary>
 public static class ProfessionalTheme
 {
-    // These colours are the same in both themes.
-    public static readonly Color Brand = Color.Parse("#0E86C4");
-    public static readonly Color BrandHover = Color.Parse("#0A76AE");
-    public static readonly Color BrandPressed = Color.Parse("#086494");
+    /// <summary>The hotel look, unless Settings → Look chose Professional. Read once at startup.</summary>
+    public static readonly bool Hotel = InstallerSettings.Load().Look != InstallerSettings.ProfessionalLook;
+
+    // These colours are the same in light and dark.
+    public static readonly Color Brand = Color.Parse(Hotel ? "#0E86C4" : "#4F5FE6");
+    public static readonly Color BrandHover = Color.Parse(Hotel ? "#0A76AE" : "#4352D4");
+    public static readonly Color BrandPressed = Color.Parse(Hotel ? "#086494" : "#3744B8");
     // The green of the hotel's OK and Enter buttons, and its darker edge.
     public static readonly Color Go = Color.Parse("#3FA535");
     public static readonly Color GoHover = Color.Parse("#4DB842");
@@ -30,20 +35,26 @@ public static class ProfessionalTheme
     // The yellow of the hotel logo.
     public static readonly Color HotelYellow = Color.Parse("#FFCD38");
     public static readonly Color Outline = Color.Parse("#0F2D3F");
-    public static readonly Color Sidebar = Color.Parse("#0E3A52");
-    public static readonly Color SidebarHover = Color.Parse("#155072");
-    public static readonly Color SidebarSelected = Color.Parse("#1C6690");
-    public static readonly Color SidebarText = Color.Parse("#DCEEF8");
-    public static readonly Color SidebarMuted = Color.Parse("#8DB6CB");
-    public static readonly Color SidebarAccent = HotelYellow;
-    public static readonly Color ConsoleBackground = Color.Parse("#0B1620");
-    public static readonly Color ConsoleText = Color.Parse("#D3E2EC");
-    public static readonly Color ConsoleBorder = Color.Parse("#1F3646");
+    public static readonly Color Sidebar = Color.Parse(Hotel ? "#0E3A52" : "#0E1424");
+    public static readonly Color SidebarHover = Color.Parse(Hotel ? "#155072" : "#1A2338");
+    public static readonly Color SidebarSelected = Color.Parse(Hotel ? "#1C6690" : "#232F52");
+    public static readonly Color SidebarText = Color.Parse(Hotel ? "#DCEEF8" : "#C9D2E3");
+    public static readonly Color SidebarMuted = Color.Parse(Hotel ? "#8DB6CB" : "#7283A6");
+    public static readonly Color SidebarAccent = Hotel ? HotelYellow : Color.Parse("#8B9BFF");
+    public static readonly Color ConsoleBackground = Color.Parse(Hotel ? "#0B1620" : "#0B101C");
+    public static readonly Color ConsoleText = Color.Parse(Hotel ? "#D3E2EC" : "#D3DAE6");
+    public static readonly Color ConsoleBorder = Color.Parse(Hotel ? "#1F3646" : "#1F293D");
 
-    /// <summary>Pixel font for titles, in the spirit of the hotel's Volter.</summary>
+    /// <summary>Corners and edge of cards and tiles.</summary>
+    public static readonly CornerRadius CardCorners = new(Hotel ? 8 : 12);
+    public static readonly Thickness CardEdge = new(Hotel ? 2 : 1);
+
+    /// <summary>Pixel font for titles, in the spirit of the hotel's Volter (the hotel look only).</summary>
     public static readonly FontFamily Pixel = new("fonts:Hotel#Pixelify Sans");
 
-    private static readonly (string Key, string Light, string Dark)[] Tokens =
+    private static readonly (string Key, string Light, string Dark)[] Tokens = Hotel ? HotelTokens : ProfessionalTokens;
+
+    private static (string Key, string Light, string Dark)[] HotelTokens =>
     [
         // Day: the pale sky of the hotel view. Night: the hotel at night.
         ("Pro.Surface", "#DCEFF8", "#0A1824"),
@@ -72,12 +83,43 @@ public static class ProfessionalTheme
         ("Pro.InfoText", "#0A6FA3", "#7FCBF2")
     ];
 
-    /// <summary>Registers Ubuntu and Pixelify Sans (App/Fonts) and makes Ubuntu the default font.</summary>
-    public static AppBuilder WithHotelFonts(this AppBuilder builder) =>
+    private static (string Key, string Light, string Dark)[] ProfessionalTokens =>
+    [
+        ("Pro.Surface", "#F4F6FA", "#0D121C"),
+        ("Pro.Card", "#FFFFFF", "#151B28"),
+        ("Pro.CardBorder", "#E2E7EF", "#232C3E"),
+        ("Pro.CardBorderStrong", "#C9D1DE", "#34405A"),
+        ("Pro.Outline", "#E2E7EF", "#232C3E"),
+        ("Pro.Text", "#0F172A", "#E7EBF3"),
+        ("Pro.Muted", "#5E6B80", "#97A3B8"),
+        ("Pro.Subtle", "#8C97AA", "#66738C"),
+        ("Pro.Hover", "#EFF2F7", "#1C2434"),
+        ("Pro.Pressed", "#E4E8F0", "#232C3F"),
+        ("Pro.Selected", "#ECEFFF", "#1E2550"),
+        ("Pro.AccentText", "#4352D4", "#A9B4FF"),
+        ("Pro.AccentSoft", "#ECEFFF", "#1E2550"),
+        ("Pro.Disabled", "#E9ECF2", "#1B2130"),
+        ("Pro.DisabledText", "#9AA4B5", "#5B6680"),
+        ("Pro.WarningBack", "#FEF3C7", "#3A2C0C"),
+        ("Pro.WarningText", "#8A4B0B", "#F5C451"),
+        ("Pro.SuccessBack", "#DCFCE7", "#11301F"),
+        ("Pro.SuccessText", "#15803D", "#5BD68A"),
+        ("Pro.ErrorBack", "#FEE2E2", "#3A1717"),
+        ("Pro.ErrorText", "#B42318", "#F78A80"),
+        ("Pro.InfoBack", "#E6F0FF", "#152340"),
+        ("Pro.InfoText", "#1D4ED8", "#8AB4FF")
+    ];
+
+    /// <summary>
+    /// Registers Inter, Ubuntu and Pixelify Sans (App/Fonts), and makes Ubuntu (hotel look) or Inter (professional
+    /// look) the default font.
+    /// </summary>
+    public static AppBuilder WithLookFonts(this AppBuilder builder) =>
         builder
+            .WithInterFont()
             .ConfigureFonts(fonts => fonts.AddFontCollection(new EmbeddedFontCollection(new Uri("fonts:Hotel"),
                 new Uri("avares://All-in-1 Installer/App/Fonts"))))
-            .With(new FontManagerOptions { DefaultFamilyName = "fonts:Hotel#Ubuntu" });
+            .With(new FontManagerOptions { DefaultFamilyName = Hotel ? "fonts:Hotel#Ubuntu" : "fonts:Inter#Inter" });
 
     private static bool _installed;
 
@@ -105,6 +147,11 @@ public static class ProfessionalTheme
         IBrush brand = new SolidColorBrush(Brand);
         IBrush yellow = new SolidColorBrush(HotelYellow);
         IBrush goEdge = new SolidColorBrush(GoEdge);
+        if (!Hotel)
+        {
+            AddProfessionalButtonStyles(styles, brand);
+            return;
+        }
 
         // The one main action of a view: the hotel's green button with a dark edge.
         ButtonClass(styles, "primary",
@@ -134,6 +181,43 @@ public static class ProfessionalTheme
             styles.Add(down);
         }
 
+        // Clickable cards: outlined like a hotel window, yellow edge when the mouse is on them.
+        ButtonClass(styles, "tile",
+            normal: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.Outline")),
+            hover: (Res("Pro.Hover"), Res("Pro.Text"), yellow),
+            pressed: (Res("Pro.Pressed"), Res("Pro.Text"), yellow),
+            disabled: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.CardBorder")));
+        var tileShadow = new Style(x => x.OfType<Button>().Class("tile").Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"));
+        tileShadow.Setters.Add(new Setter(ContentPresenter.BoxShadowProperty, BoxShadows.Parse("0 3 0 0 #261D4257")));
+        styles.Add(tileShadow);
+
+        AddRowAndNavStyles(styles);
+    }
+
+    // The All-in-1 Converter's buttons: indigo main action, soft outlines, no bevel.
+    private static void AddProfessionalButtonStyles(Styles styles, IBrush brand)
+    {
+        ButtonClass(styles, "primary",
+            normal: (brand, Brushes.White, Brushes.Transparent),
+            hover: (new SolidColorBrush(BrandHover), Brushes.White, Brushes.Transparent),
+            pressed: (new SolidColorBrush(BrandPressed), Brushes.White, Brushes.Transparent),
+            disabled: (Res("Pro.Disabled"), Res("Pro.DisabledText"), Brushes.Transparent));
+        ButtonClass(styles, "secondary",
+            normal: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.CardBorderStrong")),
+            hover: (Res("Pro.Hover"), Res("Pro.Text"), Res("Pro.CardBorderStrong")),
+            pressed: (Res("Pro.Pressed"), Res("Pro.Text"), Res("Pro.CardBorderStrong")),
+            disabled: (Res("Pro.Card"), Res("Pro.DisabledText"), Res("Pro.CardBorder")));
+        AddRowAndNavStyles(styles);
+        ButtonClass(styles, "tile",
+            normal: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.CardBorder")),
+            hover: (Res("Pro.Card"), Res("Pro.Text"), brand),
+            pressed: (Res("Pro.Hover"), Res("Pro.Text"), brand),
+            disabled: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.CardBorder")));
+    }
+
+    // The same in both looks: rows of a list and the sidebar's navigation.
+    private static void AddRowAndNavStyles(Styles styles)
+    {
         // Entries in the operation list.
         ButtonClass(styles, "row",
             normal: (Brushes.Transparent, Res("Pro.Text"), Brushes.Transparent),
@@ -145,16 +229,6 @@ public static class ProfessionalTheme
             hover: (Res("Pro.Selected"), Res("Pro.Text"), Brushes.Transparent),
             pressed: (Res("Pro.Selected"), Res("Pro.Text"), Brushes.Transparent),
             disabled: (Res("Pro.Selected"), Res("Pro.Text"), Brushes.Transparent));
-
-        // Clickable cards: outlined like a hotel window, yellow edge when the mouse is on them.
-        ButtonClass(styles, "tile",
-            normal: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.Outline")),
-            hover: (Res("Pro.Hover"), Res("Pro.Text"), yellow),
-            pressed: (Res("Pro.Pressed"), Res("Pro.Text"), yellow),
-            disabled: (Res("Pro.Card"), Res("Pro.Text"), Res("Pro.CardBorder")));
-        var tileShadow = new Style(x => x.OfType<Button>().Class("tile").Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"));
-        tileShadow.Setters.Add(new Setter(ContentPresenter.BoxShadowProperty, BoxShadows.Parse("0 3 0 0 #261D4257")));
-        styles.Add(tileShadow);
 
         IBrush sidebarSelected = new SolidColorBrush(SidebarSelected);
         ButtonClass(styles, "nav",
@@ -216,30 +290,39 @@ public static class ProfessionalTheme
         new TextBlock { Text = text, FontSize = size, FontWeight = weight ?? FontWeight.Normal, TextWrapping = TextWrapping.Wrap }
             .Bind(TextBlock.ForegroundProperty, color);
 
-    /// <summary>A panel like a hotel window: white, a dark 2 px edge and a hard shadow under it.</summary>
+    /// <summary>A panel. Hotel look: like a hotel window, a dark 2 px edge and a hard shadow under it.</summary>
     public static Border Card(Control? child = null, Thickness? padding = null) =>
         new Border
         {
             Child = child,
             Padding = padding ?? new Thickness(20),
-            CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2),
-            BoxShadow = BoxShadows.Parse("0 4 0 0 #261D4257")
+            CornerRadius = CardCorners,
+            BorderThickness = CardEdge,
+            BoxShadow = Hotel ? BoxShadows.Parse("0 4 0 0 #261D4257") : default
         }
         .Bind(Border.BackgroundProperty, "Pro.Card")
-        .Bind(Border.BorderBrushProperty, "Pro.Outline");
+        .Bind(Border.BorderBrushProperty, Hotel ? "Pro.Outline" : "Pro.CardBorder");
 
-    /// <summary>A title in the pixel font.</summary>
+    /// <summary>A title: the pixel font in the hotel look (which needs two points more to read the same).</summary>
     public static TextBlock Title(string text, double size = 18, string color = "Pro.Text")
     {
-        TextBlock title = Text(text, size, color, FontWeight.SemiBold);
-        title.FontFamily = Pixel;
+        TextBlock title = Text(text, Hotel ? size : size - 2, color, FontWeight.SemiBold);
+        if (Hotel) title.FontFamily = Pixel;
         return title;
     }
 
-    /// <summary>A small label such as CAUTION, in the pixel font with an edge in its own colour.</summary>
-    public static Border Chip(string text, string back, string fore) =>
-        new Border
+    /// <summary>A small label such as CAUTION. Hotel look: the pixel font with an edge in its own colour.</summary>
+    public static Border Chip(string text, string back, string fore) => !Hotel
+        ? new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(7, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock { Text = text, FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.4 }
+                .Bind(TextBlock.ForegroundProperty, fore)
+        }
+        .Bind(Border.BackgroundProperty, back)
+        : new Border
         {
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(7, 2),
@@ -297,6 +380,7 @@ public static class ProfessionalTheme
         public const string Close = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
         public const string Globe = "M16.36,14C16.44,13.34 16.5,12.68 16.5,12C16.5,11.32 16.44,10.66 16.36,10H19.74C19.9,10.64 20,11.31 20,12C20,12.69 19.9,13.36 19.74,14M14.59,19.56C15.19,18.45 15.65,17.25 15.97,16H18.92C17.96,17.65 16.43,18.93 14.59,19.56M14.34,14H9.66C9.56,13.34 9.5,12.68 9.5,12C9.5,11.32 9.56,10.65 9.66,10H14.34C14.43,10.65 14.5,11.32 14.5,12C14.5,12.68 14.43,13.34 14.34,14M12,19.96C11.17,18.76 10.5,17.43 10.09,16H13.91C13.5,17.43 12.83,18.76 12,19.96M8,8H5.08C6.03,6.34 7.57,5.06 9.4,4.44C8.8,5.55 8.35,6.75 8,8M5.08,16H8C8.35,17.25 8.8,18.45 9.4,19.56C7.57,18.93 6.03,17.65 5.08,16M4.26,14C4.1,13.36 4,12.69 4,12C4,11.31 4.1,10.64 4.26,10H7.64C7.56,10.66 7.5,11.32 7.5,12C7.5,12.68 7.56,13.34 7.64,14M12,4.03C12.83,5.23 13.5,6.57 13.91,8H10.09C10.5,6.57 11.17,5.23 12,4.03M18.92,8H15.97C15.65,6.75 15.19,5.55 14.59,4.44C16.43,5.07 17.96,6.34 18.92,8M12,2C6.47,2 2,6.5 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z";
         public const string History ="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z";
+        public const string Bug = "M14,12H10V10H14M14,16H10V14H14M20,8H17.19C16.74,7.22 16.12,6.55 15.37,6.04L17,4.41L15.59,3L13.42,5.17C12.96,5.06 12.5,5 12,5C11.5,5 11.04,5.06 10.59,5.17L8.41,3L7,4.41L8.62,6.04C7.88,6.55 7.26,7.22 6.81,8H4V10H6.09C6.04,10.33 6,10.66 6,11V12H4V14H6V15C6,15.34 6.04,15.67 6.09,16H4V18H6.81C7.85,19.79 9.78,21 12,21C14.22,21 16.15,19.79 17.19,18H20V16H17.91C17.96,15.67 18,15.34 18,15V14H20V12H18V11C18,10.66 17.96,10.33 17.91,10H20V8Z";
         public const string Console = "M20,19V7H4V19H20M20,3A2,2 0 0,1 22,5V19A2,2 0 0,1 20,21H4A2,2 0 0,1 2,19V5C2,3.89 2.9,3 4,3H20M13,17V15H18V17H13M9.58,13L5.57,9H8.4L11.7,12.3C12.09,12.69 12.09,13.33 11.7,13.72L8.42,17H5.59L9.58,13Z";
         public const string ArrowUp = "M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z";
         public const string Image = "M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19Z";

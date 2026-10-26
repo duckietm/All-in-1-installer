@@ -19,6 +19,13 @@ public sealed class InstallerSettings
     public string? DownloaderPath { get; set; }
     /// <summary>The branch chosen per repository ("duckietm/Octane" to "dev"); a repository that is not in here uses main.</summary>
     public Dictionary<string, string> Branches { get; set; } = [];
+    /// <summary>Paths on the server and the emulator's account; null means the defaults. Read once at startup.</summary>
+    public ServerLayout? Layout { get; set; }
+    /// <summary>"hotel" (the default) or "professional". Read once at startup.</summary>
+    public string? Look { get; set; }
+
+    public const string HotelLook = "hotel";
+    public const string ProfessionalLook = "professional";
 
     public const string DefaultBranch = "main";
 

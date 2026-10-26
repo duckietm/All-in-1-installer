@@ -188,6 +188,8 @@ public sealed partial class WebAccessStep : InstallStep
         Run.Log("> Polaris: ws.whitelist and ws.ip.header (emulator_settings)");
         bool polaris = await Task.Run(() => WebAccessInstaller.ConfigurePolarisAsync(connection, settings, Run.Log));
         Run.Done(polaris ? $"{settings.Address} whitelisted" : "emulator not set up yet");
+        // Behind Cloudflare: its ranges for NGINX, Traefik and Polaris, refreshed weekly.
+        await Task.Run(() => WebAccessInstaller.InstallCloudflareRefreshAsync(connection, settings, Run.Log));
 
         // Test through Traefik from the server itself.
         WebAccessResult result = await Task.Run(() => WebAccessInstaller.TestAsync(connection, settings, Run.Log));
@@ -200,7 +202,7 @@ public sealed partial class WebAccessStep : InstallStep
                          (settings.Cloudflare ? "Cloudflare (proxied)" : "this server") + " and that port 80 is open; Traefik keeps trying.");
         if (!result.ApiAnswered || !result.WebSocketAnswered)
             problems.Add(state.EmulatorRunning || polaris
-                ? "Polaris did not answer on /api or /ws: check that the emulator runs (Emulator step) and see /var/log/emu/emulator.log."
+                ? $"Polaris did not answer on /api or /ws: check that the emulator runs (Emulator step) and see {EmulatorInstaller.LogDirectory}/emulator.log."
                 : "Polaris does not run yet: run the Emulator step, then this step again.");
         if (problems.Count > 0)
             return await SucceededWithWarningAsync("Traefik is running, with something to check", routes + " " + string.Join(" ", problems));

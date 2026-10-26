@@ -35,7 +35,9 @@ public sealed class EmulatorStep : InstallStep
         $"Builds {EmulatorInstaller.Directory} and runs it as a service under its own account.",
         [
             "Installs JDK 25 (OpenJDK, or Eclipse Temurin where the distribution has none) and builds with Emulator/build.sh.",
-            "Creates the account 'emulator' (member of www-data); it owns /var/www/emulator and the log folder /var/log/emu.",
+            EmulatorInstaller.Account == ServerLayout.RootAccount
+                ? $"Runs the emulator as root (Settings → Server layout; a normal account is safer); root owns {EmulatorInstaller.Repository} and the log folder {EmulatorInstaller.LogDirectory}."
+                : $"Creates the account '{EmulatorInstaller.Account}' (member of www-data); it owns {EmulatorInstaller.Repository} and the log folder {EmulatorInstaller.LogDirectory}.",
             "Creates a MariaDB account just for the emulator, with a generated password saved in the configuration folder.",
             "Writes config.ini, the start script and emulator.service, starts it at boot, and waits until the emulator has loaded."
         ],
@@ -158,7 +160,7 @@ public sealed class EmulatorStep : InstallStep
         string javaHome = await Task.Run(() => EmulatorInstaller.InstallJavaAsync(connection, Run.Log));
         Run.Done(javaHome);
         await Task.Run(() => EmulatorInstaller.CreateAccountAsync(connection, Run.Log));
-        Run.Done("emulator (www-data), /var/log/emu");
+        Run.Done($"{EmulatorInstaller.Account} (www-data), {EmulatorInstaller.LogDirectory}");
         string jar = await Task.Run(() => EmulatorInstaller.BuildAsync(connection, javaHome, Run.Log));
         Run.Done(Path.GetFileName(jar));
 

@@ -22,14 +22,15 @@ public sealed record EmulatorState(
 
 public sealed record EmulatorStartResult(string Jar, bool Systemd, int Errors);
 
-/// <summary>Builds and runs the Polaris emulator from /var/www/emulator as emulator.service.</summary>
+/// <summary>Builds and runs the Polaris emulator from its clone (Settings → Server layout) as emulator.service.</summary>
 public static class EmulatorInstaller
 {
-    public const string Repository = "/var/www/emulator";
-    public const string Directory = "/var/www/emulator/Emulator";
-    public const string LogDirectory = "/var/log/emu";
-    public const string Account = "emulator";
-    public const string AccountHome = "/var/lib/emulator";
+    public static readonly string Repository = ServerLayout.Current.EmulatorRepository;
+    public static readonly string Directory = Repository + "/Emulator";
+    public static readonly string LogDirectory = ServerLayout.Current.EmulatorLogs;
+    public static readonly string Account = ServerLayout.Current.EmulatorAccount;
+    /// <summary>The home folder a new account gets; an existing account (root, a person's account) keeps its own.</summary>
+    public static readonly string AccountHome = ServerLayout.Current.EmulatorHome;
 
     /// <summary>Adoptium's signing key, used for Temurin where the distribution has no OpenJDK 25.</summary>
     public const string AdoptiumKeyFingerprint = "3B04D753C9050D9A5D343F39843C48A565F8F04B";
@@ -38,11 +39,11 @@ public static class EmulatorInstaller
     public const string FindJava = "ls -d /usr/lib/jvm/java-25-openjdk-* /usr/lib/jvm/temurin-25-jdk-* 2>/dev/null | head -1";
 
     // Without systemd, look for the process instead.
-    private const string RunningCheck =
-        "if [ -d /run/systemd/system ]; then systemctl is-active --quiet emulator; else pgrep -u emulator -f 'jar-with-dependencies' >/dev/null; fi";
+    private static readonly string RunningCheck =
+        $"if [ -d /run/systemd/system ]; then systemctl is-active --quiet emulator; else pgrep -u {Account} -f 'jar-with-dependencies' >/dev/null; fi";
 
     // Shell helpers that control the emulator. The calling script must set $d and $log.
-    public const string ControlFunctions = $$"""
+    public static readonly string ControlFunctions = $$"""
         emulator_running() { {{RunningCheck}}; }
         stop_emulator() {
           # pkill fails when nothing runs, which would end the script under set -e.
@@ -219,16 +220,19 @@ public static class EmulatorInstaller
             chown {{Account}}:www-data "$d/build.sh"
             chmod 755 "$d/build.sh" "$d/mvnw"
             echo "> $d/build.sh (as {{Account}})"
-            [ -d {{AccountHome}}/.m2/repository ] || echo "  The first build downloads the libraries (about 150 MB): this takes a few minutes."
+            # The account's real home (an existing account keeps its own), for Maven's ~/.m2.
+            home=$(getent passwd {{Account}} | cut -d: -f6)
+            home=${home:-{{AccountHome}}}
+            [ -d "$home/.m2/repository" ] || echo "  The first build downloads the libraries (about 150 MB): this takes a few minutes."
             cd "$d"
             # Maven prints little while it downloads, so report progress every 30 s and give up after 30 minutes.
             start=$(date +%s)
-            timeout 1800 runuser -u {{Account}} -- env HOME={{AccountHome}} "$d/build.sh" &
+            timeout 1800 runuser -u {{Account}} -- env HOME="$home" "$d/build.sh" &
             build=$!
             (
               while sleep 30 </dev/null >/dev/null 2>&1; do
                 kill -0 $build 2>/dev/null || exit 0
-                echo "  ... still building: $(( ($(date +%s) - start) / 60 )) min, $(du -sm {{AccountHome}}/.m2 2>/dev/null | cut -f1) MB in ~/.m2"
+                echo "  ... still building: $(( ($(date +%s) - start) / 60 )) min, $(du -sm "$home/.m2" 2>/dev/null | cut -f1) MB in ~/.m2"
               done
             ) &
             beat=$!
@@ -311,8 +315,8 @@ public static class EmulatorInstaller
             # The previous log is kept as emulator.log.<time>; kept logs older than 30 days are removed.
             JAVA_HOME=JAVA_HOME_HERE
             MEMORY_MB=MEMORY_HERE
-            LOG_DIR=/var/log/emu
-            # Logs and backups: writable by emulator, readable by group www-data, not by others.
+            LOG_DIR={{LogDirectory}}
+            # Logs and backups: writable by the emulator's account, readable by group www-data, not by others.
             umask 027
             cd "$(dirname "$0")"
             jar=$(ls -t target/Polaris-*-jar-with-dependencies.jar target/Habbo-*-jar-with-dependencies.jar 2>/dev/null | head -1)
@@ -337,12 +341,11 @@ public static class EmulatorInstaller
             Requires=mariadb.service
 
             [Service]
-            User=emulator
-            Group=emulator
+            User={{Account}}
             SupplementaryGroups=www-data
             # config.ini, build.sh and the start script live here; target/ only holds the build output.
-            WorkingDirectory=/var/www/emulator/Emulator
-            ExecStart=/var/www/emulator/Emulator/emulator
+            WorkingDirectory={{Directory}}
+            ExecStart={{Directory}}/emulator
             SuccessExitStatus=143
             TimeoutStopSec=30
             Restart=on-failure

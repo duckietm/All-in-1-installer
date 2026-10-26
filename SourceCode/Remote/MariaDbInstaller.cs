@@ -57,7 +57,7 @@ public static class MariaDbInstaller
 
     public static async Task<MariaDbState> InspectAsync(ServerConnection connection, CancellationToken token = default)
     {
-        const string script = """
+        string script = $$"""
             . /etc/os-release
             echo "codename=${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}"
             echo "version=$(dpkg-query -W -f='${db:Status-Abbrev}${Version}' mariadb-server 2>/dev/null | awk '/^ii/{print substr($0,4)}')"
@@ -65,7 +65,7 @@ public static class MariaDbInstaller
             if pgrep -x mariadbd >/dev/null || pgrep -x mysqld >/dev/null; then
               echo "running=yes"
               echo "bind=$(mariadb -N -e 'SELECT @@bind_address' 2>/dev/null)"
-              echo "database=$(mariadb -N -e "SELECT 1 FROM information_schema.schemata WHERE schema_name='habbo'" 2>/dev/null)"
+              echo "database=$(mariadb -N -e "SELECT 1 FROM information_schema.schemata WHERE schema_name='{{ServerLayout.Current.Database}}'" 2>/dev/null)"
               echo "rootremote=$(mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='root' AND host='%'" 2>/dev/null)"
               echo "cms=$(mariadb -N -e "SELECT 1 FROM mysql.user WHERE user='cms' AND host='%'" 2>/dev/null)"
             fi

@@ -16,7 +16,7 @@ public sealed record UiTextsState(IReadOnlyList<string> Languages, string? Curre
 /// </summary>
 public static partial class UiTextsInstaller
 {
-    public const string Target = OctaneInstaller.Gamedata + "/config/UITexts.jsonc";
+    public static readonly string Target = OctaneInstaller.Gamedata + "/config/UITexts.jsonc";
     private const string RawUrl = "https://raw.githubusercontent.com/duckietm/Octane/main/public/configuration";
 
     /// <summary>Octane's languages, used when there is no clone to look in.</summary>

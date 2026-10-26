@@ -40,10 +40,54 @@ public sealed class SettingsView
 
     public Control View { get; }
 
-    public SettingsView()
+    /// <summary>"Restart now" after changing the look: the window closes and the installer starts again.</summary>
+    public event Action? RestartRequested;
+
+    private readonly RadioButton _hotelLook = new() { GroupName = "look", Content = "Hotel: the look of a Habbo hotel (blue, yellow, pixel titles, a hotel view on the dashboard)" };
+    private readonly RadioButton _professionalLook = new() { GroupName = "look", Content = "Professional: the calm look of the All-in-1 Converter (indigo, soft cards)" };
+    private readonly ResultBanner _lookResult = new();
+    private readonly Button _restart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
+
+    // Server layout: one box per value, in the order of the card.
+    private readonly TextBox _emulatorPath = LayoutBox("/var/www/emulator");
+    // The emulator's account: the server's users when logged in, and "Create a new user" at the bottom.
+    private readonly ComboBox _emulatorAccount = new() { MinWidth = 380 };
+    private string _account = "emulator";
+    private List<ServerUser>? _users;
+    private ServerConnection? _usersFor;
+    private bool _settingAccounts;
+    private readonly Func<ServerConnection?> _connection;
+
+    // ToString is what the list shows; no name is the "Create a new user" entry.
+    private sealed record AccountItem(string? Name, string Caption)
     {
+        public override string ToString() => Name is null ? Caption : $"{Name}   ({Caption})";
+    }
+    private readonly TextBox _emulatorLogs = LayoutBox("/var/log/emu");
+    private readonly TextBox _octanePath = LayoutBox("/var/www/Octane");
+    private readonly TextBox _rendererPath = LayoutBox("/var/www/Octane-Renderer");
+    private readonly TextBox _gamedataPath = LayoutBox("/var/www/gamedata");
+    private readonly TextBox _atomPath = LayoutBox("/var/www/atomcms");
+    private readonly ComboBox _atomInstalled = new()
+    {
+        MinWidth = 380,
+        ItemsSource = new[] { "Detect: look on the server", "Installed", "Not installed" }
+    };
+    private readonly TextBox _backupsPath = LayoutBox("/var/backups/all-in-1");
+    private readonly TextBox _database = LayoutBox("habbo");
+    private readonly ResultBanner _rootWarning = new();
+    private readonly ResultBanner _layoutResult = new();
+    private readonly Button _layoutRestart = new() { Content = "Restart now", Padding = new Thickness(18, 9), Classes = { "primary" }, IsVisible = false };
+
+    /// <param name="connection">The login at startup, for the list of the server's users.</param>
+    public SettingsView(Func<ServerConnection?> connection)
+    {
+        _connection = connection;
+        _emulatorAccount.SelectionChanged += async (_, _) => await AccountChosenAsync();
         var page = new StackPanel { Spacing = 18 };
+        page.Children.Add(Card(BuildLook(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDefaults(), new Thickness(24, 20)));
+        page.Children.Add(Card(BuildLayout(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildBranches(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildKeys(), new Thickness(24, 20)));
         page.Children.Add(Card(BuildDownloader(), new Thickness(24, 20)));
@@ -66,14 +110,15 @@ public sealed class SettingsView
         for (int i = 0; i < _branches.Length; i++)
             _branches[i].SelectedItem = InstallerSettings.ChoiceFor(settings.BranchFor(InstallerWindow.Components[i].Repository));
         RefreshKeyList();
+        ShowAccounts();
+        _ = LoadUsersAsync();
     }
 
     private Control BuildDefaults()
     {
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(Text("Default server", 15, weight: FontWeight.SemiBold));
-        panel.Children.Add(Text("Install New Server, AtomCMS and Tools fill in this server. The default key is selected for \"My own SSH key\" " +
-                                "and is tried first by AtomCMS and Tools.", 12.5, "Pro.Muted"));
+        panel.Children.Add(Text("The login at startup fills in this server, and selects the default key when you log in with an SSH key.", 12.5, "Pro.Muted"));
         panel.Children.Add(Label("Server (IP or hostname, with :port for another SSH port)"));
         panel.Children.Add(_server);
         panel.Children.Add(Label("SSH key (from configuration/keys)"));
@@ -119,6 +164,230 @@ public sealed class SettingsView
             (server.Length > 0 ? $"The login fills in {server}" : "No default server") + (key is null ? "." : $", with the key {Path.GetFileName(key)}."));
     }
 
+    private Control BuildLook()
+    {
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(Text("Look", 15, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("How the installer looks. Light or dark follows your system in both. A change applies when the installer starts again.", 12.5, "Pro.Muted"));
+        bool hotel = InstallerSettings.Load().Look != InstallerSettings.ProfessionalLook;
+        _hotelLook.IsChecked = hotel;
+        _professionalLook.IsChecked = !hotel;
+        panel.Children.Add(_hotelLook);
+        panel.Children.Add(_professionalLook);
+        var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
+        save.Click += (_, _) => SaveLook();
+        _restart.Click += (_, _) => RestartRequested?.Invoke();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(save);
+        buttons.Children.Add(_restart);
+        panel.Children.Add(buttons);
+        panel.Children.Add(_lookResult);
+        return panel;
+    }
+
+    private void SaveLook()
+    {
+        InstallerSettings settings = InstallerSettings.Load();
+        bool hotel = _hotelLook.IsChecked == true;
+        settings.Look = hotel ? InstallerSettings.HotelLook : InstallerSettings.ProfessionalLook;
+        settings.Save();
+        // The theme is read once at startup, so a different choice waits for a restart.
+        bool changed = hotel != ProfessionalTheme.Hotel;
+        _restart.IsVisible = changed;
+        _lookResult.Show(changed ? ResultKind.Info : ResultKind.Success, "Saved",
+            changed ? $"The {(hotel ? "hotel" : "professional")} look starts with the next start of the installer: Restart now, or later."
+                    : $"The {(hotel ? "hotel" : "professional")} look is the one you see now.");
+    }
+
+    private static TextBox LayoutBox(string placeholder) => new() { PlaceholderText = placeholder, MinWidth = 380, FontFamily = Mono, FontSize = 13 };
+
+    private Control BuildLayout()
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(Text("Server layout", 15, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("Where the hotel lives on the server and the account the emulator runs as. The installer installs to these places, " +
+                                "and the tools, addons and the dashboard look for everything there. Changing a value does not move anything on the server: " +
+                                "move the folder yourself (or install again). It applies when the installer starts again.", 12.5, "Pro.Muted"));
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 14, RowSpacing = 8, Margin = new Thickness(0, 6, 0, 0) };
+        void Row(string label, Control input)
+        {
+            TextBlock text = Label(label);
+            text.VerticalAlignment = VerticalAlignment.Center;
+            input.HorizontalAlignment = HorizontalAlignment.Left;
+            AddGridRow(grid, text, input);
+        }
+        Row("Emulator (Polaris clone)", _emulatorPath);
+        Row("Emulator account", _emulatorAccount);
+        Row("Emulator logs", _emulatorLogs);
+        Row("Octane", _octanePath);
+        Row("Octane-Renderer", _rendererPath);
+        Row("Gamedata (assets, served on /gamedata)", _gamedataPath);
+        Row("AtomCMS", _atomPath);
+        Row("AtomCMS installed", _atomInstalled);
+        Row("Database backups", _backupsPath);
+        Row("Hotel database", _database);
+        panel.Children.Add(grid);
+        panel.Children.Add(_rootWarning);
+
+        var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
+        save.Click += (_, _) => SaveLayout();
+        var reset = new Button { Content = "Defaults", Padding = new Thickness(18, 9), Classes = { "secondary" } };
+        reset.Click += (_, _) =>
+        {
+            ShowLayout(new ServerLayout());
+            _layoutResult.Show(ResultKind.Info, "The defaults are filled in", "Save to use them.");
+        };
+        _layoutRestart.Click += (_, _) => RestartRequested?.Invoke();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(save);
+        buttons.Children.Add(reset);
+        buttons.Children.Add(_layoutRestart);
+        panel.Children.Add(buttons);
+        panel.Children.Add(_layoutResult);
+        ShowLayout(InstallerSettings.Load().Layout ?? new ServerLayout());
+        return panel;
+    }
+
+    private void ShowLayout(ServerLayout layout)
+    {
+        _emulatorPath.Text = layout.EmulatorRepository;
+        _account = layout.EmulatorAccount;
+        ShowAccounts();
+        _emulatorLogs.Text = layout.EmulatorLogs;
+        _octanePath.Text = layout.Octane;
+        _rendererPath.Text = layout.Renderer;
+        _gamedataPath.Text = layout.Gamedata;
+        _atomPath.Text = layout.AtomCms;
+        _atomInstalled.SelectedIndex = (int)layout.AtomCmsInstalled;
+        _backupsPath.Text = layout.Backups;
+        _database.Text = layout.Database;
+        ShowRootWarning();
+    }
+
+    // root works, but the emulator then has every right on the server.
+    private void ShowRootWarning()
+    {
+        if (_account == ServerLayout.RootAccount)
+            _rootWarning.Show(ResultKind.Warning, "Use a normal account for the emulator, not root",
+                "As root the emulator (and every plugin in it) can change anything on the server: a bug, or someone who finds a hole in it, " +
+                "can take over the whole machine. A normal account such as emulator can only touch the hotel's files. The installer creates the account for you.");
+        else
+            _rootWarning.Hide();
+    }
+
+    // Fills the account list: the server's users when logged in, the chosen account, and "Create a new user".
+    private void ShowAccounts()
+    {
+        ServerConnection? connection = _connection();
+        List<ServerUser>? users = ReferenceEquals(_usersFor, connection) ? _users : null;
+        var items = new List<AccountItem>();
+        foreach (ServerUser user in users ?? [])
+            items.Add(new AccountItem(user.Name, user.Uid == 0 ? "administrator, not recommended"
+                : (user.IsSystem ? "service account" : $"user, uid {user.Uid}") + (user.InWwwData ? ", in www-data" : "") + (user.CanLogIn ? "" : ", no login")));
+        if (items.All(i => i.Name != _account))
+            items.Insert(0, new AccountItem(_account, connection is null ? "log in to see the server's users"
+                : users is null ? "reading the server's users ..." : "not on the server yet: the Emulator step creates it"));
+        items.Add(new AccountItem(null, connection is null ? "+ Create a new user (the Emulator step creates it) ..." : "+ Create a new user ..."));
+        _settingAccounts = true;
+        _emulatorAccount.ItemsSource = items;
+        _emulatorAccount.SelectedItem = items.First(i => i.Name == _account);
+        _settingAccounts = false;
+        ShowRootWarning();
+    }
+
+    // Reads the users once per login (and again after creating one).
+    private async Task LoadUsersAsync(bool force = false)
+    {
+        if (_connection() is not { } connection || (!force && ReferenceEquals(_usersFor, connection))) return;
+        _usersFor = connection;
+        _users = null;
+        ShowAccounts();
+        try
+        {
+            _users = await Task.Run(() => ServerUsers.ListAsync(connection));
+        }
+        catch (Exception ex)
+        {
+            _users = [];
+            _layoutResult.Show(ResultKind.Warning, "Could not read the server's users", ex.Message);
+        }
+        ShowAccounts();
+    }
+
+    private async Task AccountChosenAsync()
+    {
+        if (_settingAccounts || _emulatorAccount.SelectedItem is not AccountItem item) return;
+        if (item.Name is not null)
+        {
+            _account = item.Name;
+            ShowRootWarning();
+            return;
+        }
+        // "Create a new user": back to the current account until the new one exists.
+        ShowAccounts();
+        if (TopLevel.GetTopLevel(View) is not Window owner) return;
+        ServerConnection? connection = _connection();
+        string? name = await NameDialog.ShowAsync(owner, "New account for the emulator",
+            connection is null
+                ? "A service account (no login, home in /var/lib/<name>, member of www-data). You are not logged in, so the Emulator step creates it on the server."
+                : $"A service account on {connection.Login.Host}, created now: no login, home in /var/lib/<name>, member of www-data. The Emulator step gives it the emulator's folders.",
+            "hotel", "Create",
+            text => !ServerLayout.IsValidAccount(text) ? "Use lower case letters, digits, '_' and '-', starting with a letter or '_'."
+                : text == ServerLayout.RootAccount ? "root already exists, and is not recommended for the emulator."
+                : _users?.Any(u => u.Name == text) == true ? $"{text} already exists: pick it in the list." : null);
+        if (name is null) return;
+        if (connection is not null)
+        {
+            try
+            {
+                await Task.Run(() => ServerUsers.CreateAsync(connection, name));
+            }
+            catch (Exception ex)
+            {
+                _layoutResult.Show(ResultKind.Error, $"Creating {name} failed", ex.Message);
+                return;
+            }
+        }
+        _account = name;
+        _layoutResult.Show(ResultKind.Success, connection is null ? $"{name} is chosen" : $"{name} is created on {connection.Login.Host}",
+            "Save to make it the emulator's account; the Emulator step gives it the emulator's folders.");
+        if (connection is not null) await LoadUsersAsync(force: true);
+        else ShowAccounts();
+    }
+
+    private void SaveLayout()
+    {
+        var layout = new ServerLayout
+        {
+            EmulatorRepository = _emulatorPath.Text ?? "",
+            EmulatorAccount = _account,
+            EmulatorLogs = _emulatorLogs.Text ?? "",
+            Octane = _octanePath.Text ?? "",
+            Renderer = _rendererPath.Text ?? "",
+            Gamedata = _gamedataPath.Text ?? "",
+            AtomCms = _atomPath.Text ?? "",
+            AtomCmsInstalled = (AtomCmsPresence)Math.Max(0, _atomInstalled.SelectedIndex),
+            Backups = _backupsPath.Text ?? "",
+            Database = _database.Text ?? ""
+        };
+        layout.Normalize();
+        if (layout.Validate() is { } problem)
+        {
+            _layoutResult.Show(ResultKind.Error, "Not saved", problem);
+            return;
+        }
+        InstallerSettings settings = InstallerSettings.Load();
+        settings.Layout = layout;
+        settings.Save();
+        ShowLayout(layout);
+        // Like the look, the layout is read once at startup.
+        bool changed = System.Text.Json.JsonSerializer.Serialize(layout) != System.Text.Json.JsonSerializer.Serialize(ServerLayout.Current);
+        _layoutRestart.IsVisible = changed;
+        _layoutResult.Show(changed ? ResultKind.Info : ResultKind.Success, "Saved",
+            changed ? "The installer uses the new layout from its next start: Restart now, or later." : "This is the layout the installer uses now.");
+    }
+
     private Control BuildBranches()
     {
         var panel = new StackPanel { Spacing = 10 };
@@ -156,7 +425,7 @@ public sealed class SettingsView
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(Text("SSH keys", 15, weight: FontWeight.SemiBold));
         panel.Children.Add(Text($"Keys in {Path.Combine(ClientConfiguration.Directory, "keys")}: the ones the SSH key step generated, and the ones you import here. " +
-                                "Import your own private key to log in with it (\"My own SSH key\"); a public key alone can be installed for root in the SSH key step.",
+                                "Import your own private key to log in with it (\"SSH key\" in the login); a public key alone can be installed for root in the SSH key step.",
             12.5, "Pro.Muted"));
         panel.Children.Add(_keyList);
 

@@ -100,6 +100,8 @@ public sealed class ToolsView
             Tool("Restart NGINX", "And PHP-FPM (AtomCMS)", Icons.Globe, RestartNginxAsync),
             Tool("Restart Traefik", "The Docker container on 80/443", Icons.Swap, RestartTraefikAsync),
             Tool("Restart all", "MariaDB, emulator, NGINX, Traefik", Icons.Play, RestartAllAsync)));
+        page.Children.Add(Section("Visitors",
+            Tool("Fix visitor IPs", "The players' real IP behind Cloudflare: Traefik, NGINX and Polaris", Icons.Globe, FixVisitorIpsAsync)));
         page.Children.Add(Section("Firewall",
             Tool("Enable firewall", "ufw on: SSH, 80 and 443 only (the Harden step's rules)", Icons.Shield, EnableFirewallAsync),
             Tool("Disable firewall", "ufw off: every port is reachable again", Icons.Alert, DisableFirewallAsync)));
@@ -645,6 +647,34 @@ public sealed class ToolsView
             : $"up to date · {description}";
     }
 
+    private async Task FixVisitorIpsAsync(Window owner, ServerConnection connection)
+    {
+        HardenState state = await Task.Run(() => HardenInstaller.InspectAsync(connection));
+        WebAccessSettings site = state.Site ?? throw new ServerConnectionException("The hotel's address is not known: run the Web access step first.");
+        if (!site.Cloudflare)
+        {
+            Show("Fix visitor IPs", ResultKind.Warning, "The hotel is set up without Cloudflare",
+                $"Without Cloudflare, Traefik writes every visitor's address itself and Polaris and NGINX already read it. If {site.Address} is behind " +
+                "Cloudflare (the orange cloud in Cloudflare's DNS), run Install New Server → Web access again with Cloudflare on: then Traefik, " +
+                "NGINX and Polaris trust Cloudflare's ranges and see the players' real IP.");
+            return;
+        }
+        if (!await ConfirmAsync(owner, "Fix the visitor IPs?",
+                "Polaris, NGINX and Traefik get Cloudflare's current IP ranges, so they read the player's address past Cloudflare. " +
+                "The emulator restarts when its setting changes (everyone is disconnected for a moment), and Traefik when its list changes. " +
+                $"A weekly refresh ({WebAccessInstaller.CloudflareRefreshScript}, Sunday 04:00) keeps the ranges current.", "Fix the visitor IPs")) return;
+        RunPanel run = StartRun("Polaris: trust Cloudflare's ranges", "NGINX: real IP past Cloudflare", "Weekly refresh, Traefik");
+        bool polaris = await Task.Run(() => WebAccessInstaller.ConfigurePolarisAsync(connection, site, run.Log));
+        run.Done(polaris ? "ws.ip.header.trusted" : "emulator not set up yet");
+        await Task.Run(() => WebAccessInstaller.ConfigureNginxRealIpAsync(connection, site, run.Log));
+        run.Done(HotelSite.RealIpFile);
+        await Task.Run(() => WebAccessInstaller.InstallCloudflareRefreshAsync(connection, site, run.Log));
+        run.Done(WebAccessInstaller.CloudflareRefreshCron);
+        await FinishAsync(run, ResultKind.Success, "The players' real IP is passed on",
+            "Polaris logs \"logged in from IP <the player>\" from the next login; NGINX's access log shows the visitor too (Debug → NGINX access). " +
+            $"The ranges are refreshed every Sunday at 04:00 ({WebAccessInstaller.CloudflareRefreshScript}, output in /var/log/cf-refresh.log).");
+    }
+
     private async Task UpdateSystemAsync(Window owner, ServerConnection connection)
     {
         RunPanel run = StartRun("apt-get update, upgrade and dist-upgrade");
@@ -733,6 +763,8 @@ public sealed class ToolsView
 
     private async Task UpdateAtomCmsAsync(Window owner, ServerConnection connection)
     {
+        if (ServerLayout.Current.AtomCmsInstalled == AtomCmsPresence.NotInstalled)
+            throw new ServerConnectionException("Settings → Server layout says AtomCMS is not installed on this server. Change that there to update it.");
         AtomCmsState state = await Task.Run(() => AtomCmsInstaller.InspectAsync(connection));
         if (!state.VendorPresent || !state.Migrated)
             throw new ServerConnectionException($"AtomCMS is not installed on this server ({AtomCmsInstaller.Directory}): install it with Addons → AtomCMS.");

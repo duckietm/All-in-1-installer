@@ -1,3 +1,4 @@
+using AllInOneInstaller.Configuration;
 namespace AllInOneInstaller.Remote;
 
 /// <summary>A database dump on the server.</summary>
@@ -9,13 +10,13 @@ public sealed record EmulatorUpdate(string? OldVersion, string? NewVersion, bool
 public static class ServerTools
 {
     /// <summary>Database dumps made by the tools. Only root can read them because they hold every password hash.</summary>
-    public const string BackupDirectory = "/var/backups/all-in-1";
+    public static readonly string BackupDirectory = ServerLayout.Current.Backups;
     public const int KeptBackups = 10;
 
     // The hotel database from the emulator's config.ini, or habbo.
-    private const string Database = $$"""
+    private static readonly string Database = $$"""
         db=$(grep -sE '^db.database=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2 | tr -d '[:space:]')
-        db=${db:-habbo}
+        db=${db:-{{ServerLayout.Current.Database}}}
         """;
 
     private const string Systemd = "[ -d /run/systemd/system ]";

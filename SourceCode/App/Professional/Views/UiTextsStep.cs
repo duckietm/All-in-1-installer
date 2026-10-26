@@ -28,7 +28,7 @@ public sealed class UiTextsStep : InstallStep
         "Octane comes with them in several languages; choose the one for your hotel.",
         [
             $"Takes UITexts_<language>.jsonc.example from {OctaneInstaller.ConfigurationDirectory} (the Octane clone), or downloads it from github.com/duckietm/Octane when the clone is not there.",
-            "Installs it as UITexts.jsonc in /var/www/gamedata/config, readable by NGINX.",
+            $"Installs it as UITexts.jsonc in {OctaneInstaller.Gamedata}/config, readable by NGINX.",
             "A UITexts.jsonc of your own (one that is none of Octane's languages) is kept as UITexts.jsonc.bak-<time>, so your changes are not lost."
         ],
         "Players see the new texts after reloading the hotel. The game's own texts (furniture names, badges) are in ExternalTexts.json.",

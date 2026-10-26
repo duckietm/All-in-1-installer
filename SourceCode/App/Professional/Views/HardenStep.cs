@@ -21,6 +21,7 @@ public sealed class HardenStep : InstallStep
         "Closes everything that does not need to be reachable from the internet.",
         [
             "Firewall (ufw): deny incoming, allow outgoing, SSH rate limited (ufw limit), HTTP/HTTPS open; with Cloudflare only for Cloudflare's IP ranges.",
+            $"Firewall log: ufw logging on, and '& stop' in {HardenInstaller.UfwRsyslog}, so blocked connections go only to {HardenInstaller.UfwLog} (Debug → Firewall shows it live); rsyslog is restarted.",
             "Closes MariaDB (3306) and the emulator's ports (3000, 2096: the game runs through Traefik on /ws). HeidiSQL and the like connect through an SSH tunnel with your key.",
             "Polaris: ws.whitelist = only the hotel's address, ws.ip.header = X-Forwarded-For (the emulator is stopped while they are set).",
             "TCP stack: SYN cookies, a larger SYN backlog and fewer SYN-ACK retries in /etc/sysctl.conf."
@@ -91,6 +92,9 @@ public sealed class HardenStep : InstallStep
         // Only the hotel's own pages may open the websocket.
         bool polaris = await Task.Run(() => HardenInstaller.ConfigurePolarisAsync(connection, site, Run.Log));
         Run.Done(polaris ? $"ws.whitelist = {HardenInstaller.WhitelistHost(site)}" : "emulator not set up yet");
+        // The visitor's real address behind Cloudflare, in NGINX too, kept current weekly.
+        await Task.Run(() => WebAccessInstaller.ConfigureNginxRealIpAsync(connection, site, Run.Log));
+        await Task.Run(() => WebAccessInstaller.InstallCloudflareRefreshAsync(connection, site, Run.Log));
 
         // An SSH tunnel arrives as root@localhost, so that account takes the root password too.
         DatabaseCredentials? credentials = ClientConfiguration.LoadDatabaseCredentials(connection.Login.Host);

@@ -29,7 +29,7 @@ public sealed class AssetSyncStep : InstallStep
 
     public AssetSyncStep() : base(Icons.Download,
         "Sync from the All-in-1 downloader",
-        "Copies the Habbo assets the All-in-1 downloader saved in its Habbo_Default folder to /var/www/gamedata on the server, where Octane loads them.",
+        $"Copies the Habbo assets the All-in-1 downloader saved in its Habbo_Default folder to {OctaneInstaller.Gamedata} on the server, where Octane loads them.",
         [
             "Compares every folder with the server first: only files that are not there yet, or that differ (size, or newer here), are sent.",
             "Sends them per folder as one stream over the SSH connection (no FTP, no temporary files); the files keep their dates.",

@@ -11,12 +11,16 @@ machine over SSH:
 | AtomCMS (addon, optional) | <https://github.com/ObjectRetros/atomcms> |
 
 The GUI looks like a Habbo hotel: hotel-blue sidebar, the yellow of the hotel logo, green "go" buttons, panels with a
-dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (by day, or at night with lit
-windows in dark mode), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
+dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (blue sky with outlined clouds by day, stars at night, and a hotel
+scene), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
 the hotel's pixel font. Both fonts are free (Ubuntu Font Licence, SIL Open Font License) and ship in
-`SourceCode/App/Fonts` with their licences; the hotel view is drawn by the installer itself, so no Sulake artwork is
-built into the program. The layout (sidebar, cards, status pill, console log) comes from the
+`SourceCode/App/Fonts` with their licences. The sky and clouds are drawn by the installer itself; the hotel scene on
+the right is `SourceCode/App/Images/hotel-view.png`, built into the program (replace that file to show another one). The layout (sidebar, cards, status pill, console log) comes from the
 [All-in-1 Converter](https://github.com/duckietm/all-in-1-converter).
+
+**Settings → Look** switches between this **Hotel** look and the **Professional** look of the All-in-1 Converter
+(indigo, soft cards, Inter). It is stored in `configuration/settings.json` and applies at the next start; **Restart
+now** starts the installer again right away (it waits while a step runs). Light or dark follows the system in both.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -467,8 +471,9 @@ https://example.com/api/...  Traefik          -> Polaris    http://127.0.0.1:209
    Cloudflare, `X-Forwarded-For` is only trusted from Cloudflare's published IP ranges; without it, Traefik
    writes the header itself, so it cannot be faked. Ports 80 and 443 are opened in ufw when it is active.
 4. **Polaris**: the address is added to `ws.whitelist` (websocket origins and CORS for `/api`), and
-   `ws.ip.header = X-Forwarded-For`, so bans and rate limits see the visitor's IP. The emulator restarts when
-   that changed.
+   `ws.ip.header = X-Forwarded-For`, so bans and rate limits see the visitor's IP; with Cloudflare also
+   `ws.ip.header.trusted` = Cloudflare's ranges (see **The players' real IP behind Cloudflare** below). The emulator
+   restarts when that changed. With Cloudflare the weekly refresh of Cloudflare's ranges is set up too.
 5. **Test** on the server through Traefik: the site, `/api/health` and a websocket upgrade on `/ws` (101), and
    with https it waits up to 2 minutes for the certificate. Without a certificate the step ends with a warning
    that shows Let's Encrypt's error (usually: the domain does not point to this server yet, or port 80 is closed).
@@ -543,9 +548,22 @@ Nothing to fill in.
 1. **Polaris** (the emulator is stopped while they are written, then started again):
    `ws.whitelist` = only the hotel's address (`example.com`; Polaris drops `www.` itself), the old
    `websockets.whitelist` the same, and `ws.ip.header` = `X-Forwarded-For`.
-   That header is right **with Cloudflare too**: Polaris only reads it from a trusted proxy (Traefik, on
-   127.0.0.1). Traefik keeps the `X-Forwarded-For` from Cloudflare's ranges only (visitor first, Polaris takes the
-   first entry) and replaces it for everyone else, so it cannot be faked; `CF-Connecting-IP` is not needed.
+   That header is right **with Cloudflare too**, with `ws.ip.header.trusted` = Cloudflare's ranges and the same
+   ranges for NGINX (see **The players' real IP behind Cloudflare** below).
+
+   **The players' real IP behind Cloudflare.** Cloudflare sends `X-Forwarded-For: <player>`; Traefik trusts that
+   only from Cloudflare's ranges and appends the Cloudflare address it saw: `<player>, <Cloudflare>`. Polaris and
+   NGINX read the header **from the right** and skip only the proxies they trust (a visitor can write anything on
+   the left, so that is the only safe way), so both must trust Cloudflare's ranges, or every player shows up as a
+   Cloudflare address (`logged in from IP 172.71.x.x using proxyserver 127.0.0.1`). The installer gives Polaris
+   `ws.ip.header.trusted` = Cloudflare's ranges, and NGINX `/etc/nginx/hotel-real-ip.conf` (`set_real_ip_from`
+   127.0.0.1 and Cloudflare's ranges, with `real_ip_header X-Forwarded-For` and `real_ip_recursive on` in the hotel
+   site). `CF-Connecting-IP` is not used on purpose: Traefik passes it through unchanged, so anyone reaching the
+   server without Cloudflare could write their own. Cloudflare changes its ranges now and then, so
+   `/var/scripts/CF_Refresh.sh` runs every Sunday at 04:00 from `/etc/cron.d/cf-refresh` (output in
+   `/var/log/cf-refresh.log`): it rewrites NGINX's list (a graceful reload), and Traefik's and Polaris' only when the
+   ranges really changed (Traefik is restarted, the emulator stopped and started, because it writes its settings
+   back when it stops). On an existing server, **Tools → Fix visitor IPs** does all of this at once.
 2. **MariaDB over an SSH tunnel**: 3306 stays closed; HeidiSQL and the like use your SSH key. A tunnel arrives
    from 127.0.0.1, which MariaDB counts as `root@localhost` (socket login only), so that account also gets the
    saved root password (`IDENTIFIED VIA unix_socket OR mysql_native_password`). In HeidiSQL: network type
@@ -569,6 +587,11 @@ Nothing to fill in.
    with the host network, so Docker publishes no ports past ufw. Without IPv6 only Cloudflare's IPv4 ranges are
    used. `/etc/ufw/all-in-1-hardened` marks the firewall as managed: the NGINX, MariaDB, Emulator and Web access
    steps then no longer open ports themselves.
+   **Firewall log**: `ufw logging` is switched on (low) when it was off, and in `/etc/rsyslog.d/20-ufw.conf` the last
+   line `#& stop` becomes `& stop` (added when missing), so the firewall's messages go only to `/var/log/ufw.log`
+   instead of also filling `kern.log` and `syslog`; then rsyslog is restarted. Without rsyslog (Debian 12 keeps only
+   the journal) the messages stay in the journal. **Debug → Firewall** shows the log live. A server hardened before
+   this counts as not done yet, so the step offers **Apply again**.
 5. **Log in again**: a new SSH login through the firewall proves you are not locked out (the current session stays
    open; if it fails, the step says so and `ufw disable` undoes it).
 
@@ -644,7 +667,7 @@ Every install step first checks the server and shows what it found:
 | Polaris / Octane / Renderer | the folder is a clone of that repository, on the branch picked under **Branch** | **Skip (already installed)** · Update (git pull) |
 | Emulator | JDK 25, the `emulator` account, a built JAR, `config.ini`, and the emulator running | **Skip (already installed)** · Rebuild and restart |
 | Web access | Docker from download.docker.com running, the Traefik container running, the hotel site on 127.0.0.1:85 | **Skip (already installed)** · Set up again |
-| Harden | ufw active with deny incoming and no 3306 rule, the TCP settings in `/etc/sysctl.conf`, `ws.whitelist` = the hotel's address and `ws.ip.header` = `X-Forwarded-For` | **Skip (already installed)** · Apply again |
+| Harden | ufw active with deny incoming and no 3306 rule, the TCP settings in `/etc/sysctl.conf`, `ws.whitelist` = the hotel's address and `ws.ip.header` = `X-Forwarded-For`; with Cloudflare also `ws.ip.header.trusted` and NGINX's real-IP file with Cloudflare's ranges | **Skip (already installed)** · Apply again |
 | SSH login | sshd -T says no password and no keyboard-interactive login | **Skip (already installed)** · Apply again |
 | Octane | `dist/` built and served, `/var/www/gamedata` exists, `socket.url` matches the web access address, the camera URLs are set (ui-config and emulator) and `plainConfigBaseUrl` matches the layout (`/configuration/`, or `/client/configuration/` with AtomCMS) | **Skip (already installed)** · Configure and rebuild |
 | AtomCMS (addon) | `vendor/` and the atom theme are built, AtomCMS' tables exist, the hotel site's root is `/var/www/atomcms/public` and `hotel.env` has `CMS=atom` | **Skip (already installed)** · Update and rebuild |
@@ -866,9 +889,36 @@ port; **Log in to MariaDB** asks again.
 
 **Settings** (sidebar, under GENERAL):
 
-- **Default server** and **SSH key**: Install New Server, the addons and Tools fill in the server; the key is selected
-  for "My own SSH key" (which is then chosen) and is tried first by the addons and Tools. Stored in
-  `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Look**: Hotel or Professional (see the top of this page).
+- **Default server** and **SSH key**: the login at startup fills in the server, and selects the key when you log in
+  with an SSH key. Stored in `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Server layout**: where the hotel lives on the server and who the emulator runs as. The installer installs to these
+  places, and the tools, the addons, the Asset Explorer and the dashboard look for everything there:
+
+  | Setting | Default |
+  |---|---|
+  | Emulator (Polaris clone; it runs from `Emulator/` in it) | `/var/www/emulator` |
+  | Emulator account | `emulator` |
+  | Emulator logs | `/var/log/emu` |
+  | Octane / Octane-Renderer | `/var/www/Octane`, `/var/www/Octane-Renderer` |
+  | Gamedata (served on `/gamedata`) | `/var/www/gamedata` |
+  | AtomCMS, and **AtomCMS installed**: Detect / Installed / Not installed | `/var/www/atomcms`, Detect |
+  | Database backups | `/var/backups/all-in-1` |
+  | Hotel database (for new MariaDB passwords files) | `habbo` |
+
+  **Emulator account** is a list of the server's accounts once you are logged in: `root`, the people's accounts and
+  the accounts in group `www-data` (where the emulator's account lives), each with a short note. **+ Create a new
+  user ...** at the bottom asks for a name and creates it on the server right away as a service account (no login,
+  home in `/var/lib/<name>`, member of `www-data`); without a login the name is chosen and the Emulator step creates
+  it. An existing account keeps its own home folder for the build's `~/.m2`.
+  **Emulator account `root`** works but gets a warning: the emulator, and every plugin in it, could then change
+  anything on the server. A normal account (created by the Emulator step) can only touch the hotel's files.
+  **AtomCMS installed** decides whether AtomCMS is on the dashboard, in the update check and in **Update AtomCMS**:
+  Detect looks for the clone, Installed always lists it (as NOT FOUND when the folder is missing), Not installed leaves it out.
+  The values go into scripts that run as root, so only plain absolute paths (letters, digits, `.`, `_`, `-`, `/`),
+  Linux user names and simple database names are accepted; system folders such as `/var/www` itself and two parts
+  in one folder are refused. A change does not move anything on the server (move the folder yourself, or install
+  again) and applies at the next start (**Restart now**). Stored in `configuration/settings.json` under `Layout`.
 - **Repository branches**: the branch for Polaris, Octane and Octane-Renderer: **main** or **dev**. This is the
   one choice the whole program follows: the clone steps of Install New Server, **Tools → Update emulator** and
   **Tools → Update Octane**, and the update check that counts new commits. A clone that is on another branch is
@@ -888,6 +938,25 @@ port; **Log in to MariaDB** asks again.
 
 ![Settings: All-in-1 downloader](docs/screenshots/settings-downloader.png)
 
+## Debug
+
+**Debug** (sidebar, under TOOLS) follows the server's logs live over the login, newest lines at the bottom:
+
+| Log | What it follows |
+|---|---|
+| **Emulator** | `<emulator logs>/emulator.log` (Settings → Server layout; `/var/log/emu` by default) |
+| **NGINX errors** | `/var/log/nginx/hotel/error.log` and `/var/log/nginx/error.log` |
+| **NGINX access** | `/var/log/nginx/hotel/access.log`: every request that reaches the hotel site |
+| **Traefik** | `docker logs traefik`: certificates, routing and connection errors |
+| **Firewall** | `/var/log/ufw.log` (see the Harden step), or the kernel journal's UFW lines without rsyslog |
+
+It starts with the last lines of the log and then shows what comes in. **Filter** shows only the lines with a text
+(for example `BLOCK` or a player's IP), **Pause** holds the view still while lines keep being collected, **Clear**
+empties it and **Restart** follows the log again (for example after the connection dropped). The last 5,000 lines are
+kept; **Copy log** and Ctrl+C copy them. The log is only followed while the page is on screen: leaving it, or the
+connection dropping, stops `tail` / `docker logs` on the server too (the follower runs in a process group of its own,
+which is stopped as soon as the SSH channel closes), so nothing keeps running there.
+
 ## Tools
 
 The sidebar's **TOOLS** section is for running the hotel. The page shows the server tools, and the settings
@@ -905,6 +974,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Restart NGINX** | `nginx -t` first (a broken configuration is not restarted), then PHP-FPM 8.5 and NGINX; checks 127.0.0.1:85 |
 | **Restart Traefik** | `docker restart traefik`; waits for port 80 |
 | **Restart all** | MariaDB, emulator, NGINX + PHP-FPM, Traefik, in that order |
+| **Fix visitor IPs** | for a hotel behind Cloudflare whose players show up with a Cloudflare address: gives Polaris (`ws.ip.header.trusted`), NGINX (`/etc/nginx/hotel-real-ip.conf`) and Traefik Cloudflare's current ranges and sets up the weekly refresh (`/var/scripts/CF_Refresh.sh`, `/etc/cron.d/cf-refresh`). Asks first: the emulator restarts when its setting changes, Traefik when its list changes. A hotel set up without Cloudflare gets the advice to run Web access again with Cloudflare on |
 | **Enable firewall** | switches ufw on with the Harden step's rules: when that step set them up they are switched on again, after checking that every SSH port (and the one you are connected on) is in them, so you cannot lock yourself out; on a server where it never ran, the same rules are set up (SSH rate limited, 80/443 for everyone or only Cloudflare's ranges, everything else closed) |
 | **Disable firewall** | `ufw disable` (asks first: every port is reachable again, also the emulator's 3000 and 2096). The rules are kept, so Enable firewall switches the same rules on again; for testing a connection problem |
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |
@@ -1030,6 +1100,7 @@ SourceCode/
   App/Professional/Views/NameDialog.cs    Asks for a file or folder name (rename, new folder)
   App/Professional/Views/SqlEditorView.cs SQL Editor: database tree, table data (edit, filter, pages), structure, query editor
   App/Professional/Views/DatabaseLoginDialog.cs  MariaDB user, password and port for the SQL Editor
+  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik and the firewall
   App/Professional/Views/ToolsView.cs     Tools page: server tools and the settings backup
   App/Professional/Views/TerminalView.cs  SSH terminal page (toolbar, terminal, ssh command)
   App/Professional/Views/SettingsView.cs  Settings page: default server and key, importing SSH keys, downloader path
@@ -1048,7 +1119,8 @@ SourceCode/
   Configuration/ClientConfiguration.cs    The configuration/ directory on the client
   Configuration/DatabaseCredentials.cs    Generated MariaDB passwords and their file format
   Configuration/SettingsBackup.cs         Encrypted export / import of the configuration directory
-  Configuration/InstallerSettings.cs      Default server and key, downloader path (configuration/settings.json)
+  Configuration/InstallerSettings.cs      Default server and key, downloader path, branches, look, layout (configuration/settings.json)
+  Configuration/ServerLayout.cs           Paths on the server, the emulator's account and the database name, with their checks
   Remote/ServerConnection.cs              SSH login, OS check, sudo -> root, RunAsRootAsync
   Remote/SshKeys.cs                       Key generation (encrypted OpenSSH format) and public key parsing
   Remote/BcryptPbkdf.cs                   bcrypt_pbkdf: turns the key password into the encryption key
@@ -1071,6 +1143,7 @@ SourceCode/
   Remote/GamedataFiles.cs                 Asset Explorer server side: list, upload (rights), download, rename, delete, locked to gamedata
   Remote/SqlSession.cs                    SQL Editor: SSH tunnel to MariaDB (MySqlConnector), tables, data, edits, scripts
   Remote/SqlScript.cs                     Splits a script into statements like the mariadb client (quotes, comments, DELIMITER)
+  Remote/ServerUsers.cs                   The server's accounts for Settings → Server layout, and creating a service account
   Remote/ServerTools.cs                   Restarts, database backup / import, system and emulator updates
   Remote/ServerStatus.cs                  Samples CPU, memory, network, disks, users and the git versions
   Remote/EmulatorMonitor.cs               Emulator threads (CPU per thread, jcmd names) and slow-wired log warnings
