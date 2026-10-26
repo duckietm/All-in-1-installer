@@ -50,7 +50,7 @@ public static class DatabaseLoginDialog
             };
 
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(26, 24) };
-        panel.Children.Add(Text("Log in to MariaDB", 18, weight: FontWeight.SemiBold));
+        panel.Children.Add(Title("Log in to MariaDB", 20));
         var message = Text($"The SQL editor connects through the SSH session to 127.0.0.1 on {host}, like HeidiSQL with an SSH tunnel. " +
                            "The installer's root password is in configuration/database when this computer installed MariaDB.", 13);
         message.TextWrapping = TextWrapping.Wrap;

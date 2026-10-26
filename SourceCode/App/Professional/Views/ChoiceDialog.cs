@@ -36,7 +36,7 @@ public static class ChoiceDialog
         }.Bind(Border.BackgroundProperty, "Pro.WarningBack"));
 
         var panel = new StackPanel { Spacing = 10 };
-        panel.Children.Add(Text(heading, 18, weight: FontWeight.SemiBold));
+        panel.Children.Add(Title(heading, 20));
         panel.Children.Add(Text(message, 13));
         foreach (Option<T> option in options)
         {

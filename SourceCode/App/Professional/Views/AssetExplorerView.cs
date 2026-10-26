@@ -24,7 +24,7 @@ public sealed class AssetExplorerView : Grid
     private static readonly string[] ImageExtensions = [".png", ".gif", ".jpg", ".jpeg", ".bmp", ".webp"];
 
     private readonly Func<ServerConnection?> _connection;
-    private readonly Func<Task> _disconnect;
+    private readonly Action _back;
     private readonly Pane _local;
     private readonly Pane _remote;
     private Pane _active;
@@ -39,10 +39,11 @@ public sealed class AssetExplorerView : Grid
     private int _previewRequest;
     private ServerConnection? _loadedFor;
 
-    public AssetExplorerView(Func<ServerConnection?> connection, Func<Task> disconnect)
+    /// <param name="back">Back to the dashboard; the login stays open.</param>
+    public AssetExplorerView(Func<ServerConnection?> connection, Action back)
     {
         _connection = connection;
-        _disconnect = disconnect;
+        _back = back;
         RowDefinitions = new RowDefinitions("Auto,*,Auto,Auto");
         RowSpacing = 10;
         Margin = new Thickness(32, 0, 32, 18);
@@ -56,10 +57,10 @@ public sealed class AssetExplorerView : Grid
         heading.Children.Add(_title);
         heading.Children.Add(Text($"The server side is locked to {GamedataFiles.Root}: uploads get owner www-data, folders 2775, files 664.", 12, "Pro.Muted"));
         bar.Children.Add(heading);
-        var disconnectButton = new Button { Content = "Disconnect", Padding = new Thickness(14, 7), Classes = { "secondary" } };
-        disconnectButton.Click += async (_, _) => { if (!_busy) await _disconnect(); };
-        Grid.SetColumn(disconnectButton, 1);
-        bar.Children.Add(disconnectButton);
+        var backButton = new Button { Content = "Back", Padding = new Thickness(14, 7), Classes = { "secondary" } };
+        backButton.Click += (_, _) => { if (!_busy) _back(); };
+        Grid.SetColumn(backButton, 1);
+        bar.Children.Add(backButton);
         Children.Add(bar);
 
         var panes = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 12 };
@@ -129,8 +130,12 @@ public sealed class AssetExplorerView : Grid
         _remote.Location = "";
         if (_local.Location.Length == 0 && !OperatingSystem.IsWindows())
             _local.Location = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        await _local.LoadAsync();
-        await _remote.LoadAsync();
+        // Like Refresh: a server without gamedata yet shows the reason instead of stopping the program.
+        await RunAsync("Opening the folders", async () =>
+        {
+            await _local.LoadAsync();
+            await _remote.LoadAsync();
+        });
         _local.FocusList();
     }
 

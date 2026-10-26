@@ -10,11 +10,26 @@ machine over SSH:
 | Octane Renderer | <https://github.com/duckietm/Octane-Renderer> |
 | AtomCMS (addon, optional) | <https://github.com/ObjectRetros/atomcms> |
 
-The GUI uses the same Avalonia "Professional" look as the
-[All-in-1 Converter](https://github.com/duckietm/all-in-1-converter): dark sidebar, cards,
-status pill and console log, in light and dark mode.
+The GUI looks like a Habbo hotel: hotel-blue sidebar, the yellow of the hotel logo, green "go" buttons, panels with a
+dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (by day, or at night with lit
+windows in dark mode), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
+the hotel's pixel font. Both fonts are free (Ubuntu Font Licence, SIL Open Font License) and ship in
+`SourceCode/App/Fonts` with their licences; the hotel view is drawn by the installer itself, so no Sulake artwork is
+built into the program. The layout (sidebar, cards, status pill, console log) comes from the
+[All-in-1 Converter](https://github.com/duckietm/all-in-1-converter).
 
 ![Dashboard](docs/screenshots/dashboard.png)
+
+Once you are logged in, the dashboard's **Full server installation** card shows what is on the server: per component
+the build version (the emulator's JAR, Octane's and the renderer's `package.json`), the branch, commit and date of
+its clone, and whether GitHub has something new. That comes from the same `git fetch` as **Tools → Check for
+updates** (right after logging in, and again after every update; **Check again** fetches once more), counted
+against the branches chosen in **Settings → Repository branches**. A component that is behind gets
+**N NEW COMMITS** and an **Update** button, which opens Tools and runs that update (Update emulator, Update Octane,
+or Update AtomCMS) with its question and progress there. Octane and Octane-Renderer are updated and built together,
+so both rows run Update Octane. AtomCMS gets a row of its own once it is installed.
+
+![Dashboard with versions and updates](docs/screenshots/dashboard-versions.png)
 
 ## Requirements
 
@@ -45,24 +60,29 @@ by the wizard.
 
 ## Status
 
-**Step 1 – Install New Server: login and root access** (done)
+**Step 1 – Logging in** (done)
 
-From the dashboard or the sidebar, click **Install New Server**. The installer then asks:
+When the program starts, it asks for the server first. **One login is used for everything**: Install New Server,
+the addons and the tools. It stays open until you close the program or the server drops the connection.
 
-1. **Server IP / Hostname**: e.g. `192.168.1.10` or `hotel.example.com`. Add `:2222` for a
-   different SSH port (`[::1]:2222` for IPv6).
-2. **User account and login**: `root`, or a user with sudo rights, and how to log in:
-   - **Password**, or
-   - **My own SSH key**, for servers that were deployed with a key (no password needed). The user of a cloud image
-     (`ubuntu`, `debian` ...) needs sudo without a password.
-3. **Password**, or with an SSH key: **the private key** (from `configuration/keys`, or **Browse** for an OpenSSH /
-   PEM / PuTTY `.ppk` file) and its password. The key is checked on this computer before connecting; it never leaves it.
+1. **Server IP / hostname**: e.g. `192.168.1.10` or `hotel.example.com`. Add `:2222` for a different SSH port
+   (`[::1]:2222` for IPv6).
+2. **User**: `root`, or a user with sudo rights.
+3. **Log in with**:
+   - **Password**: also used for sudo when the account is not root, or
+   - **SSH key**: a private key from `configuration/keys` (the default key from Settings, or else one in a folder
+     named after the server, is selected), **Browse** for another file, or **Import key ...**: copies your private
+     key (OpenSSH, PEM or PuTTY `.ppk`) to `configuration/keys/<server>/` with its public key next to it. Without any
+     key in the configuration, the login says so and Import key is the highlighted button. The key and its password
+     are checked on this computer before connecting; the key never leaves it. The user of a cloud image (`ubuntu`,
+     `debian` ...) needs sudo without a password.
 
-With a default server and key in **Settings**, these are filled in.
+With a default server and key in **Settings**, these are filled in. **Not now** opens the program without a server:
+the pages that need one show a **Log in** button, and so does the status at the top right (**Not connected · Log in**).
 
-![Login method](docs/screenshots/login-method.png)
+![Login](docs/screenshots/login.png)
 
-Then it:
+Logging in:
 
 - logs in over SSH (password, keyboard-interactive / PAM, or the SSH key),
 - reads `/etc/os-release` and refuses anything that is not Ubuntu or Debian,
@@ -73,14 +93,21 @@ Then it:
     (`usermod -aG sudo <user>`),
 - confirms root access by running `id -un` as root.
 
-![Connected](docs/screenshots/connected.png)
+A failed login shows the reason in the login window, which stays open to try again. When the server drops the
+connection (a reboot, a network problem), the installer notices within a few seconds and opens the login again,
+filled in with the same server, user and key (never the passwords), as soon as no step is running.
 
-Later installation steps use `ServerConnection.RunAsRootAsync(...)`, which always runs as root:
-directly when logged in as root, or through sudo.
+Pages leave with **Back**, which returns to the dashboard and keeps the login open; a wizard continues where it was
+the next time you open it. Logging in again (after a lost connection) starts the wizards over.
+
+Every step uses `ServerConnection.RunAsRootAsync(...)`, which always runs as root: directly when logged in as root,
+or through sudo. Files copied over SFTP into folders only root can open (the database backups) go through a private
+staging folder in `/tmp` when the login is not root.
 
 **Step 2 – SSH key for root** (done)
 
-After connecting, **Next: SSH key** puts a key in `/root/.ssh/authorized_keys`. Choose one:
+**Install New Server** starts with the SSH key step, which puts a key in `/root/.ssh/authorized_keys`, so the next
+login can be root with that key. Choose one:
 
 - **Generate a new key pair**: Ed25519 (recommended) or RSA 4096, in the standard OpenSSH format
   (works with `ssh`, SSH.NET, and PuTTYgen via *Conversions → Import key*). You must set a
@@ -103,13 +130,12 @@ key is already one of them) and asks:
 
 - **Clean all keys and place this one**: only the new key remains.
 - **Add my key to it**: keeps the existing keys, so the server has several (no duplicates).
-- **Abort installation**: changes nothing on the server and disconnects. A key pair generated for
-  this run is deleted again.
+- **Abort installation**: changes nothing on the server. A key pair generated for this run is deleted again.
 
 ![Existing keys](docs/screenshots/ssh-key-existing.png)
 
-After an abort you choose **Abort** (leave the installation and go back to the dashboard) or
-**Start over** (back to the first question).
+After an abort you choose **Abort** (leave the installation and go back to the dashboard; it starts over the next
+time) or **Start over** (the SSH key step again). The login stays open either way.
 
 ![Aborted](docs/screenshots/ssh-key-aborted.png)
 
@@ -469,7 +495,7 @@ Uses the address from the web access step; nothing to fill in. For `https://exam
 
    | File | Keys |
    |---|---|
-   | `renderer-config.json` | `socket.url` = `wss://example.com/ws` (`ws://` with http), `api.url` = `https://example.com`, `asset.url` = `https://example.com/gamedata`, `image.library.url` = `…/gamedata/c_images/`, `hof.furni.url`, `furni.asset.icon.url` = `…/gamedata/icons/…`, `badge.asset.group.url` = `…/gamedata/c_images/groupbadge/badge/%badgedata%`, `badge.asset.grouparts.url` = `…/gamedata/c_images/groupbadge/badgeparts/badgepart_%part%.png`, `group.badge.url` = `%imagerdata%` |
+   | `renderer-config.json` | `socket.url` = `wss://example.com/ws` (`ws://` with http), `api.url` = `https://example.com`, `asset.url` = `https://example.com/gamedata`, `image.library.url` = `…/gamedata/c_images/`, `hof.furni.url`, `furni.asset.icon.url` = `…/gamedata/icons/…`, `badge.asset.group.url` = `…/gamedata/c_images/groupbadge/badge/%badgedata%`, `badge.asset.grouparts.url` = `…/gamedata/c_images/groupbadge/badgeparts/badgepart_%part%.png`, `group.badge.url` = `%imagerdata%`, `habbicons.asset.root` = `/habbicons` (`/client/habbicons` with AtomCMS: the icons are in Octane's own build) |
    | `ui-config.json` | `camera.url` = `https://example.com/gamedata/camera`, `thumbnails.url` = `…/gamedata/camera/thumb/%thumbnail%.png`, `camera.render.mode` = `upload` |
    | `client-mode.json` | `apiBaseUrl` = `https://example.com`, `plainConfigBaseUrl` = `…/configuration/`, `plainGamedataBaseUrl` = `…/gamedata/` |
 
@@ -632,18 +658,13 @@ Skipping a step moves on to the next one, and a failed step can be skipped too.
 ![NGINX already installed](docs/screenshots/rerun-nginx-installed.png)
 
 A new step is a class derived from `InstallStep`, added to `ServerWizard.ServerSteps()`. An addon is a
-`ServerWizard` with its own step list and finish page (and `keyLogin: true`), plus a sidebar entry in `InstallerWindow`.
+`ServerWizard` with its own step list and finish page (and `keyStep: false`), plus a sidebar entry in `InstallerWindow`.
 
 ## Addons
 
 The sidebar has an **ADDONS** section for things that go on top of a finished server installation.
-An addon (and Tools) asks only for the server and **your SSH key**: it logs in as **root with that key** (no account,
-no password, no SSH key step). The list holds every private key in `configuration/keys` (OpenSSH, PEM or PuTTY
-`.ppk`); selected is the default key from Settings, or else a key in a folder named after the server
-(`keys/192.168.0.8`, or one that contains it, like `keys/Server-192.168.0.8`). **Browse** picks another file. Leave the
-key password empty when the key has none; it is checked on this computer before connecting.
-
-![Addon login with the saved SSH key](docs/screenshots/addon-key-login.png)
+The addons and Tools use the login from the start of the program: there is no separate login per page. **Back**
+returns to the dashboard and keeps the login (and the SQL Editor's database connection) open.
 
 ### AtomCMS
 
@@ -688,7 +709,7 @@ It asks for the hotel's name, then:
 
    `client-mode.json` gets `plainConfigBaseUrl` = `<url>/client/configuration/` (`plainGamedataBaseUrl` stays
    `<url>/gamedata/`, `apiBaseUrl` stays `<url>`, through Traefik), `renderer-config.json` gets
-   `"login.screen.enabled": false`, and Octane is rebuilt. `build.sh` puts the `--base` back after a git pull,
+   `"login.screen.enabled": false` and `"habbicons.asset.root": "/client/habbicons"`, and Octane is rebuilt. `build.sh` puts the `--base` back after a git pull,
    and the Octane clone step undoes only that change before it pulls.
 7. **NGINX and Traefik**: the hotel site's root becomes `/var/www/atomcms/public` (PHP 8.5 through PHP-FPM),
    with Octane's `dist/` on `/client/`; `/gamedata/` stays as it is. AtomCMS has an `/api` of its own, so
@@ -782,8 +803,8 @@ server installed before that.
 
 ### Asset Explorer
 
-A two-pane file manager in the style of Norton Commander, for everything in `/var/www/gamedata`. It logs in like the
-other addons (root with your SSH key); then the page shows **this computer** on the left (the drives C:, D: … on
+A two-pane file manager in the style of Norton Commander, for everything in `/var/www/gamedata`. It uses the login from the
+start of the program; the page shows **this computer** on the left (the drives C:, D: … on
 Windows, `/` and your home folder on Linux) and the **server** on the right, **locked to `/var/www/gamedata`** and the
 folders in it: there is no way above it.
 
@@ -816,8 +837,8 @@ folders in it: there is no way above it.
 
 ### SQL Editor
 
-A database client in the style of HeidiSQL, inside the installer. It logs in like the other addons (root with your
-SSH key) and then reaches MariaDB through that SSH session: a tunnel from a free port on `127.0.0.1` of this computer
+A database client in the style of HeidiSQL, inside the installer. It uses the login from the start of the program and
+reaches MariaDB through that SSH session: a tunnel from a free port on `127.0.0.1` of this computer
 to `127.0.0.1:3306` on the server, so the MariaDB port does not have to be open (the Harden step closes it).
 
 It logs in to MariaDB with the root account from `configuration/database/<server>/mariadb.txt` (written when this
@@ -869,9 +890,8 @@ port; **Log in to MariaDB** asks again.
 
 ## Tools
 
-The sidebar's **TOOLS** section is for running the hotel. The page shows the login at the top, the server tools
-below it and the settings backup at the bottom. The server tools are greyed out until you log in, like the addons:
-the server address and the SSH key's password, then root with the saved key.
+The sidebar's **TOOLS** section is for running the hotel. The page shows the server tools, and the settings
+backup at the bottom. Without a login the server tools are greyed out, with a **Log in** button above them.
 
 ![Tools](docs/screenshots/tools.png)
 
@@ -894,6 +914,7 @@ the server address and the SSH key's password, then root with the saved key.
 | **Update system** | `apt-get update`, `upgrade` and `dist-upgrade` (changed configuration files are kept); says when a reboot is needed |
 | **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
 | **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
+| **Update AtomCMS** | `git pull` in `/var/www/atomcms`, `composer install`, `php artisan migrate` (an installed AtomCMS only runs the new migrations; its settings and the hotel name stay) and the theme build. Octane is not touched |
 
 **Settings backup** (no server needed): **Export encrypted settings** writes the whole configuration directory
 (SSH keys, .ppk files, MariaDB passwords of every server) to one `.aio-settings` file, encrypted with AES-256-GCM
@@ -983,9 +1004,12 @@ Assets/                                   Client images shipped next to the exec
 SourceCode/
   Program.cs                              Avalonia entry point
   App/Gui/AvaloniaApp.cs                  Fluent theme + Professional theme
-  App/Professional/ProfessionalTheme.cs   Colours, button styles and icons (shared with the converter)
+  App/Professional/ProfessionalTheme.cs   The hotel look: colours, fonts, buttons, cards, chips and icons
+  App/Fonts/                              Ubuntu and Pixelify Sans, with their licences
   App/Professional/Views/InstallerWindow.cs   Sidebar, header, dashboard
-  App/Professional/Views/ServerWizard.cs  Login, connect and SSH key pages, then the install steps (server install and addons)
+  App/Professional/Views/LoginDialog.cs   The login at startup: server, user, password or SSH key (import a key), connect
+  App/Professional/Views/SshKeyImport.cs  Reads a key file and stores a private key in configuration/keys (login and Settings)
+  App/Professional/Views/ServerWizard.cs  SSH key step, then the install steps (server install and addons), on the shared login
   App/Professional/Views/SshKeyStep.cs    SSH key page (generate / own key, install, test)
   App/Professional/Views/ExistingKeysDialog.cs  "Some keys are already present" dialog
   App/Professional/Views/InstallStep.cs   Base class of the install steps (intro, detection, run panel)

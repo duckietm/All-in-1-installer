@@ -21,6 +21,11 @@
     <Content Include="favicon.ico" />
   </ItemGroup>
 
+  <!-- The hotel look: Ubuntu (as habbo.com and the client use) and Pixelify Sans for titles. Licences next to them. -->
+  <ItemGroup>
+    <AvaloniaResource Include="App\Fonts\*.ttf" />
+  </ItemGroup>
+
   <!-- Client images Octane needs (also in Polaris' Assets/): next to the executable, so Deploy Assets can upload what
        the server is missing. Not inside the single-file bundle: extra images can be dropped in this folder. -->
   <ItemGroup>

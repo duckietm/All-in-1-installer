@@ -11,8 +11,8 @@ using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 namespace AllInOneInstaller.App.Professional.Views;
 
 /// <summary>
-/// Interactive SSH shell over the Tools login. The session survives switching pages and ends on exit or when
-/// Tools disconnects.
+/// Interactive SSH shell over the login. The session survives switching pages and ends on exit or when the
+/// connection to the server is lost.
 /// </summary>
 public sealed class TerminalView : Grid
 {

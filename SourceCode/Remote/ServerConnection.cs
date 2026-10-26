@@ -211,17 +211,52 @@ public sealed class ServerConnection : IAsyncDisposable
         _log("  sudo accepted the password.");
     }
 
+    // SFTP runs as the login user. Without a root login, files in root-only folders (the database backups) go through
+    // a staging folder that only the login user can open.
+    private bool SftpIsRoot => LoginUser == "root";
+
+    private async Task<string> CreateStagingFolderAsync(CancellationToken token)
+    {
+        CommandResult result = await RunAsRootAsync(
+            $"d=$(mktemp -d /tmp/all-in-1.XXXXXX) && chown {ShellQuote(LoginUser)} \"$d\" && chmod 700 \"$d\" && echo \"$d\"", token);
+        if (!result.Succeeded) throw new ServerConnectionException("Could not create a staging folder on the server: " + FirstLine(result.Error, result.Output));
+        return result.Output.Trim();
+    }
+
+    private async Task RemoveStagingFolderAsync(string folder)
+    {
+        try { await RunAsRootAsync($"rm -rf -- {ShellQuote(folder)}"); } catch (Exception) { }
+    }
+
     /// <summary>
-    /// Copies a file from the server over SFTP as the login user, which is root for the tools.
-    /// <paramref name="progress"/> gets the bytes copied so far.
+    /// Copies a file from the server over SFTP. A file only root can read is copied to a staging folder first when
+    /// the login user is not root. <paramref name="progress"/> gets the bytes copied so far.
     /// </summary>
-    public Task DownloadAsync(string remotePath, string localPath, Action<ulong>? progress = null, CancellationToken token = default) =>
-        Task.Run(() =>
+    public async Task DownloadAsync(string remotePath, string localPath, Action<ulong>? progress = null, CancellationToken token = default)
+    {
+        string source = remotePath;
+        string? staging = null;
+        try
         {
-            using SftpClient sftp = OpenSftp();
-            using FileStream file = File.Create(localPath);
-            sftp.DownloadFile(remotePath, file, bytes => progress?.Invoke(bytes));
-        }, token);
+            if (!SftpIsRoot)
+            {
+                staging = await CreateStagingFolderAsync(token);
+                source = $"{staging}/{Path.GetFileName(remotePath)}";
+                CommandResult copy = await RunAsRootAsync($"cp -- {ShellQuote(remotePath)} {ShellQuote(source)} && chown {ShellQuote(LoginUser)} {ShellQuote(source)}", token);
+                if (!copy.Succeeded) throw new ServerConnectionException($"Could not read {remotePath}: {FirstLine(copy.Error, copy.Output)}");
+            }
+            await Task.Run(() =>
+            {
+                using SftpClient sftp = OpenSftp();
+                using FileStream file = File.Create(localPath);
+                sftp.DownloadFile(source, file, bytes => progress?.Invoke(bytes));
+            }, token);
+        }
+        finally
+        {
+            if (staging is not null) await RemoveStagingFolderAsync(staging);
+        }
+    }
 
     /// <summary>
     /// Downloads several files over one SFTP session and creates the local folders as needed.
@@ -255,13 +290,38 @@ public sealed class ServerConnection : IAsyncDisposable
             return (byte[]?)memory.ToArray();
         }, token);
 
-    public Task UploadAsync(string localPath, string remotePath, Action<ulong>? progress = null, CancellationToken token = default) =>
-        Task.Run(() =>
+    /// <summary>
+    /// Copies a file to the server over SFTP. Without a root login it goes to a staging folder first and root moves it
+    /// into place (owned by root).
+    /// </summary>
+    public async Task UploadAsync(string localPath, string remotePath, Action<ulong>? progress = null, CancellationToken token = default)
+    {
+        string target = remotePath;
+        string? staging = null;
+        try
         {
-            using SftpClient sftp = OpenSftp();
-            using FileStream file = File.OpenRead(localPath);
-            sftp.UploadFile(file, remotePath, bytes => progress?.Invoke(bytes));
-        }, token);
+            if (!SftpIsRoot)
+            {
+                staging = await CreateStagingFolderAsync(token);
+                target = $"{staging}/{Path.GetFileName(remotePath)}";
+            }
+            await Task.Run(() =>
+            {
+                using SftpClient sftp = OpenSftp();
+                using FileStream file = File.OpenRead(localPath);
+                sftp.UploadFile(file, target, bytes => progress?.Invoke(bytes));
+            }, token);
+            if (staging is not null)
+            {
+                CommandResult move = await RunAsRootAsync($"mv -f -- {ShellQuote(target)} {ShellQuote(remotePath)} && chown root:root {ShellQuote(remotePath)}", token);
+                if (!move.Succeeded) throw new ServerConnectionException($"Could not write {remotePath}: {FirstLine(move.Error, move.Output)}");
+            }
+        }
+        finally
+        {
+            if (staging is not null) await RemoveStagingFolderAsync(staging);
+        }
+    }
 
     /// <summary>An interactive xterm-256color shell of this size as the logged-in user.</summary>
     public ShellStream OpenShell(int columns, int rows) =>

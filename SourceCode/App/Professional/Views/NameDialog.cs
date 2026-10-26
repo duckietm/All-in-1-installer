@@ -46,7 +46,7 @@ public static class NameDialog
         };
 
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(26, 24) };
-        panel.Children.Add(Text(heading, 18, weight: FontWeight.SemiBold));
+        panel.Children.Add(Title(heading, 20));
         var text = Text(message, 13);
         text.TextWrapping = TextWrapping.Wrap;
         panel.Children.Add(text);

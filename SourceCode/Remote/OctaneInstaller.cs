@@ -119,7 +119,7 @@ public static class OctaneInstaller
             # The emulator's timezone (config.ini) for timezone.settings in a new renderer-config.json.
             tz=$(grep -oE 'serverTimezone=[^&[:space:]]+' {{EmulatorInstaller.Directory}}/config.ini 2>/dev/null | head -1 | cut -d= -f2)
             echo "> {{ConfigurationDirectory}}: {{string.Join(", ", ConfigurationFiles.Select(f => f + ".json"))}}"
-            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' ATOM='{{(site.AtomCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
+            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' CLIENT_PATH='{{site.ClientPath}}' ATOM='{{(site.AtomCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
               FILES='{{string.Join(' ', ConfigurationFiles)}}' TIMEZONE="$tz" node - <<'JS'
             {{ConfigureScript}}
             JS
@@ -194,7 +194,7 @@ public static class OctaneInstaller
     private const string ConfigureScript = """
         const fs = require('fs');
         const path = require('path');
-        const { SITE_URL: site, CLIENT_URL: client, ATOM: atom, SOCKET_URL: socket, CONFIG_DIR: dir, GAMEDATA_DIR: gamedata, TIMEZONE: timezone } = process.env;
+        const { SITE_URL: site, CLIENT_URL: client, CLIENT_PATH: clientPath, ATOM: atom, SOCKET_URL: socket, CONFIG_DIR: dir, GAMEDATA_DIR: gamedata, TIMEZONE: timezone } = process.env;
 
         // Always set: the hotel's URLs. Only in a file created from the .example: the folder layout and modes.
         const urls = {
@@ -208,6 +208,8 @@ public static class OctaneInstaller
                 'badge.asset.group.url': `${site}/gamedata/c_images/groupbadge/badge/%badgedata%`,
                 'badge.asset.grouparts.url': `${site}/gamedata/c_images/groupbadge/badgeparts/badgepart_%part%.png`,
                 'group.badge.url': '%imagerdata%',
+                // Octane's own public/habbicons, so under /client/ with AtomCMS.
+                'habbicons.asset.root': `${clientPath}habbicons`,
                 // With AtomCMS the CMS logs in and opens the client with an SSO ticket.
                 ...(atom ? { 'login.screen.enabled': false } : {})
             },

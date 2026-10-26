@@ -9,7 +9,7 @@ using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 
 namespace AllInOneInstaller.App.Professional.Views;
 
-/// <summary>Settings: the default server and SSH key for every wizard, and importing your own SSH keys.</summary>
+/// <summary>Settings: the default server and SSH key for the login, and importing your own SSH keys.</summary>
 public sealed class SettingsView
 {
     private sealed record KeyItem(string? Path)
@@ -88,7 +88,7 @@ public sealed class SettingsView
             cleared.DefaultKey = null;
             cleared.Save();
             Refresh();
-            _defaultsResult.Show(ResultKind.Info, "No default server", "The wizards start empty again.");
+            _defaultsResult.Show(ResultKind.Info, "No default server", "The login starts empty again.");
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         buttons.Children.Add(save);
@@ -116,7 +116,7 @@ public sealed class SettingsView
         settings.DefaultKey = key is null ? null : InstallerSettings.RelativeKey(key);
         settings.Save();
         _defaultsResult.Show(ResultKind.Success, "Saved",
-            (server.Length > 0 ? $"The wizards fill in {server}" : "No default server") + (key is null ? "." : $", with the key {Path.GetFileName(key)}."));
+            (server.Length > 0 ? $"The login fills in {server}" : "No default server") + (key is null ? "." : $", with the key {Path.GetFileName(key)}."));
     }
 
     private Control BuildBranches()
@@ -208,19 +208,14 @@ public sealed class SettingsView
     private async Task ImportFileAsync()
     {
         if (TopLevel.GetTopLevel(View) is not { } top) return;
-        var options = new FilePickerOpenOptions { Title = "Select an SSH key (private or .pub)", AllowMultiple = false };
-        string sshFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh");
-        if (Directory.Exists(sshFolder)) options.SuggestedStartLocation = await top.StorageProvider.TryGetFolderFromPathAsync(sshFolder);
-        IReadOnlyList<IStorageFile> files = await top.StorageProvider.OpenFilePickerAsync(options);
-        if (files.Count == 0) return;
-        await using Stream stream = await files[0].OpenReadAsync();
-        if (stream.CanSeek && stream.Length > 64 * 1024)
+        try
         {
-            _importResult.Show(ResultKind.Error, "That file is too large to be an SSH key", files[0].Name);
-            return;
+            if (await SshKeyImport.PickFileAsync(top, "Select an SSH key (private or .pub)") is { } file) await ImportAsync(file.Text, file.Name);
         }
-        using var reader = new StreamReader(stream);
-        await ImportAsync(await reader.ReadToEndAsync(), files[0].Name);
+        catch (IOException ex)
+        {
+            _importResult.Show(ResultKind.Error, "That key file cannot be used", ex.Message);
+        }
     }
 
     // A private key is stored with its public key. A public key on its own is stored as provided_*.pub.
@@ -252,33 +247,20 @@ public sealed class SettingsView
             return true;
         }
 
-        string passphrase = "";
-        AuthorizedKey key;
-        while (true)
+        if (TopLevel.GetTopLevel(View) is not Window owner) return false;
+        SshKeyImport.Imported? imported;
+        try
         {
-            try
-            {
-                key = SshKeys.PublicKeyOf(text, passphrase, $"imported {source}");
-                break;
-            }
-            catch (SshKeys.KeyPasswordException ex)
-            {
-                if (TopLevel.GetTopLevel(View) is not Window owner) return false;
-                string? entered = await PasswordDialog.ShowAsync(owner, "Key password", "This key has a password",
-                    passphrase.Length > 0 ? ex.Message + " Try again." : "Enter it once to read the public key. The key is stored as it is: still protected by its password.",
-                    confirm: false);
-                if (entered is null) return false;
-                passphrase = entered;
-            }
-            catch (FormatException ex)
-            {
-                _importResult.Show(ResultKind.Error, "Not a usable private key", ex.Message);
-                return false;
-            }
+            imported = await SshKeyImport.ImportPrivateKeyAsync(owner, text, source, folder);
         }
-        string path = ClientConfiguration.SaveImportedKey(folder, text, key);
+        catch (FormatException ex)
+        {
+            _importResult.Show(ResultKind.Error, "Not a usable private key", ex.Message);
+            return false;
+        }
+        if (imported is null) return false;
         _importResult.Show(ResultKind.Success, "Private key imported",
-            $"{path} ({key.Type}, {key.Fingerprint}). Choose it as the default key above, or pick it under \"My own SSH key\" when logging in.");
+            $"{imported.Path} ({imported.Key.Type}, {imported.Key.Fingerprint}). Choose it as the default key above, or pick it under \"SSH key\" when logging in.");
         Refresh();
         return true;
     }
