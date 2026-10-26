@@ -10,9 +10,13 @@ machine over SSH:
 | Octane Renderer | <https://github.com/duckietm/Octane-Renderer> |
 | AtomCMS (addon, optional) | <https://github.com/ObjectRetros/atomcms> |
 
-The GUI uses the same Avalonia "Professional" look as the
-[All-in-1 Converter](https://github.com/duckietm/all-in-1-converter): dark sidebar, cards,
-status pill and console log, in light and dark mode.
+The GUI looks like a Habbo hotel: hotel-blue sidebar, the yellow of the hotel logo, green "go" buttons, panels with a
+dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (by day, or at night with lit
+windows in dark mode), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
+the hotel's pixel font. Both fonts are free (Ubuntu Font Licence, SIL Open Font License) and ship in
+`SourceCode/App/Fonts` with their licences; the hotel view is drawn by the installer itself, so no Sulake artwork is
+built into the program. The layout (sidebar, cards, status pill, console log) comes from the
+[All-in-1 Converter](https://github.com/duckietm/all-in-1-converter).
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -1000,7 +1004,8 @@ Assets/                                   Client images shipped next to the exec
 SourceCode/
   Program.cs                              Avalonia entry point
   App/Gui/AvaloniaApp.cs                  Fluent theme + Professional theme
-  App/Professional/ProfessionalTheme.cs   Colours, button styles and icons (shared with the converter)
+  App/Professional/ProfessionalTheme.cs   The hotel look: colours, fonts, buttons, cards, chips and icons
+  App/Fonts/                              Ubuntu and Pixelify Sans, with their licences
   App/Professional/Views/InstallerWindow.cs   Sidebar, header, dashboard
   App/Professional/Views/LoginDialog.cs   The login at startup: server, user, password or SSH key (import a key), connect
   App/Professional/Views/SshKeyImport.cs  Reads a key file and stores a private key in configuration/keys (login and Settings)

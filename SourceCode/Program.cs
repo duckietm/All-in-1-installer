@@ -1,5 +1,6 @@
 using Avalonia;
 using AllInOneInstaller.App.Gui;
+using AllInOneInstaller.App.Professional;
 
 namespace AllInOneInstaller;
 
@@ -16,6 +17,6 @@ internal static class Program
     private static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<AvaloniaApp>()
             .UsePlatformDetect()
-            .WithInterFont()
+            .WithHotelFonts()
             .LogToTrace();
 }

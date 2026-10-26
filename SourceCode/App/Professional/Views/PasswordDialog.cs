@@ -49,7 +49,7 @@ public static class PasswordDialog
             };
 
         var panel = new StackPanel { Spacing = 10, Margin = new Thickness(26, 24) };
-        panel.Children.Add(Text(heading, 18, weight: FontWeight.SemiBold));
+        panel.Children.Add(Title(heading, 20));
         panel.Children.Add(Text(message, 13));
         panel.Children.Add(password);
         if (confirm) panel.Children.Add(again);

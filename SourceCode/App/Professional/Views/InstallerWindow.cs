@@ -27,7 +27,7 @@ public sealed class InstallerWindow : Window
     private readonly ContentControl _pageHost = new();
     private readonly ScrollViewer _pageScroll = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly StackPanel _content = new() { Spacing = 18, Margin = new Thickness(32, 0, 32, 18) };
-    private readonly TextBlock _title = Text("", 26, weight: FontWeight.SemiBold);
+    private readonly TextBlock _title = Title("", 28);
     private readonly TextBlock _subtitle = Text("", 13.5, "Pro.Muted");
     private readonly Border _statusPill = new() { CornerRadius = new CornerRadius(14), Padding = new Thickness(11, 5), VerticalAlignment = VerticalAlignment.Center };
     private readonly Avalonia.Controls.Shapes.Ellipse _statusDot = Dot();
@@ -292,23 +292,30 @@ public sealed class InstallerWindow : Window
         var sidebar = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
 
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 11, Margin = new Thickness(6, 0, 0, 26) };
+        // The hotel logo's yellow, with a dark edge and a hard shadow.
         var logoIcon = Icon(Icons.Server, 19);
-        logoIcon.Foreground = Brushes.White;
+        logoIcon.Foreground = Solid(Outline);
         brand.Children.Add(new Border
         {
-            Width = 36,
-            Height = 36,
-            CornerRadius = new CornerRadius(10),
-            Background = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-                GradientStops = { new GradientStop(Color.Parse("#6D7BFF"), 0), new GradientStop(Color.Parse("#4352D4"), 1) }
-            },
+            Width = 38,
+            Height = 38,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(2),
+            BorderBrush = Solid(Outline),
+            Background = Solid(HotelYellow),
+            BoxShadow = BoxShadows.Parse("0 3 0 0 #66000000"),
             Child = logoIcon
         });
         var brandText = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
-        brandText.Children.Add(new TextBlock { Text = "All-in-1 Installer", Foreground = Brushes.White, FontSize = 15, FontWeight = FontWeight.SemiBold });
+        brandText.Children.Add(new TextBlock
+        {
+            Text = "All-in-1 Installer",
+            Foreground = Solid(HotelYellow),
+            FontFamily = Pixel,
+            FontSize = 17,
+            FontWeight = FontWeight.Bold,
+            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 2, BlurRadius = 0, Color = Color.Parse("#B0000000") }
+        });
         brandText.Children.Add(new TextBlock { Text = "Hotel server setup", Foreground = Solid(SidebarMuted), FontSize = 11.5 });
         brand.Children.Add(brandText);
         sidebar.Children.Add(brand);
@@ -467,7 +474,7 @@ public sealed class InstallerWindow : Window
     {
         _page = Page.Dashboard;
         ActivateNavigation(_dashboardNavigation);
-        var tiles = new List<Control>();
+        var tiles = new List<Control> { HotelBanner() };
         if (Session is null)
             tiles.Add(Tile("Log in", "Log in to your server: with a password or your SSH key. The login is used for everything below and stays open until you close the program.",
                 Icons.Account, Color.Parse("#16A34A"), async () => await ShowLoginAsync()));
@@ -627,6 +634,10 @@ public sealed class InstallerWindow : Window
             line.Children.Add(contribution);
             panel.Children.Add(line);
         }
+        TextBlock fonts = Text("Fonts: Ubuntu (Ubuntu Font Licence 1.0) and Pixelify Sans (SIL Open Font License 1.1), in App/Fonts with their licences. " +
+                               "The look is inspired by Habbo Hotel; Habbo is a trademark of Sulake, and this installer is not made by or connected to Sulake.", 12, "Pro.Subtle");
+        fonts.Margin = new Thickness(0, 12, 0, 0);
+        panel.Children.Add(fonts);
         ShowScrollPage(Card(panel));
         RefreshHeader();
     }
@@ -646,7 +657,7 @@ public sealed class InstallerWindow : Window
             Child = icon
         });
         var text = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(Text(title, 17, weight: FontWeight.SemiBold));
+        text.Children.Add(Title(title, 19));
         text.Children.Add(Text(description, 12.5, "Pro.Muted"));
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
@@ -661,8 +672,8 @@ public sealed class InstallerWindow : Window
             Padding = new Thickness(22, 20),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(12),
-            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(2),
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
@@ -671,6 +682,154 @@ public sealed class InstallerWindow : Window
             open();
         };
         return tile;
+    }
+
+    // The top of the dashboard: a hotel view (sky, clouds, an isometric hotel) drawn here, by day or by night.
+    private Control HotelBanner()
+    {
+        bool night = ActualThemeVariant == ThemeVariant.Dark;
+        var sky = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative)
+        };
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#071C30" : "#4FB3E6"), 0));
+        sky.GradientStops.Add(new GradientStop(Color.Parse(night ? "#1D4A6E" : "#BDE7F8"), 1));
+        var scene = new Canvas { Height = 170, ClipToBounds = true };
+        if (night)
+        {
+            // Stars at fixed places, so the banner looks the same every time.
+            var random = new Random(7);
+            for (int i = 0; i < 46; i++)
+            {
+                double size = random.Next(2) + 1.5;
+                var star = new Avalonia.Controls.Shapes.Rectangle { Width = size, Height = size, Fill = Solid(Color.FromArgb((byte)random.Next(120, 255), 255, 255, 230)) };
+                Canvas.SetLeft(star, random.Next(0, 1400));
+                Canvas.SetTop(star, random.Next(4, 140));
+                scene.Children.Add(star);
+            }
+        }
+        // Clouds of stacked blocks, pixel style, around the words rather than behind them.
+        foreach ((double x, double y, double scale) in new[] { (640.0, 20.0, 1.0), (860.0, 104.0, 0.75), (36.0, 140.0, 0.6), (1060.0, 34.0, 0.85), (1300.0, 120.0, 0.7) })
+            scene.Children.Add(Cloud(x, y, scale, night));
+
+        var hotel = HotelDrawing(night);
+        var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        layout.Children.Add(scene);
+        Grid.SetColumnSpan(scene, 2);
+
+        var words = new StackPanel { Spacing = 6, Margin = new Thickness(28, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var welcome = new TextBlock
+        {
+            Text = Session is null ? "Welcome to your hotel" : $"Welcome back to {Session.Login.Host}",
+            FontFamily = Pixel,
+            FontSize = 30,
+            FontWeight = FontWeight.Bold,
+            Foreground = Solid(HotelYellow),
+            Effect = new DropShadowEffect { OffsetX = 0, OffsetY = 3, BlurRadius = 0, Color = Outline }
+        };
+        words.Children.Add(welcome);
+        words.Children.Add(new TextBlock
+        {
+            Text = Session is null
+                ? "Log in to your server, then install, run and update your Habbo retro: Polaris, Octane and AtomCMS."
+                : "Install, run and update your Habbo retro: Polaris, Octane and AtomCMS.",
+            // Dark on the day sky, white on the night sky.
+            Foreground = night ? Brushes.White : Solid(Outline),
+            FontSize = 14,
+            FontWeight = FontWeight.Medium,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 560,
+            HorizontalAlignment = HorizontalAlignment.Left
+        });
+        layout.Children.Add(words);
+        hotel.Margin = new Thickness(0, 0, 26, 0);
+        Grid.SetColumn(hotel, 1);
+        layout.Children.Add(hotel);
+
+        return new Border
+        {
+            Height = 170,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(2),
+            BorderBrush = Solid(Outline),
+            Background = sky,
+            ClipToBounds = true,
+            BoxShadow = BoxShadows.Parse("0 4 0 0 #261D4257"),
+            Child = layout
+        };
+    }
+
+    private static Control Cloud(double x, double y, double scale, bool night)
+    {
+        var cloud = new Canvas();
+        IBrush white = Solid(night ? Color.FromArgb(0x30, 255, 255, 255) : Color.FromArgb(0xE6, 255, 255, 255));
+        foreach ((double bx, double by, double bw, double bh) in new[] { (0.0, 12.0, 96.0, 14.0), (14.0, 4.0, 64.0, 10.0), (30.0, -2.0, 30.0, 8.0) })
+        {
+            var block = new Avalonia.Controls.Shapes.Rectangle { Width = bw * scale, Height = bh * scale, Fill = white };
+            Canvas.SetLeft(block, bx * scale);
+            Canvas.SetTop(block, by * scale);
+            cloud.Children.Add(block);
+        }
+        Canvas.SetLeft(cloud, x);
+        Canvas.SetTop(cloud, y);
+        return cloud;
+    }
+
+    // Two isometric blocks with windows and a HOTEL sign on the roof. Lit windows by night.
+    private static Control HotelDrawing(bool night)
+    {
+        var canvas = new Canvas { Width = 270, Height = 166 };
+        IBrush edge = Solid(Outline);
+        Color lit = Color.Parse("#FFD45E"), glass = night ? Color.Parse("#25475F") : Color.Parse("#8FD0EE");
+
+        void Block(double fx, double fy, double a, double b, double h, Color front, Color side, Color top, int seed)
+        {
+            Point F = new(fx, fy);
+            Point P(double u, double v, bool left) => left ? new Point(F.X - u, F.Y - u / 2 - v) : new Point(F.X + u, F.Y - u / 2 - v);
+            void Face(IEnumerable<Point> points, Color color) => canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
+            {
+                Points = points.ToList(), Fill = Solid(color), Stroke = edge, StrokeThickness = 1.5, StrokeJoin = PenLineJoin.Round
+            });
+            Face([P(0, 0, true), P(a, 0, true), P(a, h, true), P(0, h, true)], front);
+            Face([P(0, 0, false), P(b, 0, false), P(b, h, false), P(0, h, false)], side);
+            Face([P(0, h, true), P(a, h, true), new Point(F.X - a + b, F.Y - a / 2 - b / 2 - h), P(b, h, false)], top);
+            var random = new Random(seed);
+            foreach (bool left in new[] { true, false })
+            {
+                double width = left ? a : b;
+                for (double v = 10; v + 12 < h; v += 18)
+                    for (double u = 8; u + 9 < width; u += 15)
+                    {
+                        Color color = night ? (random.Next(3) > 0 ? lit : glass) : (random.Next(6) == 0 ? lit : glass);
+                        canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
+                        {
+                            Points = [P(u, v, left), P(u + 8, v, left), P(u + 8, v + 10, left), P(u, v + 10, left)],
+                            Fill = Solid(color),
+                            Stroke = Solid(Color.FromArgb(0x80, Outline.R, Outline.G, Outline.B)),
+                            StrokeThickness = 1
+                        });
+                    }
+            }
+        }
+
+        // A low wing on the left, the tower behind it on the right.
+        // The tower's roof is at 166 - 32 - 25 - 76 = 33, under the sign.
+        Block(190, 166, 64, 50, 76, Color.Parse("#F2EBD8"), Color.Parse("#CFC4A6"), Color.Parse("#FBF7EC"), 3);
+        Block(100, 170, 62, 40, 44, Color.Parse("#E9E1CB"), Color.Parse("#C6BA99"), Color.Parse("#F7F2E4"), 5);
+        var sign = new Border
+        {
+            Background = Solid(Color.Parse("#D8352A")),
+            BorderBrush = edge,
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(6, 1),
+            Child = new TextBlock { Text = "HOTEL", FontFamily = Pixel, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = Solid(HotelYellow) }
+        };
+        Canvas.SetLeft(sign, 150);
+        Canvas.SetTop(sign, 10);
+        canvas.Children.Add(sign);
+        return canvas;
     }
 
     // Small tiles side by side: as many columns of at least 250 px as fit, at most four, all the same width. Three
@@ -699,7 +858,7 @@ public sealed class InstallerWindow : Window
             Background = Solid(Color.FromArgb(0x26, color.R, color.G, color.B)),
             Child = icon
         });
-        TextBlock name = Text(title, 14.5, weight: FontWeight.SemiBold);
+        TextBlock name = Title(title, 16);
         name.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(name, 1);
         top.Children.Add(name);
@@ -721,8 +880,8 @@ public sealed class InstallerWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Top,
-            CornerRadius = new CornerRadius(12),
-            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(2),
             Classes = { "tile" }
         };
         tile.Click += (_, _) =>
@@ -788,7 +947,7 @@ public sealed class InstallerWindow : Window
         var list = new StackPanel { Spacing = 2 };
         var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(12, 8, 12, 10) };
         var heading = new StackPanel { Spacing = 2 };
-        heading.Children.Add(Text("Full server installation", 15, weight: FontWeight.SemiBold));
+        heading.Children.Add(Title("Full server installation", 17));
         heading.Children.Add(Text(session is null ? "Components the installer sets up. Log in to see the installed versions and updates."
             : updates is null ? $"The versions on {session.Login.Host}; checking GitHub for updates ..."
             : $"The versions on {session.Login.Host}, compared with GitHub (the branches chosen in Settings).", 12, "Pro.Muted"));

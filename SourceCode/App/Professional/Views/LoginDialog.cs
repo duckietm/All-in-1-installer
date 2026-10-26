@@ -263,7 +263,7 @@ public static class LoginDialog
             Child = icon
         });
         var heading = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        heading.Children.Add(Text("Log in to your server", 19, weight: FontWeight.SemiBold));
+        heading.Children.Add(Title("Log in to your server", 21));
         TextBlock subtitle = Text("One login for everything: installing, the addons and the tools. It stays open until you close the program.", 12.5, "Pro.Muted");
         subtitle.TextWrapping = TextWrapping.Wrap;
         heading.Children.Add(subtitle);
