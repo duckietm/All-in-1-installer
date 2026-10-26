@@ -11,11 +11,11 @@ machine over SSH:
 | AtomCMS (addon, optional) | <https://github.com/ObjectRetros/atomcms> |
 
 The GUI looks like a Habbo hotel: hotel-blue sidebar, the yellow of the hotel logo, green "go" buttons, panels with a
-dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (by day, or at night with lit
-windows in dark mode), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
+dark edge and a hard shadow like the hotel's windows, a hotel view on the dashboard (blue sky with outlined clouds by day, stars at night, and a hotel
+scene), Ubuntu for text (as habbo.com and the client use) and Pixelify Sans for titles in the spirit of
 the hotel's pixel font. Both fonts are free (Ubuntu Font Licence, SIL Open Font License) and ship in
-`SourceCode/App/Fonts` with their licences; the hotel view is drawn by the installer itself, so no Sulake artwork is
-built into the program. The layout (sidebar, cards, status pill, console log) comes from the
+`SourceCode/App/Fonts` with their licences. The sky and clouds are drawn by the installer itself; the hotel scene on
+the right is `SourceCode/App/Images/hotel-view.png`, built into the program (replace that file to show another one). The layout (sidebar, cards, status pill, console log) comes from the
 [All-in-1 Converter](https://github.com/duckietm/all-in-1-converter).
 
 **Settings → Look** switches between this **Hotel** look and the **Professional** look of the All-in-1 Converter

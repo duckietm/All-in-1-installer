@@ -740,8 +740,8 @@ public sealed class InstallerWindow : Window
         };
     }
 
-    // The top of the dashboard: a hotel view (the hotel's blue sky, outlined clouds, an isometric hotel) drawn here, by
-    // day or by night.
+    // The top of the dashboard: a hotel view (the hotel's blue sky and outlined clouds, by day or by night) with the
+    // hotel scene picture on the right.
     private Control HotelBanner()
     {
         bool night = ActualThemeVariant == ThemeVariant.Dark;
@@ -775,7 +775,7 @@ public sealed class InstallerWindow : Window
         foreach ((double x, double y) in new[] { (590.0, 92.0), (720.0, 70.0), (880.0, 40.0), (1080.0, 136.0), (1110.0, 62.0), (470.0, 148.0) })
             scene.Children.Add(Speck(x, y, night));
 
-        var hotel = HotelDrawing(night);
+        var hotel = HotelPicture();
         var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         layout.Children.Add(scene);
         Grid.SetColumnSpan(scene, 2);
@@ -819,7 +819,7 @@ public sealed class InstallerWindow : Window
             HorizontalAlignment = HorizontalAlignment.Left
         });
         layout.Children.Add(words);
-        hotel.Margin = new Thickness(0, 0, 26, 0);
+        hotel.Margin = new Thickness(0, 0, 26, 8);
         Grid.SetColumn(hotel, 1);
         layout.Children.Add(hotel);
 
@@ -885,60 +885,20 @@ public sealed class InstallerWindow : Window
         return speck;
     }
 
-    // Two isometric blocks with windows and a HOTEL sign on the roof. Lit windows by night.
-    private static Control HotelDrawing(bool night)
+    // The hotel scene on the right of the banner (App/Images/hotel-view.png), 1.5 times its size with hard pixels.
+    private static Control HotelPicture()
     {
-        var canvas = new Canvas { Width = 270, Height = 166 };
-        IBrush edge = Solid(Outline);
-        Color lit = Color.Parse("#FFD45E"), glass = night ? Color.Parse("#25475F") : Color.Parse("#8FD0EE");
-
-        void Block(double fx, double fy, double a, double b, double h, Color front, Color side, Color top, int seed)
+        var bitmap = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(new Uri("avares://All-in-1 Installer/App/Images/hotel-view.png")));
+        var picture = new Image
         {
-            Point F = new(fx, fy);
-            Point P(double u, double v, bool left) => left ? new Point(F.X - u, F.Y - u / 2 - v) : new Point(F.X + u, F.Y - u / 2 - v);
-            void Face(IEnumerable<Point> points, Color color) => canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
-            {
-                Points = points.ToList(), Fill = Solid(color), Stroke = edge, StrokeThickness = 1.5, StrokeJoin = PenLineJoin.Round
-            });
-            Face([P(0, 0, true), P(a, 0, true), P(a, h, true), P(0, h, true)], front);
-            Face([P(0, 0, false), P(b, 0, false), P(b, h, false), P(0, h, false)], side);
-            Face([P(0, h, true), P(a, h, true), new Point(F.X - a + b, F.Y - a / 2 - b / 2 - h), P(b, h, false)], top);
-            var random = new Random(seed);
-            foreach (bool left in new[] { true, false })
-            {
-                double width = left ? a : b;
-                for (double v = 10; v + 12 < h; v += 18)
-                    for (double u = 8; u + 9 < width; u += 15)
-                    {
-                        Color color = night ? (random.Next(3) > 0 ? lit : glass) : (random.Next(6) == 0 ? lit : glass);
-                        canvas.Children.Add(new Avalonia.Controls.Shapes.Polygon
-                        {
-                            Points = [P(u, v, left), P(u + 8, v, left), P(u + 8, v + 10, left), P(u, v + 10, left)],
-                            Fill = Solid(color),
-                            Stroke = Solid(Color.FromArgb(0x80, Outline.R, Outline.G, Outline.B)),
-                            StrokeThickness = 1
-                        });
-                    }
-            }
-        }
-
-        // A low wing on the left, the tower behind it on the right.
-        // The tower's roof is at 166 - 32 - 25 - 76 = 33, under the sign.
-        Block(190, 166, 64, 50, 76, Color.Parse("#F2EBD8"), Color.Parse("#CFC4A6"), Color.Parse("#FBF7EC"), 3);
-        Block(100, 170, 62, 40, 44, Color.Parse("#E9E1CB"), Color.Parse("#C6BA99"), Color.Parse("#F7F2E4"), 5);
-        var sign = new Border
-        {
-            Background = Solid(Color.Parse("#D8352A")),
-            BorderBrush = edge,
-            BorderThickness = new Thickness(1.5),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 1),
-            Child = new TextBlock { Text = "HOTEL", FontFamily = Pixel, FontSize = 13, FontWeight = FontWeight.Bold, Foreground = Solid(HotelYellow) }
+            Source = bitmap,
+            Width = bitmap.PixelSize.Width * 1.5,
+            Height = bitmap.PixelSize.Height * 1.5,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Stretch = Stretch.Uniform
         };
-        Canvas.SetLeft(sign, 150);
-        Canvas.SetTop(sign, 10);
-        canvas.Children.Add(sign);
-        return canvas;
+        RenderOptions.SetBitmapInterpolationMode(picture, Avalonia.Media.Imaging.BitmapInterpolationMode.None);
+        return picture;
     }
 
     // Small tiles side by side: as many columns of at least 250 px as fit, at most four, all the same width. Three
