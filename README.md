@@ -983,12 +983,40 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Disable firewall** | `ufw disable` (asks first: every port is reachable again, also the emulator's 3000 and 2096). The rules are kept, so Enable firewall switches the same rules on again; for testing a connection problem |
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |
 | **Import full database** | uploads a `.sql` or `.sql.gz`, makes a safety backup (`<db>-before-import-<time>.sql.gz`), stops the emulator, recreates the database with its character set and imports (database names in `CREATE DATABASE` / `USE` lines become the hotel's), clears AtomCMS' cache, and starts the emulator, which updates the database to its version. A file that is not a SQL dump is refused before anything changes |
+| **Import Plus database** | a PlusEMU dump (such as Plus' fresh install) into the Polaris hotel database: the reverse of [plus-migrator](https://github.com/plus-emulator/plus-migrator). Choose **Furniture and catalog** or **Furniture only**. It uploads the `.sql` / `.sql.gz`, makes a safety backup (`<db>-before-plus-import-<time>.sql.gz`), stops the emulator, loads the dump into a staging database `plus_import` next to the hotel's, converts, drops the staging database and starts the emulator. See [Import Plus database](#import-plus-database) |
 | **Recover SQL password** | gives MariaDB's root a new random 32-character password (asks first) and saves it in `configuration/database/<server>/mariadb.txt`; a changed file is kept as `mariadb.txt.bak-<time>`. Changes `root@localhost` (its socket login stays) and `root@'%'` when it exists. When root cannot log in through the socket any more, MariaDB is restarted for a moment with `--skip-grant-tables --skip-networking` to change it and then started normally. Then it tests the new password over 127.0.0.1 and the socket. Without a saved file, the CMS and emulator accounts are read from AtomCMS' `.env` and the emulator's `config.ini`, so the new file is complete. The emulator and AtomCMS use their own accounts and are not affected |
 | **Check for updates** | `git fetch` of the emulator, Octane, Octane-Renderer and AtomCMS, and per clone how many commits a `git pull` would bring in, with the newest one. The commits are counted against the branch chosen in **Settings → Repository branches**, not against the branch the clone happens to be on, so a clone still on `main` while `dev` is chosen reports what `dev` has and says `main → dev`. AtomCMS has no choice and is counted against its own branch. A fetch only fills the remote branches: no file on the server is changed and the hotel keeps running. The same check runs by itself right after you log in here, and again after an update, so **Update emulator** and **Update Octane** say `3 new commit(s)` or `up to date` before you press them |
 | **Update system** | `apt-get update`, `upgrade` and `dist-upgrade` (changed configuration files are kept); says when a reboot is needed |
 | **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
 | **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
 | **Update AtomCMS** | `git pull` in `/var/www/atomcms`, `composer install`, `php artisan migrate` (an installed AtomCMS only runs the new migrations; its settings and the hotel name stay) and the theme build. Octane is not touched |
+
+### Import Plus database
+
+**Tools → Import Plus database** converts PlusEMU content to Polaris, so a Plus database (for example the
+`Database/FreshInstall.sql` of PlusEMU) works for the hotel. It is the reverse of
+[plus-migrator](https://github.com/plus-emulator/plus-migrator), which goes from Arcturus / Polaris to Plus.
+
+- **Furniture** (`furniture` → `items_base`): furniture Polaris already has (same classname and type) keeps its id and
+  settings, so rooms and inventories are not touched. New furniture gets the next free ids and the Polaris
+  interaction: Wired boxes by their classname, Plus' renamed types back to the Polaris name (`purchasable_clothing` →
+  `clothing`, `crackable_egg` → `crackable`, `pressure_pad` → `pressureplate`, `bb_red_gate` → `battlebanzai_gate_red`
+  and so on), and every result is checked against the interactions Polaris registers. A type Polaris does not have
+  becomes plain furniture and is listed in the log. Clothing set ids go to `catalog_clothing`; multi-heights and
+  vending lists get Polaris' separators.
+- **Catalog** (only with **Furniture and catalog**): the normal catalog is replaced by the Plus one. An offer on several
+  pages becomes one catalog item per page; bundles become `id;id:amount`; effects, badges, bots and pets become the
+  items Polaris sells them as (`avatar_effect<n>`, the badge code, `bot_generic` / `bot_bartender` with the bot's look,
+  `a0 pet<n>`). Builders Club pages and the Habbicons shop stay as Polaris has them. Page texts and images go to the
+  columns each Polaris layout reads.
+- **Safe to run again**: a second run adds nothing new and builds the same catalog. When the conversion stops halfway,
+  the safety backup is put back right away, and the emulator always starts again.
+- **After the import**: the client needs the new furniture in its furnidata and assets (**Deploy Assets**). New
+  crackables have no prizes yet (`items_crackable`): until you add them, clicking does nothing. The log lists the
+  numbers: furniture added and already there, per interaction rule, and what was left out.
+
+The conversion is `SourceCode/Remote/Sql/plus-to-polaris-furniture.sql` and `plus-to-polaris-catalog.sql`, built into
+the program.
 
 **Settings backup** (no server needed): **Export encrypted settings** writes the whole configuration directory
 (SSH keys, .ppk files, MariaDB passwords of every server) to one `.aio-settings` file, encrypted with AES-256-GCM
@@ -1149,6 +1177,8 @@ SourceCode/
   Remote/SqlScript.cs                     Splits a script into statements like the mariadb client (quotes, comments, DELIMITER)
   Remote/ServerUsers.cs                   The server's accounts for Settings → Server layout, and creating a service account
   Remote/ServerTools.cs                   Restarts, database backup / import, system and emulator updates
+  Remote/PlusImport.cs                    Import Plus database: staging database, conversion, safety backup and restore
+  Remote/Sql/plus-to-polaris-*.sql        The Plus → Polaris conversion (furniture, catalog), built into the program
   Remote/ServerStatus.cs                  Samples CPU, memory, network, disks, users and the git versions
   Remote/EmulatorMonitor.cs               Emulator threads (CPU per thread, jcmd names) and slow-wired log warnings
   Terminal/TerminalEmulator.cs            xterm-compatible terminal: escape sequences, colours, screens, scrollback
