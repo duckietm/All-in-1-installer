@@ -64,6 +64,7 @@ public sealed class InstallerWindow : Window
 
     // The login at startup, shared by every page until the program closes or the server goes away.
     private ServerConnection? _session;
+    private readonly Button _disconnect = new() { Content = "Disconnect", Padding = new Thickness(14, 5), Classes = { "secondary" }, IsVisible = false, VerticalAlignment = VerticalAlignment.Center };
     private LoginDialog.Prefill? _lastLogin;
     private bool _loginOpen;
     // The connection was lost: the login opens again as soon as nothing runs any more.
@@ -185,6 +186,25 @@ public sealed class InstallerWindow : Window
         }
     }
 
+    /// <summary>The Disconnect button: closes the login; the pill then logs in again, to this server or another one.</summary>
+    private async Task DisconnectAsync()
+    {
+        if (_session is not { } session) return;
+        if (AnyBusy)
+        {
+            SetStatus("Wait until the running step has finished before disconnecting.");
+            return;
+        }
+        _session = null;
+        // A drop noticed while closing is not a lost connection: no login pops up.
+        _loginPending = false;
+        try { await session.DisposeAsync(); } catch (Exception) { }
+        SetStatus($"Disconnected from {session.Login.Host}. Log in with the button at the top right.");
+        await SessionChangedAsync();
+        RefreshHeader();
+        RefreshFooter();
+    }
+
     // Notices a connection the server dropped, and opens the login again once nothing runs any more.
     private async Task WatchSessionAsync()
     {
@@ -284,8 +304,13 @@ public sealed class InstallerWindow : Window
         _statusPill.Child = pill;
         // Not connected: the pill is the way to log in.
         _statusPill.PointerPressed += async (_, _) => await ShowLoginAsync();
-        Grid.SetColumn(_statusPill, 1);
-        header.Children.Add(_statusPill);
+        _disconnect.Click += async (_, _) => await DisconnectAsync();
+        ToolTip.SetTip(_disconnect, "Close the connection to the server; log in again (to this or another server) with the button next to it");
+        var session = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Top };
+        session.Children.Add(_statusPill);
+        session.Children.Add(_disconnect);
+        Grid.SetColumn(session, 1);
+        header.Children.Add(session);
         main.Children.Add(header);
 
         _pageScroll.Content = _content;
@@ -476,6 +501,7 @@ public sealed class InstallerWindow : Window
         _statusDot.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, fore);
         _statusPill.Bind(Border.BackgroundProperty, back);
         _statusPill.Cursor = session is null ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
+        _disconnect.IsVisible = session is not null;
         ToolTip.SetTip(_statusPill, session is null ? "Log in to your server" : null);
     }
 

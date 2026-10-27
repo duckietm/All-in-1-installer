@@ -84,6 +84,8 @@ the addons and the tools. It stays open until you close the program or the serve
 With your servers and a default key in **Settings**, the default server is filled in and the others are in the
 server list to choose from (or type another one). **Not now** opens the program without a server:
 the pages that need one show a **Log in** button, and so does the status at the top right (**Not connected · Log in**).
+**Disconnect** (next to the status at the top right) closes the login, for example to log in to another server; it
+waits while a step or tool is running.
 
 ![Login](docs/screenshots/login.png)
 
