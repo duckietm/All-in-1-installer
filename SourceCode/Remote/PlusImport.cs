@@ -120,7 +120,19 @@ public static class PlusImport
               $1 == "OFFERS_WITHOUT_ITEMS" { if ($2 > 0) print "  Offers with nothing Polaris can sell: " $2 " (left out)"; next }
               $1 == "POLARIS_PAGES_KEPT" { split($2, a, ":"); if (a[1] > 0) print "  Kept from the Polaris catalog: " a[2]; next }
               { print "  " $0 }' "$out"
-            restart
+            # When the emulator does not load the converted database, the hotel does not stay down: the database goes
+            # back and the emulator starts on it. wait_loaded ends with fail, so it runs in a subshell here.
+            if [ -n "$emulator" ]; then
+              echo "> Starting the emulator"
+              start_emulator
+              if ! (wait_loaded); then
+                echo "> The emulator does not start with the converted database: putting $db back as it was"
+                gunzip -c "$safety" | mariadb || fail "Restoring failed: import $safety with Import full database."
+                start_emulator
+                (wait_loaded) || true
+                fail "The emulator does not start with the converted database (its log is above). $db is as it was before the import."
+              fi
+            fi
             """;
         ScriptValues values = await RemoteScript.RunCapturingAsync(connection, script, log, "Importing the Plus database failed",
             ["SAFETY", "FURNI_EXISTING", "FURNI_NEW", "CRACKABLE_WITHOUT_PRIZES", "PAGES", "CATALOG_ITEMS"], token, stdin: ConversionSql(mode));

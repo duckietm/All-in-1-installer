@@ -218,12 +218,23 @@ SELECT p.polaris_id, f.sprite_id,
 FROM _pi_furni p JOIN furniture f ON f.id = p.plus_id
 WHERE p.is_new = 1 AND p.plus_id = p.canonical;
 
--- Clothing: which clothing sets the furni unlocks.
+-- Clothing: which clothing sets the furni unlocks. Polaris reads setid as numbers between commas and stops at
+-- anything else, so "3373, 3374" becomes "3373,3374".
+DROP TABLE IF EXISTS _pi_clothing_existing;
+CREATE TABLE _pi_clothing_existing (name_key VARCHAR(100) COLLATE utf8mb4_general_ci PRIMARY KEY) ENGINE=InnoDB
+SELECT DISTINCT LOWER(TRIM(CONVERT(name USING utf8mb4) COLLATE utf8mb4_general_ci)) AS name_key FROM `@T@`.catalog_clothing;
 INSERT INTO `@T@`.catalog_clothing (name, setid)
-SELECT CONVERT(TRIM(REGEXP_REPLACE(f.item_name, '[[:cntrl:]]', '')) USING latin1), CONVERT(LEFT(f.custom_params, 75) USING latin1)
-FROM _pi_furni p JOIN furniture f ON f.id = p.plus_id
-WHERE p.plus_id = p.canonical AND f.interaction_type = 'purchasable_clothing' AND COALESCE(f.custom_params, '') <> ''
-  AND NOT EXISTS (SELECT 1 FROM `@T@`.catalog_clothing c WHERE CONVERT(c.name USING utf8mb4) COLLATE utf8mb4_general_ci = TRIM(REGEXP_REPLACE(f.item_name, '[[:cntrl:]]', '')) COLLATE utf8mb4_general_ci);
+SELECT name, setid FROM (
+  SELECT CONVERT(TRIM(REGEXP_REPLACE(f.item_name, '[[:cntrl:]]', '')) USING latin1) AS name,
+         TRIM(BOTH ',' FROM REGEXP_REPLACE(REGEXP_REPLACE(f.custom_params, '[^0-9,]', ''), ',+', ',')) AS setid
+  FROM _pi_furni p JOIN furniture f ON f.id = p.plus_id
+  LEFT JOIN _pi_clothing_existing e ON e.name_key = p.name_key
+  WHERE p.plus_id = p.canonical AND f.interaction_type = 'purchasable_clothing' AND e.name_key IS NULL
+) c
+WHERE setid <> '' AND CHAR_LENGTH(setid) <= 75;
+-- And rows written like that before (by an earlier import), which keep the emulator from starting.
+UPDATE `@T@`.catalog_clothing SET setid = TRIM(BOTH ',' FROM REGEXP_REPLACE(REGEXP_REPLACE(setid, '[^0-9,]', ''), ',+', ','))
+WHERE setid REGEXP '[^0-9,]' OR setid LIKE ',%' OR setid LIKE '%,' OR setid LIKE '%,,%';
 
 -- ---------------------------------------------------------------- report
 SELECT CONCAT('FURNI_EXISTING=', COUNT(DISTINCT canonical)) FROM _pi_furni WHERE is_new = 0;

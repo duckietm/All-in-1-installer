@@ -1009,8 +1009,10 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
   items Polaris sells them as (`avatar_effect<n>`, the badge code, `bot_generic` / `bot_bartender` with the bot's look,
   `a0 pet<n>`). Builders Club pages and the Habbicons shop stay as Polaris has them. Page texts and images go to the
   columns each Polaris layout reads.
-- **Safe to run again**: a second run adds nothing new and builds the same catalog. When the conversion stops halfway,
-  the safety backup is put back right away, and the emulator always starts again.
+- **Safe to run again**: a second run adds nothing new and builds the same catalog, and repairs clothing set ids an
+  earlier import wrote with spaces (`3373, 3374`, which Polaris cannot read). When the conversion stops halfway, or
+  the emulator does not start with the converted database, the safety backup is put back right away and the emulator
+  starts on it.
 - **After the import**: the client needs the new furniture in its furnidata and assets (**Deploy Assets**). New
   crackables have no prizes yet (`items_crackable`): until you add them, clicking does nothing. The log lists the
   numbers: furniture added and already there, per interaction rule, and what was left out.
