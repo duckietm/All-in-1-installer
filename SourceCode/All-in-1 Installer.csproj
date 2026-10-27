@@ -25,6 +25,7 @@
   <ItemGroup>
     <AvaloniaResource Include="App\Fonts\*.ttf" />
     <AvaloniaResource Include="App\Images\*.png" />
+    <EmbeddedResource Include="Remote\Sql\*.sql" LogicalName="AllInOneInstaller.Remote.Sql.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Client images Octane needs (also in Polaris' Assets/): next to the executable, so Deploy Assets can upload what

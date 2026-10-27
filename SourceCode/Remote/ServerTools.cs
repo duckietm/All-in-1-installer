@@ -14,7 +14,7 @@ public static class ServerTools
     public const int KeptBackups = 10;
 
     // The hotel database from the emulator's config.ini, or habbo.
-    private static readonly string Database = $$"""
+    internal static readonly string DatabaseName = $$"""
         db=$(grep -sE '^db.database=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2 | tr -d '[:space:]')
         db=${db:-{{ServerLayout.Current.Database}}}
         """;
@@ -91,7 +91,7 @@ public static class ServerTools
     {
         string script = RemoteScript.Prelude + $$"""
             set -o pipefail
-            {{Database}}
+            {{DatabaseName}}
             mariadb -N "$db" -e 'SELECT 1' >/dev/null 2>&1 || fail "Database $db does not exist or MariaDB does not run."
             install -d -m 700 {{BackupDirectory}}
             file={{BackupDirectory}}/$db-$(date +%Y%m%d-%H%M%S).sql.gz
@@ -123,7 +123,7 @@ public static class ServerTools
     {
         string script = RemoteScript.Prelude + $$"""
             set -o pipefail
-            {{Database}}
+            {{DatabaseName}}
             f={{ServerConnection.ShellQuote(remoteFile)}}
             [ -s "$f" ] || fail "The uploaded file $f is missing or empty."
             # The upload is only needed for this import, whatever happens.

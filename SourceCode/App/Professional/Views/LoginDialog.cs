@@ -45,11 +45,25 @@ public static class LoginDialog
         ServerConnection? result = null;
         bool busy = false;
 
-        var host = new TextBox { Text = prefill?.Host ?? settings.DefaultServer ?? "", PlaceholderText = "192.168.1.10 or hotel.example.com (add :2222 for another SSH port)" };
+        // The saved servers (Settings) to choose from, the default filled in; another one can be typed.
+        List<string> servers = settings.ServerList;
+        if (prefill?.Host is { Length: > 0 } earlier && !servers.Contains(earlier, StringComparer.OrdinalIgnoreCase)) servers.Insert(0, earlier);
+        string start = prefill?.Host ?? settings.DefaultServer ?? "";
+        var host = new ComboBox
+        {
+            IsEditable = true,
+            ItemsSource = servers,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            FontSize = 14,
+            Padding = new Thickness(12, 9),
+            PlaceholderText = "192.168.1.10 or hotel.example.com (add :2222 for another SSH port)"
+        };
+        host.SelectedItem = servers.FirstOrDefault(s => s.Equals(start, StringComparison.OrdinalIgnoreCase));
+        host.Text = start;
         var user = new TextBox { Text = prefill?.User ?? "root", PlaceholderText = "root or a user with sudo rights" };
         var password = new TextBox { PlaceholderText = "Password of the account", PasswordChar = '•' };
         var keyPassword = new TextBox { PlaceholderText = "Leave empty when the key has no password", PasswordChar = '•' };
-        foreach (TextBox box in new[] { host, user, password, keyPassword })
+        foreach (TextBox box in new[] { user, password, keyPassword })
         {
             box.FontSize = 14;
             box.Padding = new Thickness(12, 9);
@@ -102,6 +116,8 @@ public static class LoginDialog
             error.Text = "";
         };
         host.LostFocus += (_, _) => { if (picked is null) RefreshKeys(); };
+        // Choosing another server from the list also picks its key.
+        host.SelectionChanged += (_, _) => { if (picked is null && useKey.IsChecked == true) RefreshKeys(); };
 
         var passwordPanel = new StackPanel { Spacing = 6 };
         passwordPanel.Children.Add(Label("Password (also for sudo when the account is not root)"));
@@ -238,14 +254,17 @@ public static class LoginDialog
 
         connect.Click += async (_, _) => await ConnectAsync();
         later.Click += (_, _) => dialog.Close();
-        foreach (TextBox box in new[] { host, user, password, keyPassword })
+        host.PropertyChanged += (_, e) => { if (e.Property == ComboBox.TextProperty) error.Text = ""; };
+        foreach (Control box in new Control[] { host, user, password, keyPassword })
         {
-            box.TextChanged += (_, _) => error.Text = "";
-            box.KeyDown += async (_, e) =>
+            if (box is TextBox text) text.TextChanged += (_, _) => error.Text = "";
+            // Before the box itself, as the server list would take Enter; an open list keeps its keys.
+            box.AddHandler(InputElement.KeyDownEvent, async (_, e) =>
             {
+                if (box is ComboBox { IsDropDownOpen: true }) return;
                 if (e.Key == Key.Enter) { e.Handled = true; await ConnectAsync(); }
                 else if (e.Key == Key.Escape && !busy) { e.Handled = true; dialog.Close(); }
-            };
+            }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         }
         // A login that is half-way is finished or fails first.
         dialog.Closing += (_, e) => { if (busy) e.Cancel = true; };
@@ -271,7 +290,7 @@ public static class LoginDialog
         top.Children.Add(heading);
         panel.Children.Add(top);
         panel.Children.Add(banner);
-        panel.Children.Add(Label("Server IP / hostname"));
+        panel.Children.Add(Label("Server IP / hostname (your servers from Settings in the list, or type another)"));
         panel.Children.Add(host);
         panel.Children.Add(Label("User"));
         panel.Children.Add(user);

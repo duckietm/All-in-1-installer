@@ -9,7 +9,7 @@ using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 
 namespace AllInOneInstaller.App.Professional.Views;
 
-/// <summary>Settings: the default server and SSH key for the login, and importing your own SSH keys.</summary>
+/// <summary>Settings: the servers and default SSH key for the login, and importing your own SSH keys.</summary>
 public sealed class SettingsView
 {
     private sealed record KeyItem(string? Path)
@@ -18,7 +18,10 @@ public sealed class SettingsView
             $"{System.IO.Path.GetFileName(Path)}   (keys/{System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(Path))})";
     }
 
-    private readonly TextBox _server = new() { MinWidth = 380, PlaceholderText = "192.168.1.10 or hotel.example.com (add :2222 for another SSH port)" };
+    // The saved servers: one row each (default choice, address, Remove), and a box to add one.
+    private readonly StackPanel _serverList = new() { Spacing = 6 };
+    private readonly TextBox _newServer = new() { MinWidth = 380, PlaceholderText = "192.168.1.10 or hotel.example.com (add :2222 for another SSH port)" };
+    private bool _refreshing;
     private readonly ComboBox _defaultKey = new() { MinWidth = 380 };
     private readonly ResultBanner _defaultsResult = new();
     private readonly TextBox _importFor = new() { MinWidth = 260, PlaceholderText = "server, e.g. 203.0.113.10" };
@@ -98,13 +101,15 @@ public sealed class SettingsView
     public void Refresh()
     {
         InstallerSettings settings = InstallerSettings.Load();
-        _server.Text = settings.DefaultServer ?? "";
+        ShowServers(settings);
         _downloader.Text = settings.DownloaderPath ?? "";
         ShowDownloaderState();
         var items = new List<KeyItem> { new(null) };
         items.AddRange(ClientConfiguration.AllPrivateKeys().Select(p => new KeyItem(p)));
         _defaultKey.ItemsSource = items;
+        _refreshing = true;
         _defaultKey.SelectedItem = items.FirstOrDefault(i => i.Path == settings.DefaultKeyPath) ?? items[0];
+        _refreshing = false;
         if (string.IsNullOrWhiteSpace(_importFor.Text) && settings.DefaultServer is { Length: > 0 } server)
             _importFor.Text = ServerLogin.ParseHost(server).Host;
         for (int i = 0; i < _branches.Length; i++)
@@ -117,51 +122,118 @@ public sealed class SettingsView
     private Control BuildDefaults()
     {
         var panel = new StackPanel { Spacing = 10 };
-        panel.Children.Add(Text("Default server", 15, weight: FontWeight.SemiBold));
-        panel.Children.Add(Text("The login at startup fills in this server, and selects the default key when you log in with an SSH key.", 12.5, "Pro.Muted"));
-        panel.Children.Add(Label("Server (IP or hostname, with :port for another SSH port)"));
-        panel.Children.Add(_server);
+        panel.Children.Add(Text("Servers", 15, weight: FontWeight.SemiBold));
+        panel.Children.Add(Text("The IP addresses and DNS names of your servers. The login at startup fills in the default one and lists the others " +
+                                "to choose from, and selects the default key when you log in with an SSH key. Changes are saved right away.", 12.5, "Pro.Muted"));
+        panel.Children.Add(_serverList);
+        panel.Children.Add(Label("Add a server (IP or hostname, with :port for another SSH port)"));
+        var add = new Button { Content = "Add", Padding = new Thickness(22, 9), Classes = { "primary" } };
+        add.Click += (_, _) => AddServer();
+        _newServer.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) AddServer(); };
+        var addRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        addRow.Children.Add(_newServer);
+        addRow.Children.Add(add);
+        panel.Children.Add(addRow);
         panel.Children.Add(Label("SSH key (from configuration/keys)"));
         panel.Children.Add(_defaultKey);
-        var save = new Button { Content = "Save", Padding = new Thickness(22, 9), Classes = { "primary" } };
-        var clear = new Button { Content = "Clear", Padding = new Thickness(18, 9), Classes = { "secondary" } };
-        save.Click += (_, _) => SaveDefaults();
+        _defaultKey.SelectionChanged += (_, _) => SaveKey();
+        var clear = new Button { Content = "Clear all", Padding = new Thickness(18, 9), Classes = { "secondary" } };
         clear.Click += (_, _) =>
         {
             InstallerSettings cleared = InstallerSettings.Load();
             cleared.DefaultServer = null;
+            cleared.Servers = [];
             cleared.DefaultKey = null;
             cleared.Save();
             Refresh();
-            _defaultsResult.Show(ResultKind.Info, "No default server", "The login starts empty again.");
+            _defaultsResult.Show(ResultKind.Info, "No saved servers", "The login starts empty again.");
         };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        buttons.Children.Add(save);
-        buttons.Children.Add(clear);
-        panel.Children.Add(buttons);
+        panel.Children.Add(clear);
         panel.Children.Add(_defaultsResult);
         return panel;
     }
 
-    private void SaveDefaults()
+    // The rows of the server list: the default first, with its choice ticked.
+    private void ShowServers(InstallerSettings settings)
     {
-        string server = (_server.Text ?? "").Trim();
-        if (server.Length > 0)
+        _serverList.Children.Clear();
+        List<string> servers = settings.ServerList;
+        if (servers.Count == 0)
         {
-            (string host, int port) = ServerLogin.ParseHost(server);
-            if (host.Length == 0 || host.Any(char.IsWhiteSpace) || Uri.CheckHostName(host) == UriHostNameType.Unknown || port is < 1 or > 65535)
-            {
-                _defaultsResult.Show(ResultKind.Error, "That is not a valid server", "Use an IP address or hostname, optionally with :port.");
-                return;
-            }
+            _serverList.Children.Add(Text("No servers yet: add one below.", 12.5, "Pro.Subtle"));
+            return;
         }
+        foreach (string server in servers)
+        {
+            var choice = new RadioButton
+            {
+                GroupName = "defaultserver",
+                Content = server == settings.DefaultServer ? $"{server}   (default)" : server,
+                IsChecked = server == settings.DefaultServer,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            choice.IsCheckedChanged += (_, _) => { if (choice.IsChecked == true && !_refreshing) ChangeServers(s => s.DefaultServer = server, "Default server", $"The login fills in {server}."); };
+            var remove = new Button { Content = "Remove", Padding = new Thickness(14, 6), Classes = { "secondary" } };
+            remove.Click += (_, _) => ChangeServers(s =>
+            {
+                List<string> rest = s.ServerList.Where(x => !x.Equals(server, StringComparison.OrdinalIgnoreCase)).ToList();
+                s.Servers = rest;
+                // The next one becomes the default when the default is removed.
+                if (string.Equals(s.DefaultServer, server, StringComparison.OrdinalIgnoreCase)) s.DefaultServer = rest.FirstOrDefault();
+            }, "Removed", $"{server} is no longer in the list.");
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Left, MinWidth = 460 };
+            row.Children.Add(choice);
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(remove);
+            _serverList.Children.Add(row);
+        }
+    }
+
+    private void ChangeServers(Action<InstallerSettings> change, string heading, string message)
+    {
+        InstallerSettings settings = InstallerSettings.Load();
+        settings.Servers = settings.ServerList;
+        change(settings);
+        settings.Save();
+        _refreshing = true;
+        ShowServers(settings);
+        _refreshing = false;
+        _defaultsResult.Show(ResultKind.Success, heading, message);
+    }
+
+    private void AddServer()
+    {
+        string server = (_newServer.Text ?? "").Trim();
+        if (server.Length == 0) return;
+        (string host, int port) = ServerLogin.ParseHost(server);
+        if (host.Length == 0 || host.Any(char.IsWhiteSpace) || Uri.CheckHostName(host) == UriHostNameType.Unknown || port is < 1 or > 65535)
+        {
+            _defaultsResult.Show(ResultKind.Error, "That is not a valid server", "Use an IP address or hostname, optionally with :port.");
+            return;
+        }
+        if (InstallerSettings.Load().ServerList.Contains(server, StringComparer.OrdinalIgnoreCase))
+        {
+            _defaultsResult.Show(ResultKind.Info, "Already in the list", $"{server} is saved already.");
+            return;
+        }
+        ChangeServers(s =>
+        {
+            s.Servers.Add(server);
+            // The first server is the default.
+            s.DefaultServer ??= server;
+        }, "Added", $"{server} is in the list" + (InstallerSettings.Load().DefaultServer is null ? " and is the default." : ". Tick it to make it the default."));
+        _newServer.Text = "";
+        if (string.IsNullOrWhiteSpace(_importFor.Text)) _importFor.Text = host;
+    }
+
+    private void SaveKey()
+    {
+        if (_refreshing) return;
         string? key = (_defaultKey.SelectedItem as KeyItem)?.Path;
         InstallerSettings settings = InstallerSettings.Load();
-        settings.DefaultServer = server.Length > 0 ? server : null;
         settings.DefaultKey = key is null ? null : InstallerSettings.RelativeKey(key);
         settings.Save();
-        _defaultsResult.Show(ResultKind.Success, "Saved",
-            (server.Length > 0 ? $"The login fills in {server}" : "No default server") + (key is null ? "." : $", with the key {Path.GetFileName(key)}."));
+        _defaultsResult.Show(ResultKind.Success, "Saved", key is null ? "No default key." : $"The login selects the key {Path.GetFileName(key)}.");
     }
 
     private Control BuildLook()

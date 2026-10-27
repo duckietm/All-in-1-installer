@@ -108,6 +108,7 @@ public sealed class ToolsView
         page.Children.Add(Section("Database",
             Tool("Create full database backup", "Dump on the server, download to this computer", Icons.Download, BackupDatabaseAsync),
             Tool("Import full database", "Replace the hotel database with a backup", Icons.Folder, ImportDatabaseAsync),
+            Tool("Import Plus database", "PlusEMU furniture and catalog into Polaris", Icons.Swap, ImportPlusDatabaseAsync),
             Tool("Recover SQL password", "New MariaDB root password, saved in configuration", Icons.Key, RecoverSqlPasswordAsync)));
         StackPanel updates = Section("Updates",
             Tool("Check for updates", "git fetch: what is new for the emulator, Octane and AtomCMS", Icons.Download, CheckUpdatesAsync),
@@ -505,6 +506,50 @@ public sealed class ToolsView
         run.Done("imported");
         await FinishAsync(run, ResultKind.Success, "The database is imported",
             $"{Path.GetFileName(local)} is now the hotel database; the emulator has started with it. The database as it was is in {ServerTools.BackupDirectory}/*-before-import-*.sql.gz.");
+    }
+
+    private async Task ImportPlusDatabaseAsync(Window owner, ServerConnection connection)
+    {
+        IReadOnlyList<IStorageFile> files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select the PlusEMU database dump (for example its fresh install)",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("SQL dumps") { Patterns = ["*.sql.gz", "*.sql", "*.gz"] },
+                new FilePickerFileType("All files") { Patterns = ["*"] }
+            ]
+        });
+        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } local) return;
+        long bytes = new FileInfo(local).Length;
+        PlusImportMode? mode = await ChoiceDialog.ShowAsync<PlusImportMode?>(owner, "Import Plus database", "What should come from the Plus database?",
+            $"{Path.GetFileName(local)} ({Size(bytes)}) is converted to Polaris: furniture Polaris already has keeps its id and settings, the rest is added " +
+            "with the matching Polaris interaction. A safety backup is made first, and the emulator is stopped during the import.",
+            null,
+            new ChoiceDialog.Option<PlusImportMode?>("Furniture and catalog",
+                "Add the new furniture and replace the normal catalog with the Plus catalog. Builders Club and the Habbicons shop stay as they are.",
+                PlusImportMode.FurnitureAndCatalog, Primary: true),
+            new ChoiceDialog.Option<PlusImportMode?>("Furniture only",
+                "Add the new furniture and keep your catalog: put the new furniture in the catalog yourself.", PlusImportMode.FurnitureOnly),
+            new ChoiceDialog.Option<PlusImportMode?>("Cancel", "Change nothing.", null));
+        if (mode is null) return;
+
+        RunPanel run = StartRun("Upload to the server", "Safety backup, convert to Polaris, start the emulator");
+        string remote = $"{ServerTools.BackupDirectory}/plus-import-{DateTime.Now:yyyyMMdd-HHmmss}{(local.EndsWith(".gz", StringComparison.OrdinalIgnoreCase) ? ".sql.gz" : ".sql")}";
+        await connection.RunAsRootAsync($"install -d -m 700 {ServerTools.BackupDirectory}");
+        run.Log($"> Uploading {Path.GetFileName(local)} ({Size(bytes)}) to {remote}");
+        await connection.UploadAsync(local, remote, Progress(run, bytes));
+        run.Done(Size(bytes));
+
+        PlusImportResult result = await Task.Run(() => PlusImport.ImportAsync(connection, remote, mode.Value, run.Log));
+        run.Done($"{result.FurnitureNew} new furniture");
+        string catalog = mode == PlusImportMode.FurnitureAndCatalog ? $" The catalog has {result.Pages} pages with {result.CatalogItems} items." : "";
+        string eggs = result.CrackablesWithoutPrizes > 0
+            ? $" {result.CrackablesWithoutPrizes} new crackables have no prizes yet (items_crackable): until you add them, clicking them does nothing."
+            : "";
+        await FinishAsync(run, ResultKind.Success, "The Plus database is imported",
+            $"{result.FurnitureNew} furniture added, {result.FurnitureExisting} were already there.{catalog}{eggs} " +
+            $"The client needs the new furniture in its furnidata and assets (Deploy Assets). The database as it was is in {result.SafetyBackup}.");
     }
 
     private async Task RecoverSqlPasswordAsync(Window owner, ServerConnection connection)
