@@ -11,8 +11,10 @@ public sealed class InstallerSettings
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
-    /// <summary>"host" or "host:port", as typed in the login.</summary>
+    /// <summary>"host" or "host:port", as typed in the login: the server the login fills in. One of <see cref="Servers"/>.</summary>
     public string? DefaultServer { get; set; }
+    /// <summary>The servers (IP addresses and DNS names, with :port when needed) the login offers in its list.</summary>
+    public List<string> Servers { get; set; } = [];
     /// <summary>Private key path relative to the configuration folder.</summary>
     public string? DefaultKey { get; set; }
     /// <summary>The All-in-1 downloader's executable. Deploy Assets reads Habbo_Default from its folder.</summary>
@@ -64,6 +66,21 @@ public sealed class InstallerSettings
     }
 
     public void Save() => System.IO.File.WriteAllText(File, JsonSerializer.Serialize(this, Json));
+
+    /// <summary>
+    /// The saved servers, the default first. Settings from before the list only have <see cref="DefaultServer"/>,
+    /// which then is the list.
+    /// </summary>
+    [JsonIgnore]
+    public List<string> ServerList
+    {
+        get
+        {
+            var list = Servers.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+            if (DefaultServer is { Length: > 0 } server) list.Insert(0, server);
+            return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
 
     /// <summary>The default key as a full path, when it still exists.</summary>
     [JsonIgnore]

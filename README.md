@@ -81,7 +81,8 @@ the addons and the tools. It stays open until you close the program or the serve
      are checked on this computer before connecting; the key never leaves it. The user of a cloud image (`ubuntu`,
      `debian` ...) needs sudo without a password.
 
-With a default server and key in **Settings**, these are filled in. **Not now** opens the program without a server:
+With your servers and a default key in **Settings**, the default server is filled in and the others are in the
+server list to choose from (or type another one). **Not now** opens the program without a server:
 the pages that need one show a **Log in** button, and so does the status at the top right (**Not connected · Log in**).
 
 ![Login](docs/screenshots/login.png)
@@ -890,8 +891,9 @@ port; **Log in to MariaDB** asks again.
 **Settings** (sidebar, under GENERAL):
 
 - **Look**: Hotel or Professional (see the top of this page).
-- **Default server** and **SSH key**: the login at startup fills in the server, and selects the key when you log in
-  with an SSH key. Stored in `configuration/settings.json`, so the encrypted settings backup takes it along.
+- **Servers** and **SSH key**: the IP addresses and DNS names of your servers (Add, Remove), with one ticked as the
+  default. The login at startup fills in the default and lists the others; it selects the key when you log in with an
+  SSH key. Changes are saved right away, and are stored in `configuration/settings.json`, so the encrypted settings backup takes it along.
 - **Server layout**: where the hotel lives on the server and who the emulator runs as. The installer installs to these
   places, and the tools, the addons, the Asset Explorer and the dashboard look for everything there:
 
@@ -929,6 +931,8 @@ port; **Log in to MariaDB** asks again.
   key (OpenSSH, PEM or PuTTY `.ppk`; it asks for the key's password once to read its public key) is stored as
   `keys/<server>/imported_<type>` with its `.pub`, still protected by its own password. A public key alone is stored as
   `provided_<type>.pub`, for the SSH key step to install for root.
+
+![Settings: servers](docs/screenshots/settings-servers.png)
 
 ![Settings](docs/screenshots/settings-keys.png)
 
@@ -1103,7 +1107,7 @@ SourceCode/
   App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik and the firewall
   App/Professional/Views/ToolsView.cs     Tools page: server tools and the settings backup
   App/Professional/Views/TerminalView.cs  SSH terminal page (toolbar, terminal, ssh command)
-  App/Professional/Views/SettingsView.cs  Settings page: default server and key, importing SSH keys, downloader path
+  App/Professional/Views/SettingsView.cs  Settings page: servers and default key, importing SSH keys, downloader path
   App/Professional/Views/SshLoginStep.cs  SSH login page (keys only, optional)
   App/Professional/Views/ServerStatusView.cs  Live server dashboard (Server status)
   App/Professional/Views/LineChart.cs     Rolling line graph used by the dashboards
@@ -1119,7 +1123,7 @@ SourceCode/
   Configuration/ClientConfiguration.cs    The configuration/ directory on the client
   Configuration/DatabaseCredentials.cs    Generated MariaDB passwords and their file format
   Configuration/SettingsBackup.cs         Encrypted export / import of the configuration directory
-  Configuration/InstallerSettings.cs      Default server and key, downloader path, branches, look, layout (configuration/settings.json)
+  Configuration/InstallerSettings.cs      Servers and default key, downloader path, branches, look, layout (configuration/settings.json)
   Configuration/ServerLayout.cs           Paths on the server, the emulator's account and the database name, with their checks
   Remote/ServerConnection.cs              SSH login, OS check, sudo -> root, RunAsRootAsync
   Remote/SshKeys.cs                       Key generation (encrypted OpenSSH format) and public key parsing

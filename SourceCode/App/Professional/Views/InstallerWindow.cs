@@ -462,7 +462,7 @@ public sealed class InstallerWindow : Window
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
             Page.EmulatorMonitor => ("Emulator & wired", $"The emulator on {host}: CPU per thread, the wired engine and slow wired rooms."),
             Page.About => ("About", "All-in-1 Installer"),
-            Page.Settings => ("Settings", "Default server and SSH key, your own SSH keys, and the All-in-1 downloader."),
+            Page.Settings => ("Settings", "Your servers and default SSH key, your own SSH keys, and the All-in-1 downloader."),
             _ => ("Dashboard", "Set up a complete hotel server over SSH.")
         };
 
