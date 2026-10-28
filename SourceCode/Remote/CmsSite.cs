@@ -101,21 +101,29 @@ public static class CmsSite
         fi
         [ -n "$port" ] || fail "Ports {{FirstPort}} to {{LastPort}} are all in use on 127.0.0.1: free one for the CMS and try again."
         install -d -m 755 {{HotelSite.LogDirectory}}
+        # The proxies the visitor's address is read past: servers set up before this file existed do not have it yet.
+        {{HotelSite.RealIpScript(site)}}
         echo "> $f: listen 127.0.0.1:$port, root {{root}} ({{(php ? "PHP" : "static")}})"
         cat > "$f" <<'SITE'
         {{Config(site, name, root, php)}}
         SITE
         sed -i "s#@PORT@#$port#" "$f"
-        ln -sfn "$f" /etc/nginx/sites-enabled/cms-{{name}}
-        # One CMS is the website at a time.
+        enabled=/etc/nginx/sites-enabled/cms-{{name}}
+        ln -sfn "$f" "$enabled"
+        nginx -t 2>&1 | sed 's/^/  /'
+        if ! nginx -t >/dev/null 2>&1; then
+          # Never leave NGINX with a configuration it refuses: its next restart, or a reboot, would fail.
+          rm -f "$enabled"
+          echo "  cms-{{name}} is disabled again, so NGINX keeps a configuration it accepts"
+          fail "nginx -t refuses the configuration (see above). NGINX was not reloaded: the hotel keeps running as it was."
+        fi
+        # One CMS is the website at a time: the others go off once this one is accepted.
         for other in /etc/nginx/sites-enabled/cms-*; do
           [ -e "$other" ] || [ -L "$other" ] || continue
-          [ "$other" = /etc/nginx/sites-enabled/cms-{{name}} ] && continue
+          [ "$other" = "$enabled" ] && continue
           rm -f "$other"
           echo "  $(basename "$other") is no longer the website (disabled; its files and sites-available/$(basename "$other") stay)"
         done
-        nginx -t 2>&1 | sed 's/^/  /'
-        nginx -t >/dev/null 2>&1 || fail "nginx -t refuses the configuration (see above)."
         if [ -d /run/systemd/system ]; then systemctl reload nginx || systemctl restart nginx; else nginx -s reload 2>/dev/null || service nginx restart; fi
         sleep 1
         code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/" || true)
