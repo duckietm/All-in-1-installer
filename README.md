@@ -817,6 +817,43 @@ CMS needs (`composer install`, `npm run build`) run in **Tools → SSH terminal*
 The CMS' files stay, unless you tick **Also delete the CMS' folder and its NGINX site file**. Its database tables
 (such as AtomCMS' `website_*` tables) and the users stay in the hotel database. A CMS again: **Addons → CMS**.
 
+### Gitea
+
+**Addons → Gitea** installs [Gitea](https://gitea.com), a light and easy Git server of your own (repositories,
+issues, pull requests: a small GitHub), in Docker behind the hotel's Traefik, following Gitea's
+[reverse proxy guide](https://docs.gitea.com/administration/reverse-proxies/). Run the Web access step first.
+
+It asks for:
+
+- **The domain**, a name of its own: for a hotel on `example.com`, `git.example.com` (filled in for you).
+- **Cloudflare** yes or no (filled in with the hotel's choice).
+- **The admin account**: a name (Gitea keeps `admin` for itself, so `gitadmin` is filled in) and an e-mail address.
+
+> **First add the domain to your DNS as an A record** pointing to the server, and with Cloudflare turn its **proxy on**
+> (the orange cloud). Without it Let's Encrypt cannot give Gitea its certificate. The step checks the DNS first: no
+> address stops it; Cloudflare chosen but the proxy off (or the other way round) gives a warning.
+
+What it sets up:
+
+- **Docker** in `/opt/gitea` (`compose.yaml`, `.env`, `data/`), image `gitea/gitea:1`, with SQLite: no database to set up.
+  Gitea has a Docker network of its own (the image always starts an SSH server inside, which must not meet the
+  server's SSH), and only its web port is published, on **127.0.0.1**, on the first free port from 85 to 95 (the
+  same check as for a CMS, which also recognises Gitea's own port on a later run).
+- **Gitea's SSH is off**: clone and push over https, with your password or an access token. Cloudflare's proxy does
+  not pass SSH anyway.
+- **Traefik**: `/opt/traefik/dynamic/gitea.yml` routes the domain to Gitea, with a Let's Encrypt certificate when
+  the hotel uses https. Behind Cloudflare it drops `X-Real-Ip` (Cloudflare's edge) so Gitea takes the visitor
+  from `X-Forwarded-For`; Gitea trusts proxy headers only from 127.0.0.1 and its Docker network.
+- **The admin**, once, with a random password (`gitea admin user create --random-password`), shown at the end with a
+  **Copy** button and saved on this computer in `configuration/database/<server>/gitea.txt`. Registration is closed:
+  the admin makes the accounts.
+- **Test** through Traefik: waits for the certificate (up to 2 minutes) and checks Gitea's `/api/healthz`.
+
+Running the addon again updates Gitea (`docker compose pull`, `up -d`); the repositories, accounts and the port stay.
+Back up `/opt/gitea/data`.
+
+![Gitea addon](docs/screenshots/gitea-step.png)
+
 ### Deploy Assets
 
 **Deploy Assets** copies what the [All-in-1 downloader](https://github.com/duckietm/all-in-1-converter) downloaded to
@@ -1194,6 +1231,7 @@ SourceCode/
   App/Professional/Views/AtomCmsStep.cs   CMS addon: AtomCMS
   App/Professional/Views/CustomCmsStep.cs CMS addon: your own CMS (GitHub link or ZIP, PHP or static, root folder)
   App/Professional/Views/RemoveCmsStep.cs CMS addon: remove the CMS, Octane on / again
+  App/Professional/Views/GiteaStep.cs     Gitea addon: domain, Cloudflare, admin, DNS warning
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata
@@ -1240,6 +1278,8 @@ SourceCode/
   Remote/AtomCmsInstaller.cs              AtomCMS: .env, composer, migrations and settings, theme build, tests
   Remote/CustomCmsInstaller.cs            Your own CMS: Git access, ZIP, root folder, tests
   Remote/CmsSite.cs                       A CMS' own NGINX site on the first free port from 85 to 95
+  Remote/LocalPorts.cs                    The first free local port from 85 to 95 (CMS sites, Gitea)
+  Remote/GiteaInstaller.cs                Gitea in Docker behind Traefik: DNS check, compose, route, admin, test
   Remote/AssetSync.cs                     Deploy Assets: compare with /var/www/gamedata, upload as a tar stream
   Remote/UiTextsInstaller.cs              Installs UITexts_<language>.jsonc.example as gamedata/config/UITexts.jsonc
   Remote/EmulatorAssetsInstaller.cs       Polaris' / the installer's Assets (images, hotel view, badge parts) into gamedata, missing files only

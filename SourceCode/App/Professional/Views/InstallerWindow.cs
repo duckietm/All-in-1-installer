@@ -39,6 +39,7 @@ public sealed class InstallerWindow : Window
     private Button? _dashboardNavigation;
     private Button? _installNavigation;
     private Button? _atomNavigation;
+    private Button? _giteaNavigation;
     private Button? _deployNavigation;
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
@@ -51,6 +52,7 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _customCmsWizard;
     private readonly ServerWizard _removeCmsWizard;
+    private readonly ServerWizard _giteaWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -74,10 +76,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _giteaWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -105,6 +107,10 @@ public sealed class InstallerWindow : Window
         _removeCmsWizard = new ServerWizard(() => Session, [removeCmsStep],
             (_, _, site, _, steps) => FinishedView.BuildRemoveCms(site, removeCmsStep.RemovedName, removeCmsStep.FilesDeleted, steps),
             "Octane on /", keyStep: false);
+        var giteaStep = new GiteaStep();
+        _giteaWizard = new ServerWizard(() => Session, [giteaStep],
+            (host, _, _, _, steps) => FinishedView.BuildGitea(giteaStep.Settings, giteaStep.Result, GiteaStep.GiteaLoginPath(host), steps),
+            "Your Git server", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -245,6 +251,7 @@ public sealed class InstallerWindow : Window
             case Page.AtomCms: ShowAtomCmsWizard(); break;
             case Page.CustomCms: ShowCustomCmsWizard(); break;
             case Page.RemoveCms: ShowRemoveCmsWizard(); break;
+            case Page.Gitea: ShowGitea(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -380,6 +387,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(SidebarLabel("ADDONS"));
         _atomNavigation = NavButton("CMS", Icons.Puzzle, ShowCms);
         nav.Children.Add(_atomNavigation);
+        _giteaNavigation = NavButton("Gitea", Icons.Git, ShowGitea);
+        nav.Children.Add(_giteaNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
         _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, ShowAssetExplorer);
@@ -472,7 +481,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, Gitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -486,6 +495,7 @@ public sealed class InstallerWindow : Window
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.CustomCms => ("Your own CMS", "Addon: your own CMS as the hotel's website, Octane on /client."),
+            Page.Gitea => ("Gitea", "Addon: your own Git server in Docker, on a domain of its own behind Traefik."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
@@ -547,6 +557,8 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("CMS", "AtomCMS or your own CMS as the hotel's website; Octane moves to /client.",
                     Icons.Puzzle, Color.Parse("#E8590C"), ShowCms),
+                SmallTile("Gitea", "Your own Git server (like a small GitHub) on git.yourdomain, in Docker behind Traefik.",
+                    Icons.Git, Color.Parse("#609926"), ShowGitea),
                 SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
                 SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
@@ -593,6 +605,7 @@ public sealed class InstallerWindow : Window
     private void ShowAtomCmsWizard() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
     private void ShowCustomCmsWizard() => ShowWizard(Page.CustomCms, _atomNavigation, _customCmsWizard);
     private void ShowRemoveCmsWizard() => ShowWizard(Page.RemoveCms, _atomNavigation, _removeCmsWizard);
+    private void ShowGitea() => ShowWizard(Page.Gitea, _giteaNavigation, _giteaWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.
