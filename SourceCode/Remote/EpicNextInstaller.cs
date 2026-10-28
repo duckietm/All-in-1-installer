@@ -36,6 +36,39 @@ public static class EpicNextInstaller
     private const string Environment =
         "export PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root CI=1 NO_COLOR=1 COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NEXT_TELEMETRY_DISABLED=1";
 
+    /// <summary>
+    /// Node script: the SQL for the base tables of drizzle/drafts/0000_premium_spirit.sql that the hotel database lacks.
+    /// Arguments: the draft, the migrations folder, a file with the existing tables and one with the applied migrations.
+    /// </summary>
+    private const string BaseSchemaScript = """
+        // Prints the SQL for EpicNext's base tables that the hotel database does not have yet (EpicNext was built on an
+        // AtomCMS database), and drops the columns from those new tables that a pending migration adds again.
+        const fs = require("fs");
+        const [draftFile, migrationsDir, existingFile, appliedFile] = process.argv.slice(2);
+        const lines = (file) => new Set(fs.readFileSync(file, "utf8").split("\n").map((l) => l.trim().toLowerCase()).filter(Boolean));
+        const existing = lines(existingFile);
+        const applied = lines(appliedFile);
+        const created = new Map();
+        for (const statement of fs.readFileSync(draftFile, "utf8").split("--> statement-breakpoint")) {
+        	const table = statement.match(/CREATE TABLE `([^`]+)`/);
+        	if (!table || existing.has(table[1].toLowerCase())) continue;
+        	created.set(table[1], new Set([...statement.matchAll(/^\s*`([^`]+)`\s/gm)].map((c) => c[1])));
+        	// The collation of EpicNext's migrations, so their joins with these tables work.
+        	console.log(statement.trim().replace(/;$/, "").replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ") + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+        }
+        for (const file of fs.readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort()) {
+        	if (applied.has(file.replace(/\.sql$/, "").toLowerCase())) continue;
+        	const sql = fs.readFileSync(migrationsDir + "/" + file, "utf8");
+        	for (const alter of sql.matchAll(/ALTER TABLE\s+`?(\w+)`?([^;]*);/g)) {
+        		const columns = created.get(alter[1]);
+        		if (!columns) continue;
+        		for (const add of alter[2].matchAll(/ADD COLUMN\s+(?!IF NOT EXISTS)`?(\w+)`?/g))
+        			if (columns.has(add[1])) console.log("ALTER TABLE `" + alter[1] + "` DROP COLUMN `" + add[1] + "`;");
+        	}
+        }
+        console.error("  " + created.size + " base tables to create" + (created.size ? ": " + [...created.keys()].join(", ") : ""));
+        """;
+
     private static string StopService => $$"""
         if [ -d /run/systemd/system ]; then systemctl stop {{Service}} 2>/dev/null || true
         else pkill -u www-data -f '{{Directory}}/node_modules/next/' 2>/dev/null || true; fi
@@ -212,8 +245,28 @@ public static class EpicNextInstaller
             fi
             echo "> pnpm install --frozen-lockfile"
             run corepack pnpm install --frozen-lockfile --reporter=append-only || fail "pnpm install stopped (see above)."
+            # EpicNext was built on an AtomCMS database: its migrations expect AtomCMS' tables (such as
+            # website_housekeeping_permissions). The ones the hotel database lacks come from its own base schema.
+            db=$(grep -sE '^db.database=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2 | tr -d '[:space:]')
+            [ -n "$db" ] || fail "No db.database in {{EmulatorInstaller.Directory}}/config.ini: run the Emulator step first."
+            draft=drizzle/drafts/0000_premium_spirit.sql
+            if [ -f "$draft" ]; then
+              echo "> Base tables from $draft (only the ones $db does not have; the emulator's stay as they are)"
+              tmp=$(mktemp -d)
+              mariadb -N -e 'SHOW TABLES' "$db" > "$tmp/existing"
+              mariadb -N -e 'SELECT migration FROM cms_migrations' "$db" > "$tmp/applied" 2>/dev/null || : > "$tmp/applied"
+              node - "$draft" drizzle/migrations "$tmp/existing" "$tmp/applied" > "$tmp/base.sql" <<'JS' || { rm -rf "$tmp"; fail "Reading $draft failed (see above)."; }
+            {{BaseSchemaScript}}
+            JS
+              if [ -s "$tmp/base.sql" ]; then
+                mariadb "$db" < "$tmp/base.sql" || { rm -rf "$tmp"; fail "Creating the base tables in $db failed (see above)."; }
+              fi
+              rm -rf "$tmp"
+            else
+              echo "  (no $draft in this version: the migrations make all tables)"
+            fi
             echo "> pnpm db:migrate (only the CMS' own tables; the emulator's stay as they are)"
-            run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above): check DATABASE_URL in {{Directory}}/.env."
+            run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
             echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory available)"

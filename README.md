@@ -790,7 +790,10 @@ repository link is filled in; change it only when the repository has moved), the
    address), `AUTH_TRUST_HOST=true` (behind Traefik), a random `AUTH_SECRET` (made once, so logins stay valid), and
    `RCON_HOST`/`RCON_PORT` from the emulator's `config.ini`.
 4. **Build**: `/var/www/Gamedata` (where EpicNext looks for the gamedata) links to the hotel's gamedata, then
-   `pnpm install --frozen-lockfile`, `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
+   `pnpm install --frozen-lockfile`, the base tables (EpicNext was built on an AtomCMS database and its migrations
+   expect AtomCMS' tables, such as `website_housekeeping_permissions`: the ones the hotel database lacks are made
+   from its own `drizzle/drafts/0000_premium_spirit.sql`, the emulator's tables are not touched),
+   `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
    ...; the emulator's stay as they are) and `pnpm build`. The build runs under EpicNext's own memory cap
    (`scripts/with-memory-cap.sh`, with 1 GB left for MariaDB, the emulator and NGINX) and needs about 3 GB of free
    memory. The CMS is stopped during the build.
