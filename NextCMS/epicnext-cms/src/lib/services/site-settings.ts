@@ -11,7 +11,7 @@ import { redis } from "@/lib/redis";
 const DEFAULTS: Record<string, string> = {
 	habbo_imaging_url: "/imaging",
 	logo_url: "",
-	nitro_client_url: "",
+	nitro_client_url: "/client/index.html",
 	habbo_gamedata_hotel: "it",
 };
 

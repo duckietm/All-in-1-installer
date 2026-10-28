@@ -96,7 +96,7 @@ export async function inspectInstallation() {
 			{
 				key: "renderer",
 				state: health.dbOk ? "ok" : "unknown",
-				detail: health.dbOk && !renderer ? "/nitro-client/" : undefined,
+				detail: health.dbOk && !renderer ? "/client/index.html" : undefined,
 			},
 			{ key: "registry", state: "unknown" },
 		];

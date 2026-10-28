@@ -390,6 +390,13 @@ public static class EpicNextInstaller
             rm -f "$check"
             echo "> pnpm db:migrate (only the CMS' own tables; the emulator's stay as they are)"
             run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
+            # Its /client page frames the game client: Octane on /client/ of this site (the hotel site), unless
+            # staff set another URL in Admin -> CMS Settings.
+            mariadb "$db" <<'SQL' || echo "  WARNING: could not set nitro_client_url (set it in Admin -> CMS Settings: /client/index.html)"
+            UPDATE website_settings SET value = '/client/index.html' WHERE `key` = 'nitro_client_url' AND (value = '' OR value = '/nitro-client/');
+            INSERT INTO website_settings (`key`, value) SELECT 'nitro_client_url', '/client/index.html' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM website_settings WHERE `key` = 'nitro_client_url');
+            SQL
+            echo "  nitro_client_url: $(mariadb -N "$db" -e "SELECT value FROM website_settings WHERE \`key\` = 'nitro_client_url' LIMIT 1" 2>/dev/null)"
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
             # The CMS is stopped: the old build and its cache go, the build makes them again.

@@ -32,7 +32,8 @@ export default async function ClientPage() {
 	return (
 		<ClientView
 			ticket={ticket}
-			clientUrl={clientUrl || "/nitro-client/"}
+			// The All-in-1 Installer serves Octane on /client/ (the hotel site), next to this page on /client.
+			clientUrl={clientUrl || "/client/index.html"}
 			hotelName={hotelName}
 			initialOnline={onlineCount}
 		/>

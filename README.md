@@ -813,8 +813,9 @@ imported assets; with an empty folder it clones the repository into `/var/www/ep
 7. **Test** through Traefik: EpicNext on `/` and `/client`, Octane on `/client/` and Polaris' `/api/health`.
 
 Then register on `/register` (or log in with an account the hotel already has), make it admin in the SQL Editor
-(`UPDATE users SET rank = 7 WHERE username = 'yourname';`), and in `/admin` → **CMS Settings** set `nitro_client_url`
-to `<url>/client/`. More settings (mail, Valkey, Turnstile, OAuth) go in `/var/www/epicnext/.env`, followed by
+(`UPDATE users SET rank = 7 WHERE username = 'yourname';`). The step sets `nitro_client_url` (`/admin` → **CMS
+Settings**) to `/client/index.html` when it is empty, so EpicNext's `/client` page opens Octane on this site with the
+player's SSO ticket (`/client/index.html?sso=<ticket>`). More settings (mail, Valkey, Turnstile, OAuth) go in `/var/www/epicnext/.env`, followed by
 `systemctl restart epicnext-cms`; its log is `journalctl -u epicnext-cms`. To update EpicNext, run the addon again.
 
 EpicNext and AtomCMS both use `website_*` tables. On a hotel database where AtomCMS was installed, tables with the
