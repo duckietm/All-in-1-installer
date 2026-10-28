@@ -1265,9 +1265,10 @@ public sealed class InstallerWindow : Window
             var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
             if (image.HasUpdate)
             {
-                Border chip = Chip(image.NewestVersion is { } v ? $"{v.TrimStart('v')} AVAILABLE" : image.NewerOnHub ? "UPDATE AVAILABLE" : "RESTART NEEDED",
+                Border chip = Chip(image.NewestVersion is { } v ? $"{v.TrimStart('v')} AVAILABLE" : image.NewerOnHub ? "UPDATE AVAILABLE" : "NEW IMAGE WAITING",
                     "Pro.WarningBack", "Pro.WarningText");
-                ToolTip.SetTip(chip, image.NewerOnHub ? $"Docker Hub has a newer {image.Image}." : "A newer image is downloaded, but the container still runs the old one.");
+                ToolTip.SetTip(chip, image.NewerOnHub ? $"Docker Hub has a newer {image.Image}."
+                    : $"A newer {image.Image} is downloaded, but the container still runs the old one. Update starts the new one; a docker restart keeps the old image (it restarts the same container).");
                 state.Children.Add(chip);
                 var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
                 ToolTip.SetTip(button, traefik ? "Pulls the newest image and restarts Traefik: the players are disconnected for a few seconds."

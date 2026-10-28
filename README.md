@@ -1006,8 +1006,9 @@ port; **Log in to MariaDB** asks again.
 are counted together, and **Update** updates the renderer first, then Octane, then builds the client); AtomCMS when it is
 installed; and the Docker services **Traefik** and, once installed, **Gitea**. For those the check compares the image on
 the server with Docker Hub's newest for the same tag (`docker buildx imagetools inspect`, which reads only the
-registry's index: nothing is downloaded or changed), and shows **RESTART NEEDED** when a newer image is downloaded but
-the old container still runs. **Update** runs the matching tool on the Tools page.
+registry's index: nothing is downloaded or changed), and shows **NEW IMAGE WAITING** when a newer image is downloaded but
+the old container still runs (a `docker restart` keeps the image the container was made from; **Update** and
+**Restart Traefik** make a new container from it). **Update** runs the matching tool on the Tools page.
 
 ![The component list](docs/screenshots/dashboard-components.png)
 
@@ -1099,7 +1100,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Restart emulator** | `systemctl restart emulator` and waits until Polaris has loaded (asks first: everyone is disconnected) |
 | **Restart MariaDB** | restarts MariaDB and waits until it answers |
 | **Restart NGINX** | `nginx -t` first (a broken configuration is not restarted), then PHP-FPM 8.5 and NGINX; checks 127.0.0.1:85 |
-| **Restart Traefik** | `docker restart traefik`; waits for port 80 |
+| **Restart Traefik** | `docker compose up -d --force-recreate` in `/opt/traefik`: a new container, with the newest downloaded image (a `docker restart` would keep the old one); the routes and certificates stay. Waits for port 80 |
 | **Restart all** | MariaDB, emulator, NGINX + PHP-FPM, Traefik, in that order |
 | **Fix visitor IPs** | for a hotel behind Cloudflare whose players show up with a Cloudflare address: gives Polaris (`ws.ip.header.trusted`), NGINX (`/etc/nginx/hotel-real-ip.conf`) and Traefik Cloudflare's current ranges and sets up the weekly refresh (`/var/scripts/CF_Refresh.sh`, `/etc/cron.d/cf-refresh`). Asks first: the emulator restarts when its setting changes, Traefik when its list changes. A hotel set up without Cloudflare gets the advice to run Web access again with Cloudflare on |
 | **Enable firewall** | switches ufw on with the Harden step's rules: when that step set them up they are switched on again, after checking that every SSH port (and the one you are connected on) is in them, so you cannot lock yourself out; on a server where it never ran, the same rules are set up (SSH rate limited, 80/443 for everyone or only Cloudflare's ranges, everything else closed) |

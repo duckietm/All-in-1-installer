@@ -75,8 +75,15 @@ public static class ServerTools
     {
         string script = RemoteScript.Prelude + $$"""
             docker inspect traefik >/dev/null 2>&1 || fail "There is no Traefik container on this server. Run the Web access step first."
-            echo "> docker restart traefik"
-            docker restart traefik >/dev/null
+            # A new container from compose.yaml: it starts with the newest downloaded traefik image, where docker restart
+            # would keep the image the old container was made from. The routes and certificates are files, so they stay.
+            if [ -f {{WebAccessInstaller.TraefikDirectory}}/compose.yaml ]; then
+              echo "> docker compose up -d --force-recreate (Traefik, with the newest downloaded image)"
+              docker compose -f {{WebAccessInstaller.TraefikDirectory}}/compose.yaml up -d --force-recreate 2>&1 | grep -v '^ *$' | sed 's/^/  /'
+            else
+              echo "> docker restart traefik"
+              docker restart traefik >/dev/null
+            fi
             for i in $(seq 1 20); do ss -Hltn 'sport = :80' | grep -q . && break; sleep 1; done
             ss -Hltn 'sport = :80' | grep -q . || { docker logs --tail 20 traefik 2>&1 | sed 's/^/  /'; fail "Traefik does not listen on port 80 after the restart."; }
             echo "  $(docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print "Traefik " $2}') is running"
