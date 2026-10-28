@@ -1,4 +1,3 @@
-import { count, eq } from "drizzle-orm";
 import Image from "next/image";
 import type { Session } from "next-auth";
 import { getTranslations } from "next-intl/server";
@@ -8,10 +7,9 @@ import { MobileNav } from "@/components/mobile-nav";
 import { NavDropdown } from "@/components/nav-dropdown";
 import { NavbarColorPicker } from "@/components/navbar-color-picker";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { db, MessengerFriendrequests, MessengerOffline } from "@/lib/db";
 import { resolveHotelName } from "@/lib/hotel-name";
+import { loadMessengerCounts } from "@/lib/messenger-counts";
 import { canAccess, getApiAdminContext, PERMS } from "@/lib/permissions";
-import { logServerError } from "@/lib/server-log";
 import {
 	ICON_NAV_BB,
 	ICON_NAV_COMMUNITY,
@@ -28,53 +26,33 @@ export async function Navigation({ session }: { session: Session | null }) {
 	const brandLabel = await resolveHotelName();
 	let showAdmin = false;
 	let showMod = false;
-	if (session?.user) {
-		const ctx = await getApiAdminContext();
-		if (ctx) {
-			showAdmin = canAccess(
+	const userId = session?.user?.id ? Number(session.user.id) : null;
+	// Rights and counts in one round; the counts are shared with the top header.
+	const [ctx, messenger] = session?.user
+		? await Promise.all([
+				getApiAdminContext(),
+				userId ? loadMessengerCounts(userId) : null,
+			])
+		: [null, null];
+	if (ctx) {
+		showAdmin = canAccess(
+			ctx.permissions,
+			PERMS.ADMIN_DASHBOARD,
+			ctx.session.user.rank,
+		);
+		showMod =
+			canAccess(ctx.permissions, PERMS.MOD_DASHBOARD, ctx.session.user.rank) ||
+			canAccess(
 				ctx.permissions,
-				PERMS.ADMIN_DASHBOARD,
+				PERMS.MODERATION_VIEW,
 				ctx.session.user.rank,
-			);
-			showMod =
-				canAccess(
-					ctx.permissions,
-					PERMS.MOD_DASHBOARD,
-					ctx.session.user.rank,
-				) ||
-				canAccess(
-					ctx.permissions,
-					PERMS.MODERATION_VIEW,
-					ctx.session.user.rank,
-				) ||
-				canAccess(ctx.permissions, PERMS.MOD_CFH_VIEW, ctx.session.user.rank) ||
-				canAccess(ctx.permissions, PERMS.MOD_ACTIONS, ctx.session.user.rank);
-		}
+			) ||
+			canAccess(ctx.permissions, PERMS.MOD_CFH_VIEW, ctx.session.user.rank) ||
+			canAccess(ctx.permissions, PERMS.MOD_ACTIONS, ctx.session.user.rank);
 	}
 
-	let unreadMessages = 0;
-	let pendingFriendRequests = 0;
-	if (session?.user?.id) {
-		const id = Number(session.user.id);
-		try {
-			const [unreadRows, pendingRows] = await Promise.all([
-				db
-					.select({ total: count() })
-					.from(MessengerOffline)
-					.where(eq(MessengerOffline.userId, id)),
-				db
-					.select({ total: count() })
-					.from(MessengerFriendrequests)
-					.where(eq(MessengerFriendrequests.userToId, id)),
-			]);
-			unreadMessages = unreadRows[0]?.total ?? 0;
-			pendingFriendRequests = pendingRows[0]?.total ?? 0;
-		} catch (error) {
-			logServerError("navigation.messenger_counts_failed", error, {
-				userId: id,
-			});
-		}
-	}
+	const unreadMessages = messenger?.unreadMessages ?? 0;
+	const pendingFriendRequests = messenger?.requests.length ?? 0;
 
 	return (
 		<nav

@@ -34,6 +34,32 @@ function detectLocaleFromAcceptLanguage(
 	return null;
 }
 
+/**
+ * The locale's messages over the English ones, kept while both trees are the
+ * same objects (loadCmsMessages reuses them until a translation changes), so
+ * the whole catalogue is not deep-copied on every request.
+ */
+const mergedByLocale = new Map<
+	string,
+	{
+		fallback: object;
+		messages: object;
+		merged: ReturnType<typeof mergeMessages>;
+	}
+>();
+function mergedWithFallback(
+	locale: string,
+	fallback: Parameters<typeof mergeMessages>[0],
+	messages: Parameters<typeof mergeMessages>[1],
+) {
+	const hit = mergedByLocale.get(locale);
+	if (hit && hit.fallback === fallback && hit.messages === messages)
+		return hit.merged;
+	const merged = mergeMessages(fallback, messages);
+	mergedByLocale.set(locale, { fallback, messages, merged });
+	return merged;
+}
+
 export default getRequestConfig(async () => {
 	const store = await cookies();
 	const cookieLocale = store.get("NEXT_LOCALE")?.value;
@@ -56,7 +82,7 @@ export default getRequestConfig(async () => {
 
 	return {
 		locale,
-		messages: mergeMessages(fallback, messages),
+		messages: mergedWithFallback(locale, fallback, messages),
 		// Never throw on a missing message — use the English value, or a humanised
 		// key as a last resort.
 		getMessageFallback({

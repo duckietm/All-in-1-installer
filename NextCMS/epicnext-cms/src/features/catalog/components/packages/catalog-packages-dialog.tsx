@@ -447,7 +447,7 @@ export function CatalogPackagesDialog({ canEdit }: { canEdit: boolean }) {
 											{current.mode === "copy" ? t("copy") : t("update")} ·{" "}
 											{current.status === "draft" ? t("draft") : t("published")}
 											{dirty && (
-												<span className="ml-2 text-amber-500">
+												<span className="ml-2 text-[var(--admin-accent)]">
 													{t("unsaved")}
 												</span>
 											)}
@@ -542,7 +542,7 @@ export function CatalogPackagesDialog({ canEdit }: { canEdit: boolean }) {
 													</p>
 													{preview.conflicts.length > 0 ? (
 														<>
-															<p className="text-red-500">{t("conflicts")}</p>
+															<p className="text-destructive">{t("conflicts")}</p>
 															<ul className="list-disc pl-5">
 																{preview.conflicts.map((conflict) => (
 																	<li key={conflict}>{conflict}</li>

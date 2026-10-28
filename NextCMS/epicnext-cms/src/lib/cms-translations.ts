@@ -148,7 +148,6 @@ export async function saveCmsTranslation(
 	});
 }
 interface MergedMemo {
-	locale: AppLocale;
 	mtimeMs: number;
 	size: number;
 	builtAt: number;
@@ -157,10 +156,12 @@ interface MergedMemo {
 
 /**
  * Merged tree per locale, reused across requests until the override file
- * changes. Still re-stat'ed (cheap, and at most once per MEMO_TTL_MS) so a
- * runtime translation edit stays visible without a restart.
+ * changes. Re-stat'ed at most once per MEMO_TTL_MS, so a runtime translation
+ * edit stays visible without a restart. One entry per locale: a visitor's
+ * locale and the English fallback are both needed on every request, and a
+ * single slot made them evict each other (a full rebuild per page view).
  */
-let mergedMemo: MergedMemo | null = null;
+const mergedMemo = new Map<AppLocale, MergedMemo>();
 const MEMO_TTL_MS = 2_000;
 
 async function overrideFingerprint(
@@ -178,22 +179,24 @@ async function overrideFingerprint(
 /** Per-request deduplication plus the cross-request memo above. */
 export const loadCmsMessages = cache(
 	async (locale: AppLocale): Promise<MessageTree> => {
+		const memo = mergedMemo.get(locale);
+		if (memo && Date.now() - memo.builtAt < MEMO_TTL_MS) return memo.tree;
 		const fingerprint = await overrideFingerprint(locale, defaultRoot);
 		if (
-			mergedMemo &&
-			mergedMemo.locale === locale &&
-			mergedMemo.mtimeMs === fingerprint.mtimeMs &&
-			mergedMemo.size === fingerprint.size &&
-			Date.now() - mergedMemo.builtAt < MEMO_TTL_MS
+			memo &&
+			memo.mtimeMs === fingerprint.mtimeMs &&
+			memo.size === fingerprint.size
 		) {
-			return mergedMemo.tree;
+			// Unchanged on disk: keep the tree, check again after the next TTL.
+			memo.builtAt = Date.now();
+			return memo.tree;
 		}
 
 		try {
 			const tree = unflattenObject(
 				(await readCmsTranslation(locale)).messages,
 			) as MessageTree;
-			mergedMemo = { locale, ...fingerprint, builtAt: Date.now(), tree };
+			mergedMemo.set(locale, { ...fingerprint, builtAt: Date.now(), tree });
 			return tree;
 		} catch (error) {
 			logger.error("CMS translation overrides could not be loaded", {

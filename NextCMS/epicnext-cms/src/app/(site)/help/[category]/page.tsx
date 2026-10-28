@@ -7,7 +7,6 @@ import { SanitizedHtml } from "@/components/shared/sanitized-html";
 import { db, WebsiteHelpCenterCategories } from "@/lib/db";
 import { resolveHotelName } from "@/lib/hotel-name";
 import { publicAssetExists } from "@/lib/public-asset";
-import { sanitize } from "@/lib/sanitize";
 
 // Asset path matches AtomCMS's Blade view: asset('/assets/images/help-center/<image_url>').
 const HELP_IMAGE_BASE = "/assets/images/help-center";
@@ -127,7 +126,7 @@ export default async function HelpCategoryPage({
 				) : null}
 
 				{/* content is author-supplied HTML — sanitised server-side. */}
-				<SanitizedHtml html={sanitize(content)} style={{ lineHeight: 1.7 }} />
+				<SanitizedHtml html={content} style={{ lineHeight: 1.7 }} />
 
 				{hasButton ? (
 					<div style={{ clear: "both", marginTop: "1rem" }}>

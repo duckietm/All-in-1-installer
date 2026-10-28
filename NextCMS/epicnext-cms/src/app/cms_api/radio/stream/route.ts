@@ -18,18 +18,19 @@ export async function GET(req: Request) {
 					fetchNowPlaying().catch(() => null),
 					fetchListeners().catch(() => null),
 				]);
+				// Only changes go out (the ping below keeps the connection alive in between).
+				const payload = JSON.stringify({ nowPlaying, listeners });
+				if (payload === lastPayload) return;
+				lastPayload = payload;
 				try {
-					controller.enqueue(
-						encoder.encode(
-							`data: ${JSON.stringify({ nowPlaying, listeners })}\n\n`,
-						),
-					);
+					controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
 				} catch {
 					closed = true;
 				}
 			};
 
 			// Initial event immediately, then on an interval.
+			let lastPayload = "";
 			await send();
 			const interval = setInterval(() => void send(), 10_000);
 			// SSE comment as a keep-alive ping between data events.

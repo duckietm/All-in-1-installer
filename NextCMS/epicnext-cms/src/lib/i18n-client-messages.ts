@@ -18,7 +18,14 @@ import type { AbstractIntlMessages } from "next-intl";
 
 /** Top-level namespaces plus `pages.*` sub-namespaces reserved for staff tools. */
 const ADMIN_ONLY_NAMESPACES = new Set(["admin"]);
-const ADMIN_ONLY_PAGE_NAMESPACES = new Set(["admin"]);
+// housekeeping, studio and mod (about 8.5 KB) are only read under /admin, /admin-next and /mod,
+// which install the full catalogue themselves.
+const ADMIN_ONLY_PAGE_NAMESPACES = new Set([
+	"admin",
+	"housekeeping",
+	"studio",
+	"mod",
+]);
 
 /**
  * `pages.admin` sub-namespaces that are NOT staff-only because a shared

@@ -6,6 +6,7 @@ import { isDynamicSuperAdmin } from "./admin/authorization-policy";
 import { resolveAuthorizationState } from "./admin/rank-authority";
 import { auth } from "./auth";
 import { sessionUserId } from "./auth/session-user";
+import { cached } from "./cache";
 import { db, queryRows, User } from "./db";
 import { redirectSafe } from "./foundation/security";
 import { PERMS } from "./permission-slugs";
@@ -105,9 +106,17 @@ export const loadUserPermissions = cache(async function loadUserPermissions(
  * Highest rank the hotel currently has — i.e. who the dynamic owner is.
  * Rank comparisons ("can this staff member act on that user") must never be
  * hard-coded to a number, because hotels disagree on their top rank.
- * Memoised per request so several rank guards in one action cost one query.
+ * Memoised per request, and cached for a minute across requests: it is a MAX over the users
+ * table, read for every staff check, and changes only when someone gets the top rank.
  */
-export const getHighestRank = cache(async (): Promise<number | null> => {
+export const getHighestRank = cache(
+	(): Promise<number | null> =>
+		cached("permissions:highest_rank", 60_000, loadHighestRank, {
+			staleMs: 60_000,
+		}),
+);
+
+async function loadHighestRank(): Promise<number | null> {
 	const rows = await queryRows<{
 		highest_rank: number | bigint | null;
 	}>(sql`
@@ -121,7 +130,7 @@ export const getHighestRank = cache(async (): Promise<number | null> => {
         ) AS highest_rank
       `);
 	return rows[0]?.highest_rank == null ? null : Number(rows[0].highest_rank);
-});
+}
 
 const getCurrentAuthorizationState = cache(async (userId: number) =>
 	resolveAuthorizationState(userId, {

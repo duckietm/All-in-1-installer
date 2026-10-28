@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requirePermission } from "@/lib/admin/guard";
+import { invalidateKey } from "@/lib/cached-db";
 import { db, ThemeScope, ThemeScopeValue } from "@/lib/db";
 import { PERMS } from "@/lib/permissions";
 import { logStaffActivity } from "@/lib/services/staff-activity";
@@ -18,6 +19,7 @@ import {
 import { allModuleIds } from "@/lib/theme-modules";
 import { THEME_COLOR_KEYS } from "@/lib/theme-presets";
 import { getAllScopes, getScopeValues } from "@/lib/theme-resolver";
+import { SCOPED_THEMES_CACHE_KEY } from "@/lib/theme-scope-cache";
 
 const COLOR_RE = /^[#a-zA-Z0-9(),.\s%-]+$/;
 
@@ -71,6 +73,7 @@ export async function createScope(formData: FormData): Promise<void> {
 		});
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}
@@ -93,6 +96,7 @@ export async function updateScope(formData: FormData): Promise<void> {
 			.where(sql`${ThemeScope.id} = ${id}`);
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}
@@ -119,6 +123,7 @@ export async function deleteScope(formData: FormData): Promise<void> {
 		});
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}
@@ -136,6 +141,7 @@ export async function reorderScopes(orderedIds: number[]): Promise<void> {
 				.where(sql`${ThemeScope.id} = ${orderedIds[i]}`);
 		}
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}
@@ -329,6 +335,7 @@ export async function saveScopeValues(formData: FormData): Promise<void> {
 		});
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 		revalidatePath("/", "layout");
 	} catch {
 		// ignore
@@ -357,6 +364,7 @@ export async function resetScopeValues(formData: FormData): Promise<void> {
 			);
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}
@@ -425,6 +433,7 @@ export async function duplicateScope(formData: FormData): Promise<void> {
 		}
 
 		revalidatePath("/admin/theme-builder");
+		void invalidateKey(SCOPED_THEMES_CACHE_KEY);
 	} catch {
 		// ignore
 	}

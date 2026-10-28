@@ -1,4 +1,4 @@
-import { count, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import Image from "next/image";
 import type { Session } from "next-auth";
 import { getTranslations } from "next-intl/server";
@@ -8,14 +8,9 @@ import Link from "@/components/link";
 import { LiveOnlineCount } from "@/components/live-online-count";
 import { RoomQuickEntry } from "@/components/room-quick-entry";
 import { UserAvatarThumbnail } from "@/components/shared/user-avatar-thumbnail";
-import {
-	db,
-	MessengerFriendrequests,
-	MessengerOffline,
-	User,
-	UsersCurrency,
-} from "@/lib/db";
+import { db, User, UsersCurrency } from "@/lib/db";
 import { resolveHotelName } from "@/lib/hotel-name";
+import { loadMessengerCounts } from "@/lib/messenger-counts";
 import { canAccess, getApiAdminContext, PERMS } from "@/lib/permissions";
 import { logServerError } from "@/lib/server-log";
 import { cachedOnlineCount } from "@/lib/services/public-counters";
@@ -66,7 +61,6 @@ export async function TopHeader({ session }: { session: Session | null }) {
 	let showMod = false;
 	let hotelName = "";
 	let online = 0;
-	let friendRequests: { userFromId: number }[] = [];
 	let friendRequestUsers: {
 		id: number;
 		username: string;
@@ -75,7 +69,7 @@ export async function TopHeader({ session }: { session: Session | null }) {
 
 	// One round of queries instead of five sequential ones: the header is on
 	// every authenticated page, so each extra round-trip is paid on every view.
-	const [wallet, ctx, name, onlineCount, requests] = await Promise.all([
+	const [wallet, ctx, name, onlineCount, messenger] = await Promise.all([
 		(async () => {
 			try {
 				const [user, currencies] = await Promise.all([
@@ -103,11 +97,8 @@ export async function TopHeader({ session }: { session: Session | null }) {
 			logServerError("top-header.online_count_failed", error);
 			return 0;
 		}),
-		db
-			.select({ userFromId: MessengerFriendrequests.userFromId })
-			.from(MessengerFriendrequests)
-			.where(eq(MessengerFriendrequests.userToId, id))
-			.catch(() => [] as { userFromId: number }[]),
+		// Shared with the navigation (one set of queries per request).
+		loadMessengerCounts(id),
 	]);
 
 	if (wallet) {
@@ -136,35 +127,13 @@ export async function TopHeader({ session }: { session: Session | null }) {
 	}
 	hotelName = name;
 	online = onlineCount;
-	friendRequests = requests;
-	if (friendRequests.length > 0) {
-		friendRequestUsers = await db
-			.select({ id: User.id, username: User.username, look: User.look })
-			.from(User)
-			.where(
-				inArray(
-					User.id,
-					friendRequests.map((r) => r.userFromId),
-				),
-			)
-			.catch(() => [] as { id: number; username: string; look: string }[]);
-	}
+	friendRequestUsers = messenger.requests;
 
 	// The count and the rows are the same question, so derive it from the rows.
-	const pendingFriendRequests = friendRequests.length;
+	const pendingFriendRequests = messenger.requests.length;
 	const textColor =
 		"var(--color-navbar-text-readable, var(--color-navbar-text, var(--color-text)))";
-	// Unread offline messages is the only count we still need on its own.
-	let unreadMessages = 0;
-	try {
-		const [row] = await db
-			.select({ total: count() })
-			.from(MessengerOffline)
-			.where(eq(MessengerOffline.userId, id));
-		unreadMessages = row?.total ?? 0;
-	} catch (error) {
-		logServerError("top-header.messenger_counts_failed", error, { userId: id });
-	}
+	const unreadMessages = messenger.unreadMessages;
 
 	const totalNotifications = unreadMessages + pendingFriendRequests;
 

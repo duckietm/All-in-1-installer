@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { unixNow } from "@/lib/bans";
+import { cached } from "@/lib/cache";
 import { resolveClientIp } from "@/lib/client-ip";
 import { Ban, db } from "@/lib/db";
 import { safeRedirect } from "@/lib/foundation/security";
@@ -62,18 +63,27 @@ export async function enforceSiteAccess(): Promise<void> {
 
 		try {
 			if (!target && session?.user?.id) {
-				const now = unixNow();
-				const [ban] = await db
-					.select({ id: Ban.id })
-					.from(Ban)
-					.where(
-						and(
-							eq(Ban.userId, Number(session.user.id)),
-							or(eq(Ban.banExpire, 0), gt(Ban.banExpire, now)),
-						),
-					)
-					.limit(1);
-				if (ban) target = "/banned";
+				// Per page view of every signed-in visitor: cached 30 s per user (a ban also ends the
+				// user's sessions at once, see revokeUserCredentials).
+				const userId = Number(session.user.id);
+				const banned = await cached(
+					`access:ban:${userId}`,
+					30_000,
+					async () => {
+						const [ban] = await db
+							.select({ id: Ban.id })
+							.from(Ban)
+							.where(
+								and(
+									eq(Ban.userId, userId),
+									or(eq(Ban.banExpire, 0), gt(Ban.banExpire, unixNow())),
+								),
+							)
+							.limit(1);
+						return Boolean(ban);
+					},
+				);
+				if (banned) target = "/banned";
 			}
 		} catch {
 			checksDegraded = true;

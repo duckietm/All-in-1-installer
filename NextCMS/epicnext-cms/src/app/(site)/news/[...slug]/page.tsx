@@ -15,7 +15,6 @@ import { formatDate } from "@/lib/format-date";
 import { resolveHotelName } from "@/lib/hotel-name";
 import { logger } from "@/lib/logger";
 import { withPublicPagePerformance } from "@/lib/public-page-performance";
-import { sanitize } from "@/lib/sanitize";
 import {
 	absoluteAssetUrl,
 	appBaseUrl,
@@ -252,10 +251,7 @@ async function ArticlePage({
 					/>
 				) : null}
 				{/* Article body is rich HTML (atom uses TinyMCE) — sanitised server-side. */}
-				<SanitizedHtml
-					html={sanitize(article.fullStory)}
-					className="article-body"
-				/>
+				<SanitizedHtml html={article.fullStory} className="article-body" />
 			</ContentCard>
 
 			{/* ── Reactions ─────────────────────────────────────────── */}

@@ -62,18 +62,21 @@ export async function GET(req: Request) {
 					fetchOnlineCount(),
 					fetchEmulatorStatus(),
 				]);
+				// Only changes go out (the ping below keeps the connection alive in between).
+				const payload = JSON.stringify({ count, emulator });
+				if (payload === lastPayload) return;
+				lastPayload = payload;
 				try {
-					controller.enqueue(
-						encoder.encode(`data: ${JSON.stringify({ count, emulator })}\n\n`),
-					);
+					controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
 				} catch {
 					closed = true;
 				}
 			};
 
-			// Initial event immediately, then on an interval.
+			// Initial event immediately, then every 10 s: the count itself is cached for 10 s.
+			let lastPayload = "";
 			await send();
-			const interval = setInterval(() => void send(), 5_000);
+			const interval = setInterval(() => void send(), 10_000);
 			// SSE comment as a keep-alive ping between data events.
 			const ping = setInterval(() => {
 				if (!closed) {

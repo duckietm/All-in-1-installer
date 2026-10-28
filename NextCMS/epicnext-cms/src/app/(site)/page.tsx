@@ -486,9 +486,11 @@ async function Home() {
 				<AuthTopBar hotelName={hotelName} logo={logo} online={online} />
 			</div>
 
-			{/* ── Hero + the headline counters, which straddle the hero edge ── */}
+			{/* ── Hero + the headline counters, which straddle the hero edge ──
+			    Not in <Reveal>: that hides its content until the page's JavaScript runs, and the hero image is
+			    the largest thing on the page (its load time is what visitors feel as "the page is there"). */}
 			<div className="relative w-full">
-				<Reveal className="-mx-3 sm:-mx-4 md:-mx-6">
+				<div className="-mx-3 sm:-mx-4 md:-mx-6">
 					<div className="relative overflow-hidden">
 						<Image
 							src="/assets/images/next_header.jpg"
@@ -624,12 +626,12 @@ async function Home() {
 
 						<div className="hero-ring" aria-hidden="true" />
 					</div>
-				</Reveal>
+				</div>
 
 				{/* The headline counters. They straddle the hero edge so the
 				    numbers land above the fold instead of in a second block
 				    further down the page. */}
-				<Reveal className="relative z-20 mx-auto -mt-14 w-full max-w-4xl px-3 sm:-mt-16 sm:px-4 md:px-6">
+				<div className="relative z-20 mx-auto -mt-14 w-full max-w-4xl px-3 sm:-mt-16 sm:px-4 md:px-6">
 					<div className="panel panel-float relative overflow-hidden rounded-[var(--panel-radius)] px-2 py-5 sm:px-4 sm:py-6">
 						<div className="grid grid-cols-2 gap-y-6 lg:grid-cols-4 lg:gap-y-0">
 							{statItems.map((s, i) => (
@@ -685,7 +687,7 @@ async function Home() {
 							))}
 						</div>
 					</div>
-				</Reveal>
+				</div>
 			</div>
 
 			{/* ── Quick explore ── */}

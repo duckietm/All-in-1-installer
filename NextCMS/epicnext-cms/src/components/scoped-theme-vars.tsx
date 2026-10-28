@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { cached } from "@/lib/cache";
 import { db, ThemeScope, ThemeScopeValue } from "@/lib/db";
 import {
 	BLOCK_KEY_PREFIX,
@@ -8,6 +9,7 @@ import {
 	THEME_BLOCKS,
 } from "@/lib/theme-blocks";
 import { THEME_COLOR_KEYS, type ThemeColorKey } from "@/lib/theme-presets";
+import { SCOPED_THEMES_CACHE_KEY } from "@/lib/theme-scope-cache";
 
 // ─── Scoped CSS injection ────────────────────────────────────────────────────
 // Injects CSS blocks for module/route overrides using data-attribute selectors.
@@ -33,7 +35,19 @@ interface ScopeValues {
 	custom: Partial<Record<string, string>>;
 }
 
-async function loadScopedThemes(): Promise<
+/**
+ * Rendered by the root layout on every page: cached for a minute (theme-builder saves clear it)
+ * instead of one or two queries per page view.
+ */
+function loadScopedThemes(): Promise<
+	Array<{ scope: ScopeRow; values: ScopeValues }>
+> {
+	return cached(SCOPED_THEMES_CACHE_KEY, 60_000, loadScopedThemesFromDb, {
+		staleMs: 300_000,
+	});
+}
+
+async function loadScopedThemesFromDb(): Promise<
 	Array<{ scope: ScopeRow; values: ScopeValues }>
 > {
 	const rows = await db

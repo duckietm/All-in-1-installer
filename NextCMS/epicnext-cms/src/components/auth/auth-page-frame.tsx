@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { AuthTopBar } from "@/components/auth/auth-top-bar";
-import { Reveal } from "@/components/motion-reveal";
 import { UserAvatarThumbnail } from "@/components/shared/user-avatar-thumbnail";
 import { SurfaceCard } from "@/components/surface-card";
 import { loadProfilePrivacyMap } from "@/lib/services/profile-privacy";
@@ -164,7 +163,8 @@ export function AuthPageFrame({
 				<AuthTopBar hotelName={hotelName} logo={logo} online={online} />
 			</div>
 
-			<Reveal>
+			{/* Not in <Reveal>: the login form is above the fold and must show before the JavaScript runs. */}
+			<div>
 				<div className="flex flex-col gap-8 lg:flex-row lg:items-start">
 					<div className="lg:w-96 shrink-0 space-y-4">{children}</div>
 
@@ -188,7 +188,7 @@ export function AuthPageFrame({
 						</div>
 					</div>
 				</div>
-			</Reveal>
+			</div>
 		</div>
 	);
 }

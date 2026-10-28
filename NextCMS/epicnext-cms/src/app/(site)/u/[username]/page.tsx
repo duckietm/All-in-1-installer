@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -244,11 +244,13 @@ async function ProfilePage({
 				.orderBy(desc(Rooms.users))
 				.limit(8)
 				.catch(() => []),
+			// Worn badges first, then the rest; at most 100 (hotel accounts can have hundreds).
 			db
-				.select()
+				.select({ id: UsersBadges.id, badgeCode: UsersBadges.badgeCode })
 				.from(UsersBadges)
 				.where(eq(UsersBadges.userId, user.id))
-				.orderBy(asc(UsersBadges.slotId))
+				.orderBy(sql`${UsersBadges.slotId} = 0`, asc(UsersBadges.slotId))
+				.limit(100)
 				.catch(() => []),
 			visible("photos")
 				? db

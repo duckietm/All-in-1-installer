@@ -40,7 +40,12 @@ export interface LoginFormProps {
 /** NextAuth's routes are under /cms_api/auth: SessionProvider points the browser's signIn there. */
 export function LoginForm(props: LoginFormProps) {
 	return (
-		<SessionProvider basePath={AUTH_BASE_PATH} refetchOnWindowFocus={false}>
+		<SessionProvider
+			basePath={AUTH_BASE_PATH}
+			// Shown to signed-out visitors only (the server redirects signed-in ones): no session to fetch.
+			session={null}
+			refetchOnWindowFocus={false}
+		>
 			<LoginFormFields {...props} />
 		</SessionProvider>
 	);
