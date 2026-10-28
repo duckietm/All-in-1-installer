@@ -168,6 +168,8 @@ export function runSseBatch<T>(opts: RunSseBatchOptions<T>): Response {
 		headers: {
 			"Content-Type": "text/event-stream",
 			"Cache-Control": "no-cache",
+			// NGINX passes the progress on as it comes instead of buffering it.
+			"X-Accel-Buffering": "no",
 			Connection: "keep-alive",
 		},
 	});
