@@ -408,22 +408,38 @@ public static class EpicNextInstaller
             setting_default nitro_client_url /client/index.html /nitro-client/
             # The folder served on /gamedata, which the CMS reads and imports assets into.
             setting_default gamedata_root "$g" /var/www/Gamedata
+            # A build is skipped when the code, .env and Node.js are what the current build was made from
+            # (a re-run that only changed settings, or an update without new commits).
+            if [ -f {{SourceInfo}} ]; then
+              tree=$(git -c safe.directory={{SourceDirectory}} -C {{SourceDirectory}} rev-parse "HEAD:$(sed -n 3p {{SourceInfo}})" 2>/dev/null || true)
+            else
+              tree=$(git -c safe.directory="$PWD" rev-parse 'HEAD^{tree}' 2>/dev/null || true)
+            fi
+            stamp="$tree $(sha256sum .env | cut -c1-16) $(node -v)"
+            if [ -n "$tree" ] && [ -f .next/BUILD_ID ] && [ "$(cat .next/.all-in-1-build 2>/dev/null)" = "$stamp" ]; then
+              echo "> pnpm build skipped: code, .env and Node.js are unchanged since build $(cat .next/BUILD_ID)"
+            else
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
-            # The CMS is stopped: the old build and its cache go, the build makes them again.
-            rm -rf .next
+            # The CMS is stopped: the old build goes. Its cache (.next/cache) stays, so webpack only
+            # rebuilds what changed instead of starting from nothing ("No build cache found").
+            [ -d .next ] && find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} +
             need_disk 5120 "pnpm build"
-            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory, $(free_mb) MB disk free)"
+            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory, $(free_mb) MB disk free$([ -d .next/cache ] && echo ", with the cache of the last build"))"
             [ "$avail" -lt 3000 ] && echo "  WARNING: under 3 GB free: the build may run out of memory (add swap, or stop other services for the build)."
             # The build runs in a cgroup of its own (scripts/with-memory-cap.sh): leave 1 GB for MariaDB, the emulator and NGINX.
             if [ -d /run/systemd/system ]; then export CMS_MEMORY_CAP_RESERVE=1g; else export CMS_MEMORY_CAP_BACKEND=none; echo "  (no systemd: the build runs without a memory cap)"; fi
+            # The code was type-checked before it was published; the build skips its own check (about 20 s).
+            export CMS_SKIP_BUILD_TYPECHECK=1
             run corepack pnpm build || fail "pnpm build stopped (see above). The CMS stays stopped until a build succeeds."
             [ -f .next/BUILD_ID ] || fail "pnpm build did not make .next/BUILD_ID."
             echo "  build $(cat .next/BUILD_ID)"
+            [ -n "$tree" ] && echo "$stamp" > .next/.all-in-1-build
             # The build cache only makes the next build faster: on a nearly full disk the space matters more.
             if [ "$(free_mb)" -lt 3072 ]; then
               echo "  $(du -sh .next/cache 2>/dev/null | cut -f1) build cache removed: under 3 GB disk free ($(free_mb) MB)"
               rm -rf .next/cache
+            fi
             fi
             install -d public/nitro-assets public/swf storage
             chown -R www-data:www-data {{Directory}}

@@ -74,6 +74,12 @@ const nextConfig: NextConfig = {
 	deploymentId: process.env.NEXT_DEPLOYMENT_ID?.trim() || getGitCommit(),
 	distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
 	reactStrictMode: true,
+	// The All-in-1 Installer builds published commits, which were type-checked before they were
+	// pushed: it sets CMS_SKIP_BUILD_TYPECHECK=1 to save the build's own check. Unset, the build
+	// checks types as always.
+	typescript: {
+		ignoreBuildErrors: process.env.CMS_SKIP_BUILD_TYPECHECK === "1",
+	},
 	compress: true,
 	productionBrowserSourceMaps: false,
 	// `isomorphic-dompurify` builds a DOM through jsdom on the server. Bundled,
