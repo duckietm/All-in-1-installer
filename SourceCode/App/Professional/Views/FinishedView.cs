@@ -150,6 +150,27 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of Remove the CMS.</summary>
+    public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning,
+            clean ? $"Octane is the website of {site?.Url ?? "your hotel"} again" : "The CMS was not removed",
+            clean
+                ? (removed is null ? "" : $"{removed} is removed{(filesDeleted ? " and its files are deleted" : "; its files stay on the server")}. ") +
+                  "Octane has its own login screen again, and NGINX and Traefik are as after the server installation."
+                : "Run the step again (see the step for what went wrong).");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text("The CMS' tables and its users stay in the hotel database. Players log in on Octane's own login screen now.", 13));
+        later.Children.Add(Text("A CMS again: Addons → CMS.", 13));
+        page.Children.Add(Section("Next", later));
+        return page;
+    }
+
     /// <summary>The database login the server installation made for a CMS (configuration/database/&lt;server&gt;/mariadb.txt).</summary>
     public static Control CmsDatabaseLogin(DatabaseCredentials? credentials, string host)
     {

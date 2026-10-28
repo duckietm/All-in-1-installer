@@ -132,6 +132,40 @@ public static class CmsSite
         echo "PORT=$port"
         """;
 
+    /// <summary>
+    /// Disables every CMS site (the hotel site then is the only one), and with <paramref name="deleteFolder"/> deletes that
+    /// CMS' folder and NGINX site file. Reloads NGINX once nginx -t accepts it.
+    /// </summary>
+    public static Task RemoveAsync(ServerConnection connection, string? siteName, string? deleteFolder, Action<string> log, CancellationToken token = default)
+    {
+        string delete = deleteFolder is null || siteName is null ? "" : $$"""
+            d={{ServerConnection.ShellQuote(deleteFolder)}}
+            case "$d" in /var/www/?*) ;; *) fail "Refusing to delete $d: not a folder in /var/www." ;; esac
+            if [ -d "$d" ]; then
+              echo "> Deleting $d ($(du -sh "$d" | cut -f1))"
+              rm -rf -- "$d"
+            fi
+            rm -f {{File(siteName)}}
+            echo "  {{File(siteName)}} deleted"
+            """;
+        string script = RemoteScript.Prelude + $$"""
+            off=0
+            for s in /etc/nginx/sites-enabled/cms-*; do
+              [ -e "$s" ] || [ -L "$s" ] || continue
+              rm -f "$s"
+              off=$((off + 1))
+              echo "> $(basename "$s") disabled: NGINX no longer serves it"
+            done
+            [ $off -gt 0 ] || echo "  No CMS site was enabled"
+            {{delete}}
+            nginx -t 2>&1 | sed 's/^/  /'
+            nginx -t >/dev/null 2>&1 || fail "nginx -t refuses the configuration (see above)."
+            if [ -d /run/systemd/system ]; then systemctl reload nginx || systemctl restart nginx; else nginx -s reload 2>/dev/null || service nginx restart; fi
+            echo "  NGINX reloaded"
+            """;
+        return RemoteScript.RunAsync(connection, script, log, "Removing the CMS site failed", token);
+    }
+
     /// <summary>Runs <see cref="WriteScript"/>; returns the port.</summary>
     public static async Task<int> ApplyAsync(ServerConnection connection, WebAccessSettings site, string name, string root, bool php,
         Action<string> log, CancellationToken token = default)

@@ -694,8 +694,9 @@ returns to the dashboard and keeps the login (and the SQL Editor's database conn
 
 ### CMS
 
-**Addons → CMS** first asks **Would you like another CMS?**: **AtomCMS** (set up completely, below) or **My own
-CMS** (from a GitHub link or a ZIP file, see [Your own CMS](#your-own-cms)). Both work the same way for the hotel: the
+**Addons → CMS** first asks **Would you like another CMS?**: **AtomCMS** (set up completely, below), **My own
+CMS** (from a GitHub link or a ZIP file, see [Your own CMS](#your-own-cms)) or **Remove the CMS** (see
+[Removing the CMS](#removing-the-cms)). Both work the same way for the hotel: the
 CMS is the website and Octane moves to **/client**, and both need a finished server installation. One CMS is the
 website at a time; switching keeps the other one's files.
 
@@ -801,6 +802,20 @@ database, the user and its password, from `configuration/database/<server>/maria
 CMS needs (`composer install`, `npm run build`) run in **Tools → SSH terminal**, in the CMS folder.
 
 ![Your own CMS](docs/screenshots/custom-cms-step.png)
+
+### Removing the CMS
+
+**Addons → CMS → Remove the CMS** sets the hotel back to how the server installation left it:
+
+1. **Octane on /** again: `vite` without `--base`, `client-mode.json` with `<url>/configuration/`,
+   `habbicons.asset.root` back to `/habbicons`, Octane's own **login screen on** again (with a CMS the CMS logs
+   players in, so it was off), and a rebuild. The hotel is unavailable for about a minute while it builds.
+2. **NGINX**: the hotel site on 127.0.0.1:85 serves Octane on `/` again, and every CMS site (`cms-*`) is disabled.
+3. **Traefik**: `/ws` and all of `/api` go to Polaris again, the rest to the hotel site; `hotel.env` gets `CMS=none`.
+4. **Test** through Traefik: the site, Polaris' `/api/health` and the websocket.
+
+The CMS' files stay, unless you tick **Also delete the CMS' folder and its NGINX site file**. Its database tables
+(such as AtomCMS' `website_*` tables) and the users stay in the hotel database. A CMS again: **Addons → CMS**.
 
 ### Deploy Assets
 
@@ -1178,6 +1193,7 @@ SourceCode/
   App/Professional/Views/HardenStep.cs    Harden page
   App/Professional/Views/AtomCmsStep.cs   CMS addon: AtomCMS
   App/Professional/Views/CustomCmsStep.cs CMS addon: your own CMS (GitHub link or ZIP, PHP or static, root folder)
+  App/Professional/Views/RemoveCmsStep.cs CMS addon: remove the CMS, Octane on / again
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata
