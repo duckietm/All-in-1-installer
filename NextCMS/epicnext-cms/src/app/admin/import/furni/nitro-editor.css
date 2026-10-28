@@ -1,0 +1,63 @@
+[data-nitro-editor] {
+	color: var(--admin-text);
+	background: var(--admin-surface);
+	border-color: var(--admin-border);
+}
+[data-nitro-editor] section,
+[data-nitro-editor] .border,
+[data-nitro-editor] .border-b,
+[data-nitro-editor] .border-t {
+	border-color: var(--admin-border);
+}
+[data-nitro-editor] section {
+	background: var(--admin-canvas);
+}
+[data-nitro-editor] h3 {
+	font-size: 14px;
+	margin: 0;
+}
+[data-nitro-editor] [data-slot="switch"] {
+	width: 40px;
+	height: 24px;
+	background: var(--admin-border);
+	border: 1px solid var(--admin-text-muted);
+}
+[data-nitro-editor] [data-slot="switch"][data-checked] {
+	background: var(--admin-accent);
+	border-color: var(--admin-accent);
+}
+[data-nitro-editor] [data-slot="switch-thumb"] {
+	width: 18px;
+	height: 18px;
+	background: var(--admin-text);
+	color: var(--admin-canvas);
+	left: 2px;
+}
+[data-nitro-editor] [data-slot="switch-thumb"][data-checked] {
+	left: calc(100% - 20px);
+}
+[data-nitro-editor] .nitro-direction {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	min-height: 52px;
+	border: 1px solid var(--admin-border);
+	border-radius: 8px;
+	background: var(--admin-surface);
+	color: var(--admin-text-muted);
+	font-size: 12px;
+}
+[data-nitro-editor] .nitro-direction[aria-pressed="true"] {
+	border-color: var(--admin-accent);
+	background: var(--admin-accent);
+	color: var(--admin-accent-foreground);
+}
+[data-nitro-editor] .nitro-direction:focus-visible {
+	outline: 2px solid var(--admin-accent);
+	outline-offset: 3px;
+}
+[data-nitro-editor] [data-slot="dialog-footer"] {
+	flex-shrink: 0;
+}

@@ -1,0 +1,125 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "AtomCMS-Next API",
+		"version": "1.0.0",
+		"description": "Public and administrative REST API for the AtomCMS-Next Habbo retro hotel CMS."
+	},
+	"servers": [{ "url": "/api", "description": "Local API" }],
+	"security": [{ "bearerAuth": [], "sessionAuth": [] }],
+	"components": {
+		"securitySchemes": {
+			"bearerAuth": {
+				"type": "http",
+				"scheme": "bearer",
+				"description": "Laravel Sanctum-compatible Bearer token from /api/tokens"
+			},
+			"sessionAuth": {
+				"type": "apiKey",
+				"in": "cookie",
+				"name": "next-auth.session-token",
+				"description": "NextAuth session cookie (auto-sent by browser)"
+			}
+		}
+	},
+	"paths": {
+		"/health": {
+			"get": {
+				"summary": "Health check",
+				"responses": { "200": { "description": "OK" } }
+			}
+		},
+		"/articles": {
+			"get": {
+				"summary": "List published articles",
+				"parameters": [
+					{
+						"name": "limit",
+						"in": "query",
+						"schema": { "type": "integer", "default": 10 }
+					},
+					{
+						"name": "offset",
+						"in": "query",
+						"schema": { "type": "integer", "default": 0 }
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Article list",
+						"content": {
+							"application/json": { "schema": { "type": "object" } }
+						}
+					}
+				}
+			}
+		},
+		"/online": {
+			"get": {
+				"summary": "Currently online users count",
+				"responses": {
+					"200": {
+						"description": "Online count",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": { "count": { "type": "integer" } }
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/leaderboard": {
+			"get": {
+				"summary": "User leaderboard (credits, achievement score, etc.)",
+				"responses": { "200": { "description": "Leaderboard data" } }
+			}
+		},
+		"/client/sso": {
+			"get": {
+				"summary": "Generate SSO ticket for the game client (requires auth)",
+				"security": [{ "sessionAuth": [] }],
+				"responses": {
+					"200": {
+						"description": "SSO ticket + hotel name + client URL",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"ticket": { "type": "string" },
+										"hotelName": { "type": "string" },
+										"clientUrl": { "type": "string" }
+									}
+								}
+							}
+						}
+					},
+					"401": { "description": "Unauthorized" }
+				}
+			}
+		},
+		"/me": {
+			"get": {
+				"summary": "Current user profile (requires auth)",
+				"security": [{ "sessionAuth": [] }],
+				"responses": { "200": { "description": "User profile" } }
+			}
+		},
+		"/settings": {
+			"get": {
+				"summary": "Public site settings (non-sensitive keys only)",
+				"responses": { "200": { "description": "Settings object" } }
+			}
+		},
+		"/shop/packages": {
+			"get": {
+				"summary": "Available shop packages",
+				"responses": { "200": { "description": "Package list" } }
+			}
+		}
+	}
+}

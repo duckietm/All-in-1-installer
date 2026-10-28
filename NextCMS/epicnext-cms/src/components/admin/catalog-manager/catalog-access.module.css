@@ -1,0 +1,47 @@
+.options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+	gap: 12px;
+}
+.option {
+	min-width: 0;
+	padding: 14px;
+	border: 1px solid var(--admin-border);
+	border-radius: 10px;
+	background: var(--admin-surface);
+	color: var(--admin-text);
+}
+.optionHeader,
+.control {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.optionHeader {
+	justify-content: space-between;
+}
+.label {
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.control {
+	flex-shrink: 0;
+	min-height: 32px;
+}
+.state {
+	font-size: 12px;
+	color: var(--admin-text-muted);
+}
+.description {
+	margin-top: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--admin-text-muted);
+}
+.option[data-disabled] .label {
+	cursor: not-allowed;
+}
+.option[data-disabled] .control {
+	opacity: 0.6;
+}

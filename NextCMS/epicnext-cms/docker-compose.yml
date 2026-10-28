@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Next.js CMS — single slot on port 3002
+#
+# ── Eigenaar van poort 3002 ─────────────────────────────────────────────────
+# Deze repo kent twee deploy-paden die allebei op poort 3002 willen:
+#   * `scripts/ci-deploy.sh` (blue/green, docker run) — de eigenaar op een
+#     CI-host. Elke push naar main bouwt daar een nieuwe image, draait de
+#     migrations en zet nginx pas om na health + e2e + imaging.
+#   * deze compose-`cms`-service — bedoeld voor een LOSSE host zonder CI.
+#
+# Ze kunnen niet naast elkaar draaien: wie op 3002 zit, blokkeert de ander met
+# `EADDRINUSE`. Daarom staat `cms` achter een profile. Een bloot
+# `docker compose up -d` start dus alleen byparr en kan nooit de live CI-release
+# van de site drukken. De service start alleen als je hem expliciet noemt
+# (`docker compose up -d cms`, `docker compose build cms`, ...): Compose schakelt
+# het profile van een expliciet genoemde service vanzelf in. Op een CI-host wil
+# je dat dus juist NOOIT doen.
+# ─────────────────────────────────────────────────────────────────────────────
+x-cms: &cms
+  image: epicnext-cms:${CMS_RELEASE:-local}
+  # No `network: host` on the build. BuildKit (v0.26, Docker 29) refuses to grant
+  # host networking unless every caller passes --allow=network.host, and
+  # `docker compose build` has no such flag — so asking for it here turned every
+  # rebuild into an immediate "additional privileges requested" failure, which
+  # left the previous release serving traffic. The build only needs outbound
+  # internet (apk, pnpm, next/font/google), which the default bridge provides.
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      NEXT_DEPLOYMENT_ID: ${CMS_RELEASE:-unknown}
+    # Lokale buildcache op schijf. `scripts/docker-prune.sh` brengt de
+    # daemon-cache na elke deploy terug tot 4GB, waardoor de lagen van de
+    # vorige release verdwijnen. Deze export overleeft die prune: een rebuild
+    # na een lockfile-wijziging hergebruikt dan de al gedownloade packages
+    # (pnpm store) in plaats van ze opnieuw te downloaden.
+    # De map ligt binnen de buildcontext, zodat buildx een ontbrekende
+    # cachemap stilzwijgend negeert i.p.v. de build te laten falen; zowel
+    # .dockerignore als .gitignore sluiten de map uit.
+    cache_from:
+      - type=local,src=.docker-cache/cms
+    cache_to:
+      - type=local,dest=.docker-cache/cms,mode=max
+  # Runtime host networking IS required: nginx reaches the CMS over 127.0.0.1
+  # on the single port that is actually served (3002).
+  network_mode: host
+  stop_grace_period: 15s
+  restart: unless-stopped
+  env_file:
+    - .env
+  volumes:
+    - ./public/nitro-assets:/app/public/nitro-assets
+    - ./public/swf:/app/public/swf
+    - ./storage:/app/storage
+    - /var/www/Gamedata:/var/www/Gamedata
+
+  # ── Resource limits ──
+  mem_limit: 4g
+  memswap_limit: 5g
+
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "node",
+        "-e",
+        "fetch('http://127.0.0.1:'+(process.env.PORT||'3002')+'/api/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))",
+      ]
+    interval: 15s
+    timeout: 5s
+    retries: 3
+    start_period: 40s
+
+services:
+  cms:
+    <<: *cms
+    # Alleen starten als je deze host bewust compose-only beheert.
+    profiles: ["cms"]
+    container_name: epicnext-cms
+    environment:
+      - HOSTNAME=0.0.0.0
+      - PORT=3002
+
+  byparr:
+    image: ghcr.io/thephaseless/byparr:v3.0.4
+    # `latest` is een drijvende tag. Zonder pull_policy haalt compose de
+    # bestaande image nooit opnieuw op en blijft byparr hangen op de eerste
+    # versie die ooit werd binnengehaald.
+    pull_policy: always
+    container_name: byparr
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=INFO
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

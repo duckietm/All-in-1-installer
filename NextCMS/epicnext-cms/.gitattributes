@@ -1,0 +1,6 @@
+.husky/* text eol=lf
+*.sh text eol=lf
+
+*.nitro binary
+*.hab binary
+*.swf binary

@@ -1,0 +1,24 @@
+packages:
+  - "."
+
+allowBuilds:
+  "@parcel/watcher": true
+  "@swc/core": true
+  cpu-features: true
+  esbuild: true
+  msw: true
+  protobufjs: true
+  ssh2: true
+
+minimumReleaseAge: 60
+
+overrides:
+  glob: "^11.0.0"
+  "@esbuild-kit/core-utils": "npm:tsx@^4.23.15"
+  "@esbuild-kit/esm-loader": "npm:tsx@^4.23.15"
+  source-map-js: "1.2.2"
+  # GHSA advisory: postcss-selector-parser <7.1.6. Pulled in only by
+  # @tailwindcss/typography (build-time prose selectors), which pins 6.0.10
+  # exactly and has no upstream bump. The API subset it uses is unchanged in
+  # v7, so force the patched major.
+  postcss-selector-parser: "^7.1.6"

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-help}" in
+  install) shift; exec bash "$DIR/scripts/docker-install.sh" "$@" ;;
+  update) shift; exec bash "$DIR/scripts/docker-update.sh" "$@" ;;
+  help|--help|-h) printf '%s\n' 'bash cms install   Configure and install on a Linux Docker host' 'bash cms update    Update using saved settings; --skip-pull uses checked-out release' ;;
+  *) echo "Unknown command. Use: bash cms install | update" >&2; exit 1 ;;
+esac

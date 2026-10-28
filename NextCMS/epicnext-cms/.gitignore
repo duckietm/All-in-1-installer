@@ -1,0 +1,65 @@
+node_modules/
+node_modules.prev/
+.turbo/
+.next/
+.next.prev/
+.next-staging/
+next-env.d.ts
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+src/generated/
+# Runtime avatar/badge imaging disk cache
+public/cache/
+
+prod.log
+*.log
+# Imager health-alert state (last-known up/down + timestamp)
+logs/imager-health.state
+
+# Database backups
+db_backup_*.sql
+
+# Local project documentation
+/docs/*
+!/docs/cms-upgrade-2026-09.md
+
+# Local gitea binary symlink
+gitea
+
+# Runtime uploaded media (persistent, outside public/)
+storage/
+
+# Runtime downloaded furni assets (mirrored from gamedata / audit repair)
+public/nitro-assets/bundled/furniture/
+public/swf/dcr/
+public/tmp/
+
+# Test coverage reports
+coverage/
+.aider*
+
+/public/vendor/tinymce/
+
+# Shared deployment lock (never application source)
+.deploy.lock
+
+# Browser verification artifacts
+test-results/
+playwright-report/
+blob-report/
+
+# Local Docker installation metadata
+.docker-install
+.docker-install.tmp.*
+.env.install.*
+build-reports/
+!/docs/performance-budgets.md
+
+# Local buildcache (docker compose cache_from/cache_to)
+.docker-cache/
+
+# One-off local snapshots (o.a. catalog-integrity/pre-fix.json): runtime-werk,
+# geen bron. Per map opgeslagen om een incident terug te kunnen lezen.
+backups/

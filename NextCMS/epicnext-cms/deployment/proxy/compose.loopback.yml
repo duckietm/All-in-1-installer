@@ -1,0 +1,15 @@
+# Opt in through COMPOSE_FILE in the clone's .env; see docs/operations/docker-installation.md.
+# The base service uses Linux host networking: bind the process, do not add ports.
+services:
+  cms:
+    environment:
+      HOSTNAME: 127.0.0.1
+      PORT: "3002"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3002/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
