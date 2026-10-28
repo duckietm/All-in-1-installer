@@ -796,7 +796,9 @@ repository link is filled in; change it only when the repository has moved), the
    `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
    ...; the emulator's stay as they are) and `pnpm build`. The build runs under EpicNext's own memory cap
    (`scripts/with-memory-cap.sh`, with 1 GB left for MariaDB, the emulator and NGINX) and needs about 3 GB of free
-   memory. The CMS is stopped during the build.
+   memory. The CMS is stopped during the build. It also needs disk space: the step checks for 3 GB free before
+   `pnpm install` and 5 GB before the build (after removing the old build), and else stops with what uses the disk.
+   The build cache is removed again when under 3 GB stays free.
 5. **Octane on /client**, as for AtomCMS.
 6. **Service, NGINX and Traefik**: the systemd service `epicnext-cms` runs `next start` as `www-data` on
    `127.0.0.1:3002` and starts at boot. EpicNext's NGINX site (see Ports above) passes every request to it,

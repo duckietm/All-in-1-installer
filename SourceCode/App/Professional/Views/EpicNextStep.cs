@@ -33,7 +33,7 @@ public sealed class EpicNextStep : InstallStep
             $"Runs as the systemd service {EpicNextInstaller.Service} (user www-data, {EpicNextInstaller.Upstream}, started at boot). No PHP.",
             $"NGINX passes the site to it on its own port (the first free one from {CmsSite.FirstPort} to {CmsSite.LastPort}); Octane moves to /client/ with its login screen off; Traefik sends only Polaris' own /api paths to the emulator."
         ],
-        "Run the full server installation first (at least NGINX, MariaDB, Dev tools, the clones, Emulator, Web access and Octane). The build needs about 3 GB of free memory. One CMS is the website at a time: this replaces AtomCMS or your own CMS as the site (their files stay).",
+        "Run the full server installation first (at least NGINX, MariaDB, Dev tools, the clones, Emulator, Web access and Octane). The build needs about 3 GB of free memory and 5 GB of free disk space. One CMS is the website at a time: this replaces AtomCMS or your own CMS as the site (their files stay).",
         [
             "Check the server",
             "Get EpicNext",

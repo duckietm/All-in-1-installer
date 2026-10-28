@@ -243,6 +243,22 @@ public static class EpicNextInstaller
                 echo "  WARNING: {{GamedataPath}} is a folder of its own, not $g: the CMS uses that one."
               fi
             fi
+            # Free disk space in MB where the CMS is, and what uses the disk when there is too little.
+            free_mb() { df -Pm {{Directory}} | awk 'NR == 2 {print $4}'; }
+            need_disk() {
+              [ "$(free_mb)" -ge "$1" ] && return 0
+              echo "  The disk of {{Directory}}:"
+              df -h {{Directory}} | sed 's/^/    /'
+              echo "  What uses the most:"
+              du -xsh /var/www/* /root/.cache /root/.local/share/pnpm /var/lib/docker /var/lib/mysql /var/backups /home/* /var/log /var/cache/apt /tmp 2>/dev/null | sort -rh | head -12 | sed 's/^/    /'
+              command -v docker >/dev/null 2>&1 && docker system df 2>/dev/null | sed 's/^/    /'
+              fail "Only $(free_mb) MB free on the disk; $2 needs at least $(( $1 / 1024 )) GB. Make room (old backups, *.bak-* folders, unused Docker images: docker image prune -a, logs: journalctl --vacuum-size=200M) or give the server a bigger disk, then run this step again."
+            }
+            # Caches that are only downloads: pnpm keeps what node_modules uses.
+            apt-get clean 2>/dev/null || true
+            corepack pnpm store prune >/dev/null 2>&1 || true
+            echo "> Disk: $(free_mb) MB free"
+            need_disk 3072 "pnpm install"
             echo "> pnpm install --frozen-lockfile"
             run corepack pnpm install --frozen-lockfile --reporter=append-only || fail "pnpm install stopped (see above)."
             # EpicNext was built on an AtomCMS database: its migrations expect AtomCMS' tables (such as
@@ -269,13 +285,21 @@ public static class EpicNextInstaller
             run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
-            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory available)"
+            # The CMS is stopped: the old build and its cache go, the build makes them again.
+            rm -rf .next
+            need_disk 5120 "pnpm build"
+            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory, $(free_mb) MB disk free)"
             [ "$avail" -lt 3000 ] && echo "  WARNING: under 3 GB free: the build may run out of memory (add swap, or stop other services for the build)."
             # The build runs in a cgroup of its own (scripts/with-memory-cap.sh): leave 1 GB for MariaDB, the emulator and NGINX.
             if [ -d /run/systemd/system ]; then export CMS_MEMORY_CAP_RESERVE=1g; else export CMS_MEMORY_CAP_BACKEND=none; echo "  (no systemd: the build runs without a memory cap)"; fi
             run corepack pnpm build || fail "pnpm build stopped (see above). The CMS stays stopped until a build succeeds."
             [ -f .next/BUILD_ID ] || fail "pnpm build did not make .next/BUILD_ID."
             echo "  build $(cat .next/BUILD_ID)"
+            # The build cache only makes the next build faster: on a nearly full disk the space matters more.
+            if [ "$(free_mb)" -lt 3072 ]; then
+              echo "  $(du -sh .next/cache 2>/dev/null | cut -f1) build cache removed: under 3 GB disk free ($(free_mb) MB)"
+              rm -rf .next/cache
+            fi
             install -d public/nitro-assets public/swf storage
             chown -R www-data:www-data {{Directory}}
             chmod -R u+rwX,g+rX,o-w {{Directory}}
