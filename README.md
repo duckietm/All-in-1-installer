@@ -845,8 +845,10 @@ What it sets up:
   the hotel uses https. Behind Cloudflare it drops `X-Real-Ip` (Cloudflare's edge) so Gitea takes the visitor
   from `X-Forwarded-For`; Gitea trusts proxy headers only from 127.0.0.1 and its Docker network.
 - **The admin**, once, with a random password (`gitea admin user create --random-password`), shown at the end with a
-  **Copy** button and saved on this computer in `configuration/database/<server>/gitea.txt`. Registration is closed:
-  the admin makes the accounts.
+  **Copy** button and saved on this computer in `configuration/database/<server>/gitea.txt`.
+- **No sign-ups**: registration is off and the Register button hidden (`DISABLE_REGISTRATION`,
+  `SHOW_REGISTRATION_BUTTON=false`); the admin makes the accounts. The start page is the repository list
+  (`LANDING_PAGE=/explore/repos`).
 - **Test** through Traefik: waits for the certificate (up to 2 minutes) and checks Gitea's `/api/healthz`.
 
 Running the addon again updates Gitea (`docker compose pull`, `up -d`); the repositories, accounts and the port stay.

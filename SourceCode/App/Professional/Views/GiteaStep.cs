@@ -35,7 +35,7 @@ public sealed class GiteaStep : InstallStep
             $"Runs Gitea in Docker ({GiteaInstaller.Directory}, image {GiteaInstaller.Image}) with SQLite: no database to set up. Repositories and settings stay in {GiteaInstaller.Directory}/data.",
             $"Its web port is only on 127.0.0.1 (the first free port from {LocalPorts.First} to {LocalPorts.Last}); Traefik answers for the domain and gets a Let's Encrypt certificate, as for the hotel.",
             "Clone and push over https (with your Gitea password or a token). Gitea's SSH stays off: Cloudflare's proxy does not pass SSH, and the server's own SSH stays apart.",
-            "Creates the admin account with a random password, shown at the end. Registration is closed: the admin makes the accounts.",
+            "Creates the admin account with a random password, shown at the end. Registration is off (no Register button): the admin makes the accounts. The start page is the repository list (/explore/repos).",
             "Running this again updates Gitea; the repositories and accounts stay."
         ],
         "Run the Web access step first (Docker and Traefik).",

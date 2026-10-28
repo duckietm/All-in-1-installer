@@ -171,7 +171,10 @@ public static partial class GiteaInstaller
                   - GITEA__security__INSTALL_LOCK=true
                   - GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES=${TRUSTED}
                   - GITEA__security__REVERSE_PROXY_LIMIT=${LIMIT}
+                  # No sign-ups: the admin makes the accounts. Visitors land on the repositories.
                   - GITEA__service__DISABLE_REGISTRATION=true
+                  - GITEA__service__SHOW_REGISTRATION_BUTTON=false
+                  - GITEA__server__LANDING_PAGE=/explore/repos
                 volumes:
                   - ./data:/data
                   - /etc/timezone:/etc/timezone:ro
