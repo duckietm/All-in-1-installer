@@ -224,6 +224,17 @@ export async function register(
 
 	const { username, mail, password, look } = parsed.data;
 	const hasEmail = !!mail;
+	// Without an address there is nothing to verify: login only checks verification for
+	// accounts that have one, so a blank email would skip it.
+	if (
+		!hasEmail &&
+		(await siteSettings.getBool("require_email_verification", false))
+	) {
+		return fail(
+			"Enter your email address: it has to be verified before you can log in.",
+			"invalidInput",
+		);
+	}
 	const ip = await clientIp();
 
 	// Throttle sign-ups per IP (5 per 10 minutes) to curb account spam.

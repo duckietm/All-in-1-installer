@@ -537,6 +537,7 @@
 				"invalid": "Dit pakket is niet meer beschikbaar.",
 				"credits": "Je hebt niet genoeg credits voor dit pakket.",
 				"ratelimit": "Je koopt te snel achter elkaar. Wacht even en probeer het opnieuw.",
+				"online": "You can't buy while you are in the hotel: leave the hotel first, then buy the package.",
 				"error": "Er ging iets mis. Probeer het opnieuw."
 			}
 		},

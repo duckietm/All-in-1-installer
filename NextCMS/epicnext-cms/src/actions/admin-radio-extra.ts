@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/admin/guard";
 import { db, RadioBanners, RadioRanks, WebsiteSetting } from "@/lib/db";
+import { isSafeOutboundUrl } from "@/lib/import-url-safety";
 import { logger } from "@/lib/logger";
 import { PERMS } from "@/lib/permissions";
 import { siteSettings } from "@/lib/services/site-settings";
@@ -43,7 +44,17 @@ export async function saveRadioSetting(formData: FormData): Promise<void> {
 	const key = str(formData.get("key")).trim().slice(0, 255);
 	const value = str(formData.get("value"));
 	const comment = str(formData.get("comment")).trim().slice(0, 255);
-	if (!key) return;
+	// Radio rights cover radio settings only, not any website setting (staff 2FA, ranks, secrets).
+	if (!key || !(key.startsWith("radio_") || key.startsWith("auto_dj_"))) return;
+	// The server fetches the provider API URLs: refuse ones that reach this server or the local network.
+	if (
+		key.endsWith("_api_url") &&
+		value &&
+		!(await isSafeOutboundUrl(value, { allowHttp: true }))
+	) {
+		logger.warn("Radio API URL refused: private or local address", { key });
+		return;
+	}
 
 	try {
 		await db
@@ -71,15 +82,35 @@ export async function saveRadioSettings(formData: FormData): Promise<void> {
 		.filter((k) => k.startsWith("radio_") || k.startsWith("auto_dj_"));
 	if (keys.length === 0) return;
 
+	// The server fetches the provider API URLs: refuse ones that reach this server or the local network.
+	const unsafe = new Set<string>();
+	for (const key of keys) {
+		const value = str(formData.get(key));
+		if (
+			key.endsWith("_api_url") &&
+			value &&
+			!(await isSafeOutboundUrl(value, { allowHttp: true }))
+		) {
+			unsafe.add(key);
+		}
+	}
+	if (unsafe.size > 0) {
+		logger.warn("Radio API URL refused: private or local address", {
+			keys: [...unsafe],
+		});
+	}
+
 	try {
 		await Promise.all(
-			keys.map((key) => {
-				const value = str(formData.get(key));
-				return db
-					.insert(WebsiteSetting)
-					.values({ key, value, comment: null })
-					.onDuplicateKeyUpdate({ set: { value } });
-			}),
+			keys
+				.filter((key) => !unsafe.has(key))
+				.map((key) => {
+					const value = str(formData.get(key));
+					return db
+						.insert(WebsiteSetting)
+						.values({ key, value, comment: null })
+						.onDuplicateKeyUpdate({ set: { value } });
+				}),
 		);
 		siteSettings.reload();
 	} catch (err) {

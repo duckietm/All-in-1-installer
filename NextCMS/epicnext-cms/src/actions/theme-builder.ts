@@ -434,6 +434,8 @@ export async function duplicateScope(formData: FormData): Promise<void> {
 // ─── Data helpers for the admin page ─────────────────────────────────────────
 
 export async function getThemeBuilderData() {
+	// Exported from a "use server" file, so it is a public endpoint too (the page needs SETTINGS_VIEW).
+	await requirePermission(PERMS.SETTINGS_VIEW);
 	const scopes = await getAllScopes();
 	const moduleIds = allModuleIds();
 	const tree = buildTree(scopes);

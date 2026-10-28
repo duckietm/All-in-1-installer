@@ -1103,6 +1103,12 @@ export const WebsiteUsedShopVouchers = mysqlTable(
 		createdAt: timestamp("created_at"),
 		updatedAt: timestamp("updated_at"),
 	},
+	(t) => [
+		uniqueIndex("website_used_shop_vouchers_user_voucher_uk").on(
+			t.userId,
+			t.voucherId,
+		),
+	],
 );
 
 export const WebsiteShopArticleFeatures = mysqlTable(

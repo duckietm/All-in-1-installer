@@ -11,6 +11,9 @@ function isPrivateIpv4(hex: string): boolean {
 	if (a === 192 && b === 168) return true;
 	if (a === 100 && b >= 64 && b <= 127) return true;
 	if (a === 192 && b === 0 && parts[2] === 0 && parts[3] === 0) return true;
+	// Benchmarking (198.18/15), multicast and reserved (224/4 and up).
+	if (a === 198 && (b === 18 || b === 19)) return true;
+	if (a >= 224) return true;
 	return false;
 }
 
@@ -40,6 +43,7 @@ const BLOCKED_HOST_LABELS =
 export async function assertSafeImportUrl(
 	url: string,
 	label: string,
+	options: { allowHttp?: boolean } = {},
 ): Promise<void> {
 	const trimmed = url.trim();
 	if (!trimmed) return;
@@ -49,8 +53,15 @@ export async function assertSafeImportUrl(
 	} catch {
 		throw new TypeError(`${label} is not a valid URL`);
 	}
-	if (parsed.protocol !== "https:") {
-		throw new TypeError(`${label} must be an https:// URL`);
+	if (
+		parsed.protocol !== "https:" &&
+		!(options.allowHttp && parsed.protocol === "http:")
+	) {
+		throw new TypeError(
+			options.allowHttp
+				? `${label} must be an http:// or https:// URL`
+				: `${label} must be an https:// URL`,
+		);
 	}
 	if (parsed.username || parsed.password) {
 		throw new TypeError(`${label} must not embed credentials`);
@@ -78,5 +89,23 @@ export async function assertSafeImportUrl(
 		if (addresses.some((ip) => isPrivateIp(ip.toLowerCase()))) {
 			throw new TypeError(`${label} resolves to a private address`);
 		}
+	}
+}
+
+/**
+ * The same checks as `assertSafeImportUrl`, as a yes/no for fetches made at request time
+ * (the stored URL may predate the check). Fetch with `redirect: "manual"` too, so a public
+ * host cannot redirect the request to a private one.
+ */
+export async function isSafeOutboundUrl(
+	url: string,
+	options: { allowHttp?: boolean } = {},
+): Promise<boolean> {
+	if (!url.trim()) return false;
+	try {
+		await assertSafeImportUrl(url, "URL", options);
+		return true;
+	} catch {
+		return false;
 	}
 }

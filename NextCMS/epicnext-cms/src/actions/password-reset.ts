@@ -55,11 +55,16 @@ export async function requestReset(formData: FormData): Promise<void> {
 	// Always respond the same way so we don't reveal which emails exist.
 	if (allowed && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
 		try {
-			const matches = await db
-				.select({ id: User.id })
-				.from(User)
-				.where(eq(User.mail, email))
-				.orderBy(asc(User.id));
+			// The column's collation is accent-insensitive, so `victim@gmaíl.com` would match
+			// `victim@gmail.com` and the link would go to the attacker's look-alike domain:
+			// only exact addresses count.
+			const matches = (
+				await db
+					.select({ id: User.id, mail: User.mail })
+					.from(User)
+					.where(eq(User.mail, email))
+					.orderBy(asc(User.id))
+			).filter((m) => sameAddress(m.mail, email));
 			if (matches.length > 1) {
 				logger.warn("Password reset address is not unique", {
 					email,
@@ -137,11 +142,13 @@ export async function resetPassword(formData: FormData): Promise<void> {
 			if (!row || !fresh || !match) {
 				error = "invalid";
 			} else {
-				const matches = await db
-					.select({ id: User.id })
-					.from(User)
-					.where(eq(User.mail, email))
-					.orderBy(asc(User.id));
+				const matches = (
+					await db
+						.select({ id: User.id, mail: User.mail, username: User.username })
+						.from(User)
+						.where(eq(User.mail, email))
+						.orderBy(asc(User.id))
+				).filter((m) => sameAddress(m.mail, email));
 				const user = matches[0];
 				if (!user) {
 					error = "invalid";
@@ -157,7 +164,8 @@ export async function resetPassword(formData: FormData): Promise<void> {
 							.where(eq(User.id, user.id)),
 						revokeUserCredentials(user.id),
 					]);
-					await invalidateLoginCache(email);
+					// The login cache is keyed by username: the old hash must not keep working.
+					await invalidateLoginCache(user.username);
 					await db
 						.delete(PasswordReset)
 						.where(eq(PasswordReset.email, email))
@@ -177,4 +185,12 @@ export async function resetPassword(formData: FormData): Promise<void> {
 		redirect(errorRedirect(email, token, error));
 	}
 	redirect("/login?reset=1");
+}
+
+/** The exact address (ignoring only case), not what the database collation considers equal. */
+function sameAddress(
+	stored: string | null | undefined,
+	typed: string,
+): boolean {
+	return (stored ?? "").normalize("NFC").trim().toLowerCase() === typed;
 }

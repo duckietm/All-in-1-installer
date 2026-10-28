@@ -111,11 +111,13 @@ export default async function ShopPage({
 			? t("errors.invalid")
 			: sp.error === "credits"
 				? t("errors.credits")
-				: sp.error === "ratelimit"
-					? t("errors.ratelimit")
-					: sp.error
-						? t("errors.error")
-						: null;
+				: sp.error === "online"
+					? t("errors.online")
+					: sp.error === "ratelimit"
+						? t("errors.ratelimit")
+						: sp.error
+							? t("errors.error")
+							: null;
 
 	const boughtMessage =
 		sp.bought === "1"

@@ -12,6 +12,7 @@ import {
 	captureOrder,
 	creditsPerUnit,
 	isPayPalConfigured,
+	PAYPAL_CURRENCY,
 } from "@/lib/services/paypal";
 import {
 	type AuthorizedTopup,
@@ -182,13 +183,32 @@ export async function POST(req: Request): Promise<Response> {
 
 	const hotelName = await resolveHotelName();
 
-	if (result.status !== "COMPLETED") {
+	// Credits only for money that has arrived: the capture itself completed, in the configured
+	// currency, for the amount this order was created with.
+	const verified =
+		result.status === "COMPLETED" &&
+		result.captureStatus === "COMPLETED" &&
+		result.currency.toUpperCase() === PAYPAL_CURRENCY &&
+		Number.isFinite(authorized.amount) &&
+		Math.abs(result.amount - Number(authorized.amount)) < 0.005;
+	if (!verified) {
+		if (result.status === "COMPLETED") {
+			logger.warn("PayPal capture not credited: needs review", {
+				module: "paypal/capture",
+				orderId,
+				captureStatus: result.captureStatus,
+				currency: result.currency,
+				amount: result.amount,
+				expected: authorized.amount,
+			});
+		}
 		// Record the non-completed attempt so support can trace it.
 		try {
 			await db
 				.update(WebsitePaypalTransactions)
 				.set({
-					status: result.status,
+					status:
+						result.status === "COMPLETED" ? "NEEDS_REVIEW" : result.status,
 					description: `${hotelName} top-up (not completed)`,
 					amount: result.amount,
 					currency: result.currency,

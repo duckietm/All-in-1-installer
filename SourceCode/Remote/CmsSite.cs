@@ -36,8 +36,15 @@ public static class CmsSite
                     proxy_http_version 1.1;
                     proxy_set_header Host              $host;
                     proxy_set_header X-Real-IP         $remote_addr;
-                    # The visitor, as real_ip found it behind Traefik (and Cloudflare).
+                    # The visitor, as real_ip found it behind Traefik (and Cloudflare). The CMS also reads
+                    # Cloudflare's headers when present, and anyone can send those: they are
+                    # cleared, so the address cannot be faked (to dodge limits, or to get another IP banned).
                     proxy_set_header X-Forwarded-For   $remote_addr;
+                    proxy_set_header CF-Connecting-IP  "";
+                    proxy_set_header CF-Ray            "";
+                    proxy_set_header CDN-Loop          "";
+                    proxy_set_header True-Client-IP    "";
+                    proxy_set_header X-Real-Client-IP  "";
                     proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
                     proxy_set_header X-Forwarded-Host  $host;
                     proxy_set_header Upgrade           $http_upgrade;

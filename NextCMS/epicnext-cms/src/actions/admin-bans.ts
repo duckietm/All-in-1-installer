@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermissionRateLimited } from "@/lib/admin/guard";
 import { tryGuardRank } from "@/lib/admin/rank-guard";
+import { revokeUserCredentials } from "@/lib/auth/session-revocation";
 import { Ban, db } from "@/lib/db";
 import { PERMS } from "@/lib/permissions";
 import { rcon } from "@/lib/services/rcon";
@@ -49,6 +50,8 @@ export async function createBan(formData: FormData): Promise<void> {
 		cfhTopic: -1,
 	});
 
+	// The ban also ends the CMS sessions, API tokens and game SSO ticket the user has.
+	await revokeUserCredentials(userId);
 	if (guard.ok) await rcon.disconnectUser(userId, guard.target.username);
 	await logStaffActivity({
 		staffId: staff.id,

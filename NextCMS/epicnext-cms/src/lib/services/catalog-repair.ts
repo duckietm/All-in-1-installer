@@ -13,6 +13,7 @@ import {
 	getOrCreateCategoryPage,
 	getOrCreateImportedParentPage,
 } from "@/lib/services/furni-import";
+import { sqlStringLiteral } from "@/lib/sql-literal";
 
 export interface MissingCatalogEntry {
 	classname: string;
@@ -26,10 +27,6 @@ export interface CatalogSqlResult {
 	sql: string;
 	count: number;
 	skipped: number;
-}
-
-function escSqlLiteral(value: string): string {
-	return value.replace(/'/g, "''");
 }
 
 const VALID_IDENTIFIER = /^[a-zA-Z0-9_]+$/;
@@ -394,7 +391,7 @@ export async function generateCatalogSql(
 					const newId = nextPageId++;
 					pageMap.set(captionSave, newId);
 					statements.push(
-						`INSERT INTO catalog_pages (id, caption_save, caption, page_layout, parent_id, min_rank, order_num, icon_image, enabled, visible, includes, page_headline, page_teaser, page_special, page_text1, page_text2, page_text_details, page_text_teaser) VALUES (${newId}, '${escSqlLiteral(captionSave)}', '${escSqlLiteral(caption)}', 'default_3x3', ${parentPageId}, '1', ${catInfo.order}, ${catInfo.icon}, '1', '1', '', '', '', '', '', '', '', '');`,
+						`INSERT INTO catalog_pages (id, caption_save, caption, page_layout, parent_id, min_rank, order_num, icon_image, enabled, visible, includes, page_headline, page_teaser, page_special, page_text1, page_text2, page_text_details, page_text_teaser) VALUES (${newId}, ${sqlStringLiteral(captionSave)}, ${sqlStringLiteral(caption)}, 'default_3x3', ${parentPageId}, '1', ${catInfo.order}, ${catInfo.icon}, '1', '1', '', '', '', '', '', '', '', '');`,
 					);
 				}
 				existing = pageMap.get(captionSave);
@@ -414,7 +411,7 @@ export async function generateCatalogSql(
 		// and the emulator's item lookup stay consistent. offer_id mirrors the
 		// row's own id, never a literal '-1'.
 		statements.push(
-			`INSERT INTO catalog_items (id, page_id, item_ids, catalog_name, cost_credits, cost_points, points_type, amount, order_number, offer_id, extradata) VALUES (${nextId}, ${pageId}, ${entry.itemId}, '${escSqlLiteral(entry.classname)}', ${price.credits}, ${price.points}, ${price.pointsType}, 1, 1, ${nextId}, '');`,
+			`INSERT INTO catalog_items (id, page_id, item_ids, catalog_name, cost_credits, cost_points, points_type, amount, order_number, offer_id, extradata) VALUES (${nextId}, ${pageId}, ${entry.itemId}, ${sqlStringLiteral(entry.classname)}, ${price.credits}, ${price.points}, ${price.pointsType}, 1, 1, ${nextId}, '');`,
 		);
 		nextId++;
 		generated++;

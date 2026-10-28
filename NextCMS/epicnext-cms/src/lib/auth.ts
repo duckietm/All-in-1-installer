@@ -20,6 +20,7 @@ import {
 
 export { invalidateLoginCache };
 
+import { hasActiveBan } from "@/lib/auth/active-ban";
 import { AUTH_BASE_PATH } from "@/lib/auth/base-path";
 import { verify2faChallenge } from "@/lib/auth/twofactor-verification";
 import { recordWebsiteLogin } from "@/lib/auth/website-login-log";
@@ -80,6 +81,9 @@ const nextAuth = NextAuth({
 				}
 
 				await clearLoginLockout(user.id);
+
+				// A banned account gets no new session (banning also revokes the ones it has).
+				if (await hasActiveBan(user.id)) return null;
 
 				if (await isEmailUnverified(user)) {
 					return null;

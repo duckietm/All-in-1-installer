@@ -3,6 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { guardRank } from "@/lib/admin/rank-guard";
 import { db, queryRows, User } from "@/lib/db";
 import { PERMS } from "@/lib/permissions";
 import { adminAction } from "@/lib/safe-action";
@@ -94,8 +95,11 @@ const disconnectSchema = z.object({
 export const disconnectUser = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: disconnectSchema },
 	async (ctx) => {
-		const username = ctx.data.username.normalize("NFC");
-		await requireRconOk(await rcon.disconnectUser(ctx.data.userId, username));
+		// Never on a user of the same or a higher rank (nor on yourself).
+		const target = await guardRank(ctx.data.userId, ctx.session.user.rank);
+		await requireRconOk(
+			await rcon.disconnectUser(ctx.data.userId, target.username),
+		);
 		revalidatePath(PATH);
 		return actionOk();
 	},
@@ -110,6 +114,8 @@ const alertUserSchema = z.object({
 export const alertUser = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: alertUserSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		const message = ctx.data.message.normalize("NFC");
 		await requireRconOk(await rcon.alertUser(ctx.data.userId, message));
 		revalidatePath(PATH);
@@ -126,6 +132,8 @@ const forwardUserSchema = z.object({
 export const forwardUser = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: forwardUserSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		await requireRconOk(
 			await rcon.forwardUser(ctx.data.userId, ctx.data.roomId),
 		);
@@ -210,6 +218,8 @@ const giveBadgeSchema = z.object({
 export const giveBadge = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: giveBadgeSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		const badge = ctx.data.badge.normalize("NFC");
 		await requireRconOk(await rcon.giveBadge(ctx.data.userId, badge));
 		revalidatePath(PATH);
@@ -226,6 +236,8 @@ const setMottoSchema = z.object({
 export const setMotto = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: setMottoSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		const motto = ctx.data.motto.normalize("NFC");
 		await requireRconOk(await rcon.setMotto(ctx.data.userId, motto));
 		revalidatePath(PATH);
@@ -291,6 +303,8 @@ const executeCommandSchema = z.object({
 export const executeCommand = adminAction(
 	{ permission: PERMS.RCON_EXECUTE, schema: executeCommandSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		const command = ctx.data.command.normalize("NFC");
 		await requireRconOk(await rcon.executeCommand(ctx.data.userId, command));
 		revalidatePath(PATH);

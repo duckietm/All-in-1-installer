@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/admin/guard";
+import { getMinStaffRank } from "@/lib/admin/min-staff-rank";
 import { db, WebsiteShopArticles } from "@/lib/db";
 import { EDGE_CACHE_TAGS, purgeEdgeCache } from "@/lib/edge-cache";
 import { formPositiveBigInt } from "@/lib/form-data";
@@ -40,6 +41,9 @@ export async function createShopArticle(formData: FormData): Promise<void> {
 		.trim()
 		.slice(0, 255);
 	if (!name) return;
+	// A package never hands out a staff rank: buying it would make the buyer staff (or owner).
+	const giveRank = optUInt(formData, "giveRank");
+	if (giveRank != null && giveRank >= (await getMinStaffRank())) return;
 
 	const now = new Date();
 	const costs = reqUInt(formData, "costs");
@@ -59,7 +63,7 @@ export async function createShopArticle(formData: FormData): Promise<void> {
 				.trim()
 				.slice(0, 255),
 			costs,
-			giveRank: optUInt(formData, "giveRank"),
+			giveRank,
 			credits: optUInt(formData, "credits"),
 			duckets: optUInt(formData, "duckets"),
 			diamonds: optUInt(formData, "diamonds"),
@@ -102,6 +106,9 @@ export async function updateShopArticle(formData: FormData): Promise<void> {
 		.trim()
 		.slice(0, 255);
 	if (!name) return;
+	// A package never hands out a staff rank: buying it would make the buyer staff (or owner).
+	const giveRank = optUInt(formData, "giveRank");
+	if (giveRank != null && giveRank >= (await getMinStaffRank())) return;
 
 	try {
 		await db
@@ -121,7 +128,7 @@ export async function updateShopArticle(formData: FormData): Promise<void> {
 					.trim()
 					.slice(0, 255),
 				costs: reqUInt(formData, "costs"),
-				giveRank: optUInt(formData, "giveRank"),
+				giveRank,
 				credits: optUInt(formData, "credits"),
 				duckets: optUInt(formData, "duckets"),
 				diamonds: optUInt(formData, "diamonds"),

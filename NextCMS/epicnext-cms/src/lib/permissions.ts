@@ -8,6 +8,8 @@ import { auth } from "./auth";
 import { sessionUserId } from "./auth/session-user";
 import { db, queryRows, User } from "./db";
 import { redirectSafe } from "./foundation/security";
+import { PERMS } from "./permission-slugs";
+import { siteSettings } from "./services/site-settings";
 
 // Re-export PERMS from the standalone file (safe for client components)
 export { PERMS } from "./permission-slugs";
@@ -144,6 +146,38 @@ const getCurrentAuthorizationState = cache(async (userId: number) =>
 // ── Context Helpers ─────────────────────────────────────────────────
 
 /**
+ * With `force_staff_2fa` on, staff without confirmed two-factor login get no staff rights:
+ * the admin layouts already sent them to /settings/2fa, but server actions and /cms_api/admin
+ * routes do not render a layout, so the rule is applied where permissions are loaded.
+ */
+const missingRequiredStaff2fa = cache(
+	async (userId: number, permissions: PermissionSet): Promise<boolean> => {
+		const staff =
+			permissions.isSuperAdmin ||
+			permissions.hasAny(
+				PERMS.ADMIN_DASHBOARD,
+				PERMS.MOD_DASHBOARD,
+				PERMS.MODERATION_VIEW,
+				PERMS.MOD_CFH_VIEW,
+				PERMS.MOD_ACTIONS,
+				PERMS.MOD_BANS_VIEW,
+				PERMS.MOD_TICKETS_VIEW,
+				PERMS.MOD_TEAM_VIEW,
+				PERMS.MOD_USERS_VIEW,
+				PERMS.TICKETS_VIEW,
+			);
+		if (!staff) return false;
+		if (!(await siteSettings.getBool("force_staff_2fa", false))) return false;
+		const [row] = await db
+			.select({ confirmedAt: User.twoFactorConfirmedAt })
+			.from(User)
+			.where(eq(User.id, userId))
+			.limit(1);
+		return !row?.confirmedAt;
+	},
+);
+
+/**
  * For server components: get session + load permissions.
  * Redirects to login if not authenticated.
  */
@@ -157,11 +191,17 @@ export async function getAdminContext() {
 	if (!userId) redirectSafe("/login", "/login");
 	const state = await getCurrentAuthorizationState(userId);
 	if (!state) redirectSafe("/login", "/login");
-	const permissions = await loadUserPermissions(
+	const loaded = await loadUserPermissions(
 		userId,
 		state.actor.rank,
 		state.highestRank,
 	);
+	const permissions: PermissionSet = (await missingRequiredStaff2fa(
+		userId,
+		loaded,
+	))
+		? createEmptySet()
+		: loaded;
 	return {
 		session: {
 			...session,
@@ -188,11 +228,17 @@ export async function getApiAdminContext() {
 	if (!userId) return null;
 	const state = await getCurrentAuthorizationState(userId);
 	if (!state) return null;
-	const permissions = await loadUserPermissions(
+	const loaded = await loadUserPermissions(
 		userId,
 		state.actor.rank,
 		state.highestRank,
 	);
+	const permissions: PermissionSet = (await missingRequiredStaff2fa(
+		userId,
+		loaded,
+	))
+		? createEmptySet()
+		: loaded;
 	return {
 		session: {
 			...session,

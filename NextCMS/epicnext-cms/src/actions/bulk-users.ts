@@ -3,6 +3,7 @@
 import { and, eq, inArray, max, sql } from "drizzle-orm";
 import { isDynamicSuperAdmin } from "@/lib/admin/authorization-policy";
 import { requirePermission } from "@/lib/admin/guard";
+import { revokeUserCredentials } from "@/lib/auth/session-revocation";
 import {
 	Ban,
 	db,
@@ -71,7 +72,7 @@ export async function bulkUnban({
 }: {
 	userIds: number[];
 }): Promise<ActionResult<{ unbanned: number; total: number }>> {
-	const staff = await requirePermission(PERMS.USERS_EDIT);
+	const staff = await requirePermission(PERMS.USERS_BAN);
 	const ids = parseUserIds(userIds);
 	await guardBulkTargets(staff, ids);
 	const result = await db.delete(Ban).where(inArray(Ban.userId, ids));
@@ -94,7 +95,7 @@ export async function bulkBan({
 	reason: string;
 	duration: number;
 }): Promise<ActionResult<{ banned: number }>> {
-	const staff = await requirePermission(PERMS.USERS_EDIT);
+	const staff = await requirePermission(PERMS.USERS_BAN);
 	const ids = parseUserIds(userIds);
 	const seconds = parseDuration(duration);
 	const reasonText = typeof reason === "string" ? reason.slice(0, 255) : "";
@@ -115,6 +116,8 @@ export async function bulkBan({
 				type: "account",
 			});
 			banned++;
+			// The ban also ends the CMS sessions, API tokens and game SSO ticket the user has.
+			await revokeUserCredentials(userId);
 		} catch {
 			// skip duplicates
 		}

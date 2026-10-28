@@ -1,8 +1,9 @@
 "use server";
 
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, eq, gte, max, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getMinStaffRank } from "@/lib/admin/min-staff-rank";
 import { auth } from "@/lib/auth";
 import { db, User, UsersBadges, WebsiteShopArticles } from "@/lib/db";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -29,7 +30,13 @@ function parseBadgeCodes(raw: string | null | undefined): string[] {
 		.filter((s) => s.length > 0 && s.length <= 32);
 }
 
-type BuyOutcome = "bought" | "invalid" | "credits" | "ratelimit" | "error";
+type BuyOutcome =
+	| "bought"
+	| "invalid"
+	| "credits"
+	| "online"
+	| "ratelimit"
+	| "error";
 
 function shopRedirect(
 	categoryId: string,
@@ -110,27 +117,46 @@ export async function buyShopArticle(formData: FormData): Promise<void> {
 					const price = creditPriceFromCosts(article.costs);
 
 					const [buyer] = await db
-						.select({ credits: User.credits, rank: User.rank })
+						.select({
+							credits: User.credits,
+							rank: User.rank,
+							online: User.online,
+						})
 						.from(User)
 						.where(eq(User.id, userId))
 						.limit(1);
 					if (!buyer || buyer.credits < price) {
 						outcome = "credits";
+					} else if (price > 0 && buyer.online === "1") {
+						// The emulator keeps an online player's credits in memory and writes them back on save or
+						// logout, which would undo this deduction: the package would be free.
+						outcome = "online";
 					} else {
 						const badgeCodes = parseBadgeCodes(article.badges);
+						const minStaffRank = await getMinStaffRank();
 
-						await db.transaction(async (tx) => {
+						const paid = await db.transaction(async (tx) => {
 							if (price > 0) {
-								await tx
+								// Only when the credits are still there: parallel purchases cannot all pass the check above.
+								const [result] = await tx
 									.update(User)
 									.set({ credits: sql`${User.credits} - ${price}` })
-									.where(eq(User.id, userId));
+									.where(
+										and(
+											eq(User.id, userId),
+											gte(User.credits, price),
+											eq(User.online, "0"),
+										),
+									);
+								if (Number(result.affectedRows ?? 0) !== 1) return false;
 							}
 
+							// Never a staff rank, also for packages saved before that was refused.
 							if (
 								article.giveRank != null &&
 								article.giveRank > 0 &&
-								article.giveRank > buyer.rank
+								article.giveRank > buyer.rank &&
+								article.giveRank < minStaffRank
 							) {
 								await tx
 									.update(User)
@@ -162,37 +188,41 @@ export async function buyShopArticle(formData: FormData): Promise<void> {
 									});
 								}
 							}
+							return true;
 						});
-
-						await sendCurrency(
-							{ rcon, db: currencyDb },
-							userId,
-							"credits",
-							article.credits,
-						);
-						await sendCurrency(
-							{ rcon, db: currencyDb },
-							userId,
-							"duckets",
-							article.duckets,
-						);
-						await sendCurrency(
-							{ rcon, db: currencyDb },
-							userId,
-							"diamonds",
-							article.diamonds,
-						);
-
-						for (const code of badgeCodes) {
-							await rcon.giveBadge(userId, code).catch((error) =>
-								logServerError("shop.give_badge_failed", error, {
-									userId,
-									code,
-								}),
+						if (!paid) {
+							outcome = "credits";
+						} else {
+							await sendCurrency(
+								{ rcon, db: currencyDb },
+								userId,
+								"credits",
+								article.credits,
 							);
-						}
+							await sendCurrency(
+								{ rcon, db: currencyDb },
+								userId,
+								"duckets",
+								article.duckets,
+							);
+							await sendCurrency(
+								{ rcon, db: currencyDb },
+								userId,
+								"diamonds",
+								article.diamonds,
+							);
 
-						outcome = "bought";
+							for (const code of badgeCodes) {
+								await rcon.giveBadge(userId, code).catch((error) =>
+									logServerError("shop.give_badge_failed", error, {
+										userId,
+										code,
+									}),
+								);
+							}
+
+							outcome = "bought";
+						}
 					}
 				}
 			}

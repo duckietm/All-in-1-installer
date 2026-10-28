@@ -84,20 +84,6 @@ export async function enforceDdosRateLimit(
 		}
 	}
 
-	const global = await rateLimit(
-		"antiddos:global:all",
-		config.global.limit,
-		config.global.windowSeconds * 1000,
-	);
-	if (!global.ok) {
-		globalHaltedUntil = now + config.globalHaltMs;
-		return {
-			outcome: "block",
-			retryAfterSeconds: Math.max(global.retryAfter, 1),
-		};
-	}
-	if (globalHaltedUntil !== 0) globalHaltedUntil = 0;
-
 	const category = classifyDdos(pathname);
 	const rule = config[category];
 	const bucket = await rateLimit(
@@ -105,7 +91,24 @@ export async function enforceDdosRateLimit(
 		rule.limit,
 		rule.windowSeconds * 1000,
 	);
-	if (bucket.ok) return { outcome: "pass" };
+	if (bucket.ok) {
+		// The site-wide valve counts only requests that passed their own per-IP bucket, so a
+		// few clients over their limit cannot fill it and halt the site for everyone.
+		const global = await rateLimit(
+			"antiddos:global:all",
+			config.global.limit,
+			config.global.windowSeconds * 1000,
+		);
+		if (!global.ok) {
+			globalHaltedUntil = now + config.globalHaltMs;
+			return {
+				outcome: "block",
+				retryAfterSeconds: Math.max(global.retryAfter, 1),
+			};
+		}
+		if (globalHaltedUntil !== 0) globalHaltedUntil = 0;
+		return { outcome: "pass" };
+	}
 
 	let violations = 1;
 	if (redis) {

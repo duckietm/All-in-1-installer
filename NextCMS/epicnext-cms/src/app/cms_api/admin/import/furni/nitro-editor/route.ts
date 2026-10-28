@@ -26,6 +26,11 @@ function baseClassname(classname: string): string {
 	return classname.includes("*") ? classname.split("*")[0] : classname;
 }
 
+/** The classname becomes part of a file path: letters, digits, "_", "-" and "*" only (no "../"). */
+function validClassname(value: unknown): value is string {
+	return typeof value === "string" && /^[A-Za-z0-9_*-]{1,200}$/.test(value);
+}
+
 // ── GET: Read bundle metadata ──────────────────────────────────────
 
 export const GET = withAdmin(
@@ -33,6 +38,8 @@ export const GET = withAdmin(
 	async (request: NextRequest) => {
 		const rawClassname = request.nextUrl.searchParams.get("classname");
 		if (!rawClassname) return apiError("Missing classname", 400);
+		if (!validClassname(rawClassname))
+			return apiError("Invalid classname", 400);
 
 		const base = baseClassname(rawClassname);
 		const { nitroDir } = await getFurniAssetDirs();
@@ -91,6 +98,8 @@ export const PUT = withAdmin(
 
 		if (!rawClassname || !metadata)
 			return apiError("Missing classname or metadata", 400);
+		if (!validClassname(rawClassname))
+			return apiError("Invalid classname", 400);
 
 		const base = baseClassname(rawClassname);
 		const { nitroDir } = await getFurniAssetDirs();

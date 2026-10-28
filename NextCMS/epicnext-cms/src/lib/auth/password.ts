@@ -266,8 +266,10 @@ export async function checkLogin(
 	}
 
 	// Final fallback: a raw plaintext password stored by very old CMSes.
-	// Guard against junk/empty values so only a real exact match succeeds.
-	if (stored.length >= 4) {
+	// Guard against junk/empty values so only a real exact match succeeds. A stored value
+	// that looks like a digest (hex, optionally with a salt) is never compared as plaintext:
+	// otherwise anyone holding a leaked hash could log in with the hash itself.
+	if (stored.length >= 4 && !looksLikeDigest(stored)) {
 		if (
 			typeof password === "string" &&
 			password.length >= 4 &&
@@ -278,4 +280,9 @@ export async function checkLogin(
 	}
 
 	return { valid: false };
+}
+
+/** A hex digest such as md5/sha1/sha256, alone or combined with a salt (`hash:salt`, `salt$hash`). */
+function looksLikeDigest(stored: string): boolean {
+	return /[a-f0-9]{32,}/i.test(stored);
 }

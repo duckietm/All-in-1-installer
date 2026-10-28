@@ -305,12 +305,15 @@ async function backupDatabase(): Promise<void> {
 		`--databases`,
 		dbName,
 	];
-	if (parsed.password) {
-		args.splice(3, 0, `-p${decodeURIComponent(parsed.password)}`);
-	}
+	// The password goes in the environment (MYSQL_PWD), not on the command line, where every
+	// user of the server could read it in the process list.
+	const childEnv = parsed.password
+		? { ...process.env, MYSQL_PWD: decodeURIComponent(parsed.password) }
+		: process.env;
 
 	await new Promise<void>((resolvePromise) => {
 		const child = spawn("mysqldump", args, {
+			env: childEnv,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		const out = createWriteStream(outFile);

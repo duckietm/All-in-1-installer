@@ -273,8 +273,12 @@ export async function ThemeVars({ nonce }: { nonce?: string } = {}) {
 				/>
 			) : null}
 			{customCss?.trim() ? (
-				// Staff-authored custom CSS (housekeeping → Theme). Trusted input.
-				<style nonce={nonce} dangerouslySetInnerHTML={{ __html: customCss }} />
+				// Staff-authored custom CSS (housekeeping → Theme). "<" is escaped ("\3C " in CSS), so
+				// "</style>" cannot end the element and put HTML into every page.
+				<style
+					nonce={nonce}
+					dangerouslySetInnerHTML={{ __html: customCss.replace(/</g, "\\3C ") }}
+				/>
 			) : null}
 			{/* Animated site backdrop: aurora + particles + optional tint. Pure
 			    decoration, behind the content, hidden in the admin panel. */}

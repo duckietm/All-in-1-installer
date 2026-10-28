@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { db, WebsiteShopVouchers, WebsiteUsedShopVouchers } from "@/lib/db";
@@ -119,15 +119,47 @@ export async function redeem(
 		};
 	}
 
-	// Record the redemption first so a successful grant can never be double-claimed.
+	// Claim one use and record the redemption in one transaction, before granting: the use is only taken
+	// while the voucher still has uses left and has not expired, and the unique (user_id, voucher_id) key
+	// (migration 0036) makes a parallel second redemption fail and roll back.
+	const voucherId = voucher.id;
+	let claimed: "ok" | "exhausted";
 	try {
-		await db.insert(WebsiteUsedShopVouchers).values({
-			userId,
-			voucherId: voucher.id,
+		claimed = await db.transaction(async (tx) => {
+			const [result] = await tx
+				.update(WebsiteShopVouchers)
+				.set({ useCount: sql`${WebsiteShopVouchers.useCount} + 1` })
+				.where(
+					and(
+						eq(WebsiteShopVouchers.id, voucherId),
+						or(
+							eq(WebsiteShopVouchers.maxUses, 0),
+							lt(WebsiteShopVouchers.useCount, WebsiteShopVouchers.maxUses),
+						),
+						or(
+							isNull(WebsiteShopVouchers.expiresAt),
+							gt(WebsiteShopVouchers.expiresAt, sql`NOW()`),
+						),
+					),
+				);
+			if (Number(result.affectedRows ?? 0) !== 1) return "exhausted";
+			await tx.insert(WebsiteUsedShopVouchers).values({ userId, voucherId });
+			return "ok";
 		});
-	} catch {
-		// Most likely a race (another tab redeemed it) — treat as already used.
-		return { ok: false, message: "You can only use each shop voucher once." };
+	} catch (error) {
+		if (isDuplicateKey(error)) {
+			return { ok: false, message: "You can only use each shop voucher once." };
+		}
+		return {
+			ok: false,
+			message: "We couldn't reach the server. Please try again.",
+		};
+	}
+	if (claimed === "exhausted") {
+		return {
+			ok: false,
+			message: "No active voucher with the given code was found.",
+		};
 	}
 
 	// Grant the reward. The voucher carries a single amount, delivered as credits.
@@ -148,12 +180,8 @@ export async function redeem(
 		};
 	}
 
-	// Bump use_count and expire the voucher once the cap is reached.
+	// The use was claimed above; expire the voucher once the cap is reached.
 	try {
-		await db
-			.update(WebsiteShopVouchers)
-			.set({ useCount: sql`${WebsiteShopVouchers.useCount} + 1` })
-			.where(eq(WebsiteShopVouchers.id, voucher.id));
 		const [updated] = await db
 			.select({
 				maxUses: WebsiteShopVouchers.maxUses,
@@ -178,4 +206,18 @@ export async function redeem(
 		ok: true,
 		message: `Success! Your balance has been increased by ${formatNumber(voucher.amount)} credits.`,
 	};
+}
+
+/** A duplicate-key error, also when drizzle wraps the driver's error. */
+function isDuplicateKey(err: unknown): boolean {
+	for (let e = err; e && typeof e === "object"; ) {
+		const { code, errno, cause } = e as {
+			code?: string;
+			errno?: number;
+			cause?: unknown;
+		};
+		if (code === "ER_DUP_ENTRY" || errno === 1062) return true;
+		e = cause;
+	}
+	return false;
 }

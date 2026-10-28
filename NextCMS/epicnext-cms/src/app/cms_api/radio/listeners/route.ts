@@ -1,4 +1,5 @@
 import { apiJson } from "@/lib/api";
+import { isSafeOutboundUrl } from "@/lib/import-url-safety";
 import { siteSettings } from "@/lib/services/site-settings";
 
 // Proxy for the configured radio "listeners" provider. The provider URL is
@@ -68,12 +69,18 @@ export async function GET(_req: Request) {
 		return apiJson({ listeners: null });
 	}
 
+	// Staff set this URL: never let it reach this server, the emulator or the local network.
+	if (!(await isSafeOutboundUrl(url, { allowHttp: true }))) {
+		return apiJson({ listeners: null, error: "Provider URL not allowed" });
+	}
+
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 	try {
 		const res = await fetch(url, {
 			signal: controller.signal,
 			cache: "no-store",
+			redirect: "manual",
 			headers: { accept: "application/json, text/plain, */*" },
 		});
 

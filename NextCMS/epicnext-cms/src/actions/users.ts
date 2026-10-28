@@ -222,6 +222,8 @@ export const banUser = adminAction(
 			machineId: "",
 		});
 
+		// The ban also ends the CMS sessions, API tokens and game SSO ticket the user has.
+		await revokeUserCredentials(userId);
 		await rcon.disconnectUser(userId);
 
 		logAudit({

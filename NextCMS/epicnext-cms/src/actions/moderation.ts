@@ -2,6 +2,7 @@
 
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { guardRank } from "@/lib/admin/rank-guard";
 import { db, SupportTickets } from "@/lib/db";
 import { actionOk, adminAction } from "@/lib/foundation/action";
 import { NotFoundError } from "@/lib/foundation/errors";
@@ -104,6 +105,8 @@ const userIdSchema = z.object({ userId: z.coerce.number().int().positive() });
 export const quickKick = adminAction(
 	{ permission: MOD_ACTION_PERM, schema: userIdSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		await rcon.disconnectUser(ctx.data.userId);
 
 		logAudit({
@@ -125,6 +128,8 @@ const muteSchema = z.object({
 export const quickMute = adminAction(
 	{ permission: MOD_ACTION_PERM, schema: muteSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		await rcon.muteUser(ctx.data.userId, ctx.data.duration);
 
 		logAudit({
@@ -142,6 +147,8 @@ export const quickMute = adminAction(
 export const quickUnmute = adminAction(
 	{ permission: MOD_ACTION_PERM, schema: userIdSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		await rcon.unmuteUser(ctx.data.userId);
 
 		logAudit({
@@ -163,6 +170,8 @@ const alertSchema = z.object({
 export const quickAlert = adminAction(
 	{ permission: MOD_ACTION_PERM, schema: alertSchema },
 	async (ctx) => {
+		// Never on a user of the same or a higher rank (nor on yourself).
+		await guardRank(ctx.data.userId, ctx.session.user.rank);
 		await rcon.alertUser(ctx.data.userId, ctx.data.message);
 
 		logAudit({

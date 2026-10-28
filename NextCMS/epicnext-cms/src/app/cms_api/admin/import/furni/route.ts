@@ -160,6 +160,16 @@ export const GET = withAdmin(
 			return apiOk(await getFurniImportStats(nitroDir));
 		}
 
+		// These two change data on a GET, which withAdmin's CSRF token (POST and up) does not cover:
+		// refuse them when the browser says the request came from another site (a link or redirect
+		// opened by a signed-in admin).
+		if (
+			(action === "live-reconcile" || action === "build-languages") &&
+			!isSameSiteRequest(request)
+		) {
+			return apiError("Cross-site request refused", 403);
+		}
+
 		// Live furnidata reconcile (without hotel RCON reload)
 		if (action === "live-reconcile") {
 			const furniReconcile = await reconcileFurniDataWithItemsBase();
@@ -871,3 +881,9 @@ export const PATCH = withAdmin(
 		return apiOk({ succeeded, failed, results });
 	},
 );
+
+/** Sec-Fetch-Site from the browser: missing only for non-browser clients, which cannot be CSRF. */
+function isSameSiteRequest(request: Request): boolean {
+	const site = request.headers.get("sec-fetch-site");
+	return site === null || site === "same-origin" || site === "none";
+}

@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { checkLogin } from "@/lib/auth/password";
+import { checkLogin, hashPassword } from "@/lib/auth/password";
 import { cachedQuery, invalidateKey } from "@/lib/cached-db";
 import { queryRows } from "@/lib/db";
 import { siteSettings } from "@/lib/services/site-settings";
@@ -16,11 +17,11 @@ export interface LoginUser {
 }
 
 /**
- * Fixed dummy bcrypt hash used to keep timing roughly constant when a username
- * does not exist, so attackers can't enumerate accounts by response time.
+ * A real hash with the same parameters as new passwords, checked when a username does not
+ * exist, so the response time does not reveal which accounts exist. (A fixed made-up bcrypt
+ * string was rejected by the hash library at once, which gave the timing away.)
  */
-const DUMMY_BCRYPT_HASH =
-	"$2y$12$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
+let dummyHash: Promise<string> | undefined;
 
 /**
  * Normalize credentials exactly like the registration flow hashes them, so
@@ -87,7 +88,8 @@ export async function invalidateLoginCache(username: string): Promise<void> {
 
 /** Runs a dummy hash check so missing-user responses stay timing-constant. */
 export async function runDummyHashCheck(password: string): Promise<void> {
-	await checkLogin(password, DUMMY_BCRYPT_HASH);
+	dummyHash ??= hashPassword(randomBytes(16).toString("hex"));
+	await checkLogin(password, await dummyHash);
 }
 
 /** Verifies the password against the stored hash and reports a possible upgrade. */

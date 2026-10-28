@@ -88,6 +88,10 @@ export async function importSingleFigure(params: {
 	onProgress?: (status: string) => void;
 }): Promise<ImportFigureResult> {
 	const { lib, onProgress } = params;
+	// The name becomes part of file paths: letters, digits, "_" and "-" only (no "../").
+	if (!/^[A-Za-z0-9_-]{1,200}$/.test(lib)) {
+		return { ok: false, lib, warnings: [], error: "Invalid library name" };
+	}
 	const warnings: string[] = [];
 	await ensureFigureDirs();
 

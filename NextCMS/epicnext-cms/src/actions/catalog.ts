@@ -21,6 +21,7 @@ import { PERMS } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/safe-action-shared";
 import { withCatalogExport } from "@/lib/services/catalog-git-queue";
 import { logStaffActivity } from "@/lib/services/staff-activity";
+import { sqlStringLiteral } from "@/lib/sql-literal";
 
 const CATALOG_PAGE_FIELDS = [
 	"caption",
@@ -517,10 +518,7 @@ export async function organizeImportFurni(input: {
 						`WHEN ${Number(row.catalogItemId)} THEN ${nextOrder}`,
 					);
 					moveCaseName.push(
-						`WHEN ${Number(row.catalogItemId)} THEN '${catalogName.replace(
-							/['\\]/g,
-							"\\$&",
-						)}'`,
+						`WHEN ${Number(row.catalogItemId)} THEN ${sqlStringLiteral(catalogName)}`,
 					);
 					moveIds.push(Number(row.catalogItemId));
 					const hostPageId = hostPageByItemId.get(Number(row.catalogItemId));

@@ -75,13 +75,22 @@ export const saveManagedSettings = adminAction(
 	},
 );
 
+/** Lockout/security settings: only `saveManagedSettings` changes them, never the free-form forms. */
+function isLockedRawKey(key: string): boolean {
+	return (
+		key === "force_staff_2fa" ||
+		key === "min_staff_rank" ||
+		key === "maintenance_enabled"
+	);
+}
+
 export async function updateSetting(formData: FormData): Promise<void> {
 	await requirePermissionRateLimited(PERMS.SETTINGS_EDIT);
 	const key = String(formData.get("key") ?? "")
 		.normalize("NFC")
 		.trim();
 	const raw = String(formData.get("value") ?? "").normalize("NFC");
-	if (!key || !RAW_SETTING_KEY_RE.test(key)) return;
+	if (!key || !RAW_SETTING_KEY_RE.test(key) || isLockedRawKey(key)) return;
 	// Blank on a secret means "keep what is stored", so the UI can render a
 	// placeholder without the risk of wiping the credential.
 	if (isSecretSettingKey(key) && raw === SECRET_PLACEHOLDER) return;
@@ -112,14 +121,7 @@ export async function createSetting(formData: FormData): Promise<void> {
 	// Managed keys go through `saveManagedSettings`; anything else must be a
 	// clearly namespaced custom key, and lockout/security settings are never
 	// writable through the free-form form.
-	if (!key || !RAW_SETTING_KEY_RE.test(key)) return;
-	if (
-		key === "force_staff_2fa" ||
-		key === "min_staff_rank" ||
-		key === "maintenance_enabled"
-	) {
-		return;
-	}
+	if (!key || !RAW_SETTING_KEY_RE.test(key) || isLockedRawKey(key)) return;
 	await db
 		.insert(WebsiteSetting)
 		.values({ key, value, comment: comment || null })
@@ -134,7 +136,8 @@ export async function deleteSetting(formData: FormData): Promise<void> {
 	const key = String(formData.get("key") ?? "")
 		.normalize("NFC")
 		.trim();
-	if (!key) return;
+	// Deleting a lockout setting or a secret would switch that protection off (or drop the credential).
+	if (!key || isLockedRawKey(key) || isSecretSettingKey(key)) return;
 	await db.delete(WebsiteSetting).where(eq(WebsiteSetting.key, key));
 	await siteSettings.reload();
 	bustGamedataCachesIfNeeded(key);

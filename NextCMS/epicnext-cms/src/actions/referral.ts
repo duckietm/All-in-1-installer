@@ -1,6 +1,6 @@
 "use server";
 
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -130,49 +130,58 @@ export async function claimReferral(_formData: FormData): Promise<void> {
 			} else {
 				// Spend the threshold first so a concurrent double-submit can't claim
 				// twice off the same balance, then deliver the reward and log it.
-				await db
+				// Only while the balance still covers it: parallel claims cannot all spend it.
+				const [spent] = await db
 					.update(UserReferrals)
 					.set({
 						referralsTotal: sql`${UserReferrals.referralsTotal} - ${needed}`,
 					})
-					.where(eq(UserReferrals.id, referrals.id));
-
-				try {
-					await sendCurrency(
-						{ rcon, db: currencyDb },
-						userId,
-						currency,
-						amount,
+					.where(
+						and(
+							eq(UserReferrals.id, referrals.id),
+							gte(UserReferrals.referralsTotal, BigInt(needed)),
+						),
 					);
-				} catch {
-					// sendCurrency already falls back to a direct DB write; if it still
-					// throws the spend stands. Roll the threshold back so the user isn't
-					// charged for an undelivered reward.
+				if (Number(spent.affectedRows ?? 0) !== 1) {
+					outcome = "not_enough";
+				} else {
 					try {
-						await db
-							.update(UserReferrals)
-							.set({
-								referralsTotal: sql`${UserReferrals.referralsTotal} + ${needed}`,
-							})
-							.where(eq(UserReferrals.id, referrals.id));
+						await sendCurrency(
+							{ rcon, db: currencyDb },
+							userId,
+							currency,
+							amount,
+						);
 					} catch {
-						/* best-effort rollback */
+						// sendCurrency already falls back to a direct DB write; if it still
+						// throws the spend stands. Roll the threshold back so the user isn't
+						// charged for an undelivered reward.
+						try {
+							await db
+								.update(UserReferrals)
+								.set({
+									referralsTotal: sql`${UserReferrals.referralsTotal} + ${needed}`,
+								})
+								.where(eq(UserReferrals.id, referrals.id));
+						} catch {
+							/* best-effort rollback */
+						}
+						outcome = "error";
+						throw new Error("currency-delivery-failed");
 					}
-					outcome = "error";
-					throw new Error("currency-delivery-failed");
-				}
 
-				try {
-					await db.insert(ClaimedReferralLogs).values({
-						userId,
-						ipAddress: await clientIp(),
-						createdAt: new Date(),
-						updatedAt: new Date(),
-					});
-				} catch {
-					// Best-effort audit log; the reward already landed.
+					try {
+						await db.insert(ClaimedReferralLogs).values({
+							userId,
+							ipAddress: await clientIp(),
+							createdAt: new Date(),
+							updatedAt: new Date(),
+						});
+					} catch {
+						// Best-effort audit log; the reward already landed.
+					}
+					outcome = "claimed";
 				}
-				outcome = "claimed";
 			}
 		}
 	} catch (err) {

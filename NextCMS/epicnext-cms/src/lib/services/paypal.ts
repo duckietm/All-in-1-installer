@@ -24,6 +24,13 @@ function credentials(): { clientId: string; secret: string } {
 			"PayPal is not configured. Set PAYPAL_CLIENT_ID and PAYPAL_SECRET.",
 		);
 	}
+	// Without PAYPAL_API the sandbox is used: in production that would hand out real credits
+	// for sandbox test payments. Set it explicitly (also to the sandbox, to test on purpose).
+	if (env.NODE_ENV === "production" && !env.PAYPAL_API) {
+		throw new PayPalConfigError(
+			"Set PAYPAL_API (https://api-m.paypal.com for live payments) in production.",
+		);
+	}
 	return { clientId, secret };
 }
 
@@ -119,6 +126,8 @@ export interface CaptureResult {
 	status: string;
 	amount: number;
 	currency: string;
+	/** The capture's own status: an order can be COMPLETED while its capture is PENDING (review, eCheck). */
+	captureStatus: string | null;
 	captureId: string | null;
 	payerEmail: string | null;
 }
@@ -153,6 +162,7 @@ export async function captureOrder(orderId: string): Promise<CaptureResult> {
 			payments?: {
 				captures?: {
 					id: string;
+					status?: string;
 					amount?: { value?: string; currency_code?: string };
 				}[];
 			};
@@ -168,6 +178,7 @@ export async function captureOrder(orderId: string): Promise<CaptureResult> {
 		status: json.status,
 		amount,
 		currency,
+		captureStatus: capture?.status ?? null,
 		captureId: capture?.id ?? null,
 		payerEmail: json.payer?.email_address ?? null,
 	};

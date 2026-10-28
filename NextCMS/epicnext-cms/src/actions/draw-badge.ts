@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, eq, gte, max, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -95,12 +95,23 @@ export async function buyBadge(formData: FormData): Promise<void> {
 					} else {
 						// Atomically deduct credits and persist the badge so a failure
 						// between the two operations cannot orphan the user.
+						let paid = true;
 						if (price > 0) {
-							await db.transaction(async (tx) => {
-								await tx
+							paid = await db.transaction(async (tx) => {
+								// Only while the credits are still there (parallel purchases cannot all pass the check
+								// above), and not while the player is in the hotel: the emulator writes its in-memory
+								// credits back on save or logout, which would undo the deduction.
+								const [result] = await tx
 									.update(User)
 									.set({ credits: sql`${User.credits} - ${price}` })
-									.where(eq(User.id, userId));
+									.where(
+										and(
+											eq(User.id, userId),
+											gte(User.credits, price),
+											eq(User.online, "0"),
+										),
+									);
+								if (Number(result.affectedRows ?? 0) !== 1) return false;
 
 								const [existing] = await tx
 									.select({ id: UsersBadges.id })
@@ -124,19 +135,24 @@ export async function buyBadge(formData: FormData): Promise<void> {
 										badgeCode: code,
 									});
 								}
+								return true;
 							});
 						}
 
-						// Grant the badge live so it appears immediately for online users.
-						await rcon.giveBadge(userId, code).catch((error) =>
-							logServerError("drawbadge.give_failed", error, {
-								userId,
-								code,
-							}),
-						);
+						if (!paid) {
+							outcome = "credits";
+						} else {
+							// Grant the badge live so it appears immediately for online users.
+							await rcon.giveBadge(userId, code).catch((error) =>
+								logServerError("drawbadge.give_failed", error, {
+									userId,
+									code,
+								}),
+							);
 
-						outcome = "bought";
-						boughtCode = code;
+							outcome = "bought";
+							boughtCode = code;
+						}
 					}
 				}
 			}

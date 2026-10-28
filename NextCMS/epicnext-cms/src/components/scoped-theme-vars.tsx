@@ -221,7 +221,9 @@ function buildScopedCssBlock(
 	}
 
 	if (parts.length === 0) return null;
-	return parts.join("");
+	// Staff-authored text goes into a <style> element: "<" (as in "</style>") would end it and
+	// put HTML into every page. In CSS, "\3C " is the same character.
+	return parts.join("").replace(/</g, "\\3C ");
 }
 
 /**

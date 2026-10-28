@@ -1,3 +1,4 @@
+import { isSafeOutboundUrl } from "@/lib/import-url-safety";
 import { siteSettings } from "@/lib/services/site-settings";
 
 /**
@@ -7,20 +8,8 @@ import { siteSettings } from "@/lib/services/site-settings";
  * common shapes. Everything fails soft (returns null) on error/missing config.
  */
 
-// Block SSRF — only allow http/https to public IPs (no private/loopback/link-local).
-const PRIVATE_IP_RE =
-	/^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1|fe80:|fc00:|fd00:|localhost)/i;
-
-function isSafeUrl(url: string): boolean {
-	try {
-		const u = new URL(url);
-		if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-		if (PRIVATE_IP_RE.test(u.hostname)) return false;
-		return true;
-	} catch {
-		return false;
-	}
-}
+// Block SSRF: only http/https to hosts that resolve to public addresses (isSafeOutboundUrl),
+// and no redirects (a public host could redirect to a private one).
 
 export interface NowPlaying {
 	title: string;
@@ -43,13 +32,14 @@ async function cachedFetchJson(url: string, ms = 4000): Promise<unknown> {
 }
 
 async function fetchJson(url: string, ms = 4000): Promise<unknown> {
-	if (!isSafeUrl(url)) return null;
+	if (!(await isSafeOutboundUrl(url, { allowHttp: true }))) return null;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), ms);
 	try {
 		const res = await fetch(url, {
 			signal: controller.signal,
 			cache: "no-store",
+			redirect: "manual",
 		});
 		const text = await res.text();
 		try {

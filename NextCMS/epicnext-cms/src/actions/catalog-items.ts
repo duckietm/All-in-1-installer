@@ -49,6 +49,8 @@ export async function insertCatalogItemRow(data: {
 	haveOffer: string;
 	clubOnly: string;
 }): Promise<number> {
+	// Exported from a "use server" file, so it is a public endpoint too: it checks the permission itself.
+	await requirePermission(PERMS.CATALOG_EDIT);
 	const pageIdStr = String(data.pageId);
 	offerPatchSchema.required().parse(data);
 	return allocateCatalogItemId((nextId) =>
@@ -144,7 +146,8 @@ export async function createCatalogItem(
  */
 export async function bulkInsertCatalogItems(data: {
 	pageId: number;
-	staffId: number;
+	/** Ignored: the signed-in staff member is logged. */
+	staffId?: number;
 	rows: Array<{
 		baseId: number;
 		credits?: number;
@@ -153,7 +156,10 @@ export async function bulkInsertCatalogItems(data: {
 		amount?: number;
 	}>;
 }): Promise<{ created: number; failed: number }> {
-	const { pageId, staffId, rows } = data;
+	// Exported from a "use server" file, so it is a public endpoint too: it checks the permission itself,
+	// and the audit log names the signed-in staff member, not a caller-supplied id.
+	const staffId = (await requirePermission(PERMS.CATALOG_EDIT)).id;
+	const { pageId, rows } = data;
 	if (rows.length === 0) return { created: 0, failed: 0 };
 
 	const baseIds = [...new Set(rows.map((r) => r.baseId))];

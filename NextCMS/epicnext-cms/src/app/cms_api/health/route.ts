@@ -63,7 +63,6 @@ export async function GET() {
 			redis: redisOk,
 			emulator,
 			resend: resendAvailable,
-			node: process.version,
 			release: process.env.NEXT_PUBLIC_CMS_RELEASE ?? "unknown",
 			uptime: Math.round(process.uptime()),
 			time: new Date().toISOString(),

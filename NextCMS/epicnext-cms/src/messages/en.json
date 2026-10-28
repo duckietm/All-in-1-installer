@@ -541,6 +541,7 @@
 				"invalid": "That package is no longer available.",
 				"credits": "You don't have enough credits for this package.",
 				"ratelimit": "You're purchasing too fast. Please wait a moment and try again.",
+				"online": "You can't buy while you are in the hotel: leave the hotel first, then buy the package.",
 				"error": "Something went wrong. Please try again."
 			}
 		},

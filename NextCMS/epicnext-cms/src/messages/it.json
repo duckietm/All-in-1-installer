@@ -536,6 +536,7 @@
 				"invalid": "Questo pacchetto non è più disponibile.",
 				"credits": "Non hai abbastanza crediti per questo pacchetto.",
 				"ratelimit": "Stai acquistando troppo velocemente. Attendi un momento e riprova.",
+				"online": "You can't buy while you are in the hotel: leave the hotel first, then buy the package.",
 				"error": "Qualcosa è andato storto. Riprova."
 			}
 		},
