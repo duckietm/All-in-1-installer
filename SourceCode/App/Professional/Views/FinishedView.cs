@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using AllInOneInstaller.Configuration;
 using AllInOneInstaller.Remote;
 using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 
@@ -117,6 +118,90 @@ public static class FinishedView
         later.Children.Add(Text($"Rebuilding only Octane (for /client): {OctaneInstaller.Octane}/build.sh.", 12, "Pro.Subtle"));
         page.Children.Add(Section("3. Later", later));
         return page;
+    }
+
+    /// <summary>Last page of the CMS addon with your own CMS: the database login to fill in, and what else is the owner's.</summary>
+    public static Control BuildCustomCms(WebAccessSettings? site, string? name, string? root, bool php, DatabaseCredentials? credentials, string host,
+        IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        string url = site?.Url ?? "your hotel";
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Warning : ResultKind.Error,
+            clean ? "Your CMS is installed: its database settings are next" : "Your CMS was not installed",
+            clean
+                ? $"{url} is now your CMS ({(name is null ? "" : CustomCmsInstaller.Directory(name))}, {(php ? "PHP" : "static")}, root {root ?? "/"}); Octane is on {site?.ClientUrl ?? "/client/"}."
+                : "Run the step again when the server is ready (see the step for what is missing).");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        page.Children.Add(Section("1. Database settings of your CMS", CmsDatabaseLogin(credentials, host)));
+
+        var hotel = new StackPanel { Spacing = 6 };
+        hotel.Children.Add(Text("Point your CMS at the hotel: the client is on /client (the CMS opens it with the SSO ticket, as AtomCMS does), the images on /gamedata:", 13));
+        hotel.Children.Add(Code($"client: /client/index.html?sso=<ticket>\nbadges: /gamedata/c_images/album1584\nfurniture icons: /gamedata/icons\nRCON: 127.0.0.1, the port in {EmulatorInstaller.Directory}/config.ini (rcon.port)"));
+        page.Children.Add(Section("2. Hotel paths for your CMS", hotel));
+
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text("Updating: run this addon again (git pull for a GitHub link, or choose a new ZIP; your old folder is moved aside first).", 13));
+        later.Children.Add(Text("PHP packages (composer install) or a theme build (npm) that your CMS needs: run them in the SSH terminal (Tools), in the CMS folder.", 13));
+        later.Children.Add(Text("Back to AtomCMS: choose AtomCMS in Addons → CMS.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("3. Later", later));
+        return page;
+    }
+
+    /// <summary>Last page of Remove the CMS.</summary>
+    public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning,
+            clean ? $"Octane is the website of {site?.Url ?? "your hotel"} again" : "The CMS was not removed",
+            clean
+                ? (removed is null ? "" : $"{removed} is removed{(filesDeleted ? " and its files are deleted" : "; its files stay on the server")}. ") +
+                  "Octane has its own login screen again, and NGINX and Traefik are as after the server installation."
+                : "Run the step again (see the step for what went wrong).");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text("The CMS' tables and its users stay in the hotel database. Players log in on Octane's own login screen now.", 13));
+        later.Children.Add(Text("A CMS again: Addons → CMS.", 13));
+        page.Children.Add(Section("Next", later));
+        return page;
+    }
+
+    /// <summary>The database login the server installation made for a CMS (configuration/database/&lt;server&gt;/mariadb.txt).</summary>
+    public static Control CmsDatabaseLogin(DatabaseCredentials? credentials, string host)
+    {
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(Text("The installer cannot fill in the database settings of a CMS it does not know: put these in your CMS' settings " +
+                                "(for example DB_HOST, DB_DATABASE, DB_USERNAME and DB_PASSWORD in its .env). Use the cms account the server installation made, not root.", 13));
+        if (credentials is null)
+        {
+            panel.Children.Add(Text($"The MariaDB passwords of {host} are not saved on this computer. They are in configuration/database/<server>/mariadb.txt on the computer that ran the MariaDB step.", 13, "Pro.WarningText"));
+            return panel;
+        }
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 18, RowSpacing = 4 };
+        (string Key, string Value)[] rows =
+        [
+            ("Host", "127.0.0.1"), ("Port", credentials.Port.ToString()), ("Database", credentials.Database),
+            ("User", credentials.CmsUser), ("Password", credentials.CmsPassword)
+        ];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var key = Text(rows[i].Key, 12.5, "Pro.Muted");
+            Grid.SetRow(key, i);
+            grid.Children.Add(key);
+            Control value = rows[i].Key == "Password" ? CopyBox(rows[i].Value) : Code(rows[i].Value);
+            Grid.SetRow(value, i);
+            Grid.SetColumn(value, 1);
+            grid.Children.Add(value);
+        }
+        panel.Children.Add(grid);
+        panel.Children.Add(Text($"Saved on this computer in {ClientConfiguration.DatabaseCredentialsPath(host)}.", 12, "Pro.Subtle"));
+        return panel;
     }
 
     /// <summary>Last page of Deploy Assets: what was sent and what to do next.</summary>

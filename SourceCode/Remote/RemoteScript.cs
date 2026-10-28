@@ -64,6 +64,7 @@ public static class RemoteScript
 
         # Sets $ranges to Cloudflare's published IP ranges, one per line. $1 is added to the error message.
         load_cloudflare_ranges() {
+          fix_clock
           echo "> Downloading Cloudflare's IP ranges (www.cloudflare.com/ips-v4, ips-v6)"
           ranges=$( (curl -fsS --max-time 20 https://www.cloudflare.com/ips-v4; echo; curl -fsS --max-time 20 https://www.cloudflare.com/ips-v6) \
             | grep -E '^[0-9a-f.:]+/[0-9]+$' ) || true

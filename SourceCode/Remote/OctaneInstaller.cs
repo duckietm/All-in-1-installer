@@ -51,7 +51,7 @@ public static class OctaneInstaller
     /// </summary>
     public static string PackageBaseCommand(WebAccessSettings site) =>
         "sed -i -E -e 's#(\"(start|build)\": \"vite) --base=[^ \"]+#\\1#'" +
-        (site.AtomCms ? $" -e 's#(\"(start|build)\": \"vite)( |\")#\\1 --base={site.ClientPath}\\3#'" : "") + " package.json";
+        (site.HasCms ? $" -e 's#(\"(start|build)\": \"vite)( |\")#\\1 --base={site.ClientPath}\\3#'" : "") + " package.json";
 
     public static string SocketUrl(WebAccessSettings site) => $"{(site.Https ? "wss" : "ws")}://{site.Url[(site.Url.IndexOf("://", StringComparison.Ordinal) + 3)..]}/ws";
 
@@ -113,18 +113,20 @@ public static class OctaneInstaller
     /// Creates missing .json files from .example and sets the URL keys, backing up existing files first. Also
     /// creates the asset folders they reference.
     /// </summary>
-    public static Task ConfigureAsync(ServerConnection connection, WebAccessSettings site, Action<string> log, CancellationToken token = default)
+    /// <param name="restoreLoginScreen">After removing a CMS: Octane's own login screen on again.</param>
+    public static Task ConfigureAsync(ServerConnection connection, WebAccessSettings site, Action<string> log, CancellationToken token = default,
+        bool restoreLoginScreen = false)
     {
         string script = RemoteScript.Prelude + $$"""
             {{Environment}}
             # The emulator's timezone (config.ini) for timezone.settings in a new renderer-config.json.
             tz=$(grep -oE 'serverTimezone=[^&[:space:]]+' {{EmulatorInstaller.Directory}}/config.ini 2>/dev/null | head -1 | cut -d= -f2)
             echo "> {{ConfigurationDirectory}}: {{string.Join(", ", ConfigurationFiles.Select(f => f + ".json"))}}"
-            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' CLIENT_PATH='{{site.ClientPath}}' ATOM='{{(site.AtomCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
+            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' CLIENT_PATH='{{site.ClientPath}}' ATOM='{{(site.HasCms ? "yes" : "")}}' LOGIN_SCREEN='{{(restoreLoginScreen && !site.HasCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
               FILES='{{string.Join(' ', ConfigurationFiles)}}' TIMEZONE="$tz" node - <<'JS'
             {{ConfigureScript}}
             JS
-            echo "> {{Octane}}/package.json: {{(site.AtomCms ? $"vite --base={site.ClientPath} (Octane on {site.ClientPath})" : "vite without --base (Octane on /)")}}"
+            echo "> {{Octane}}/package.json: {{(site.HasCms ? $"vite --base={site.ClientPath} (Octane on {site.ClientPath})" : "vite without --base (Octane on /)")}}"
             cd {{Octane}}
             {{PackageBaseCommand(site)}}
             grep -E '"(start|build)": ' package.json | sed 's/^ */  /'
@@ -195,7 +197,7 @@ public static class OctaneInstaller
     private const string ConfigureScript = """
         const fs = require('fs');
         const path = require('path');
-        const { SITE_URL: site, CLIENT_URL: client, CLIENT_PATH: clientPath, ATOM: atom, SOCKET_URL: socket, CONFIG_DIR: dir, GAMEDATA_DIR: gamedata, TIMEZONE: timezone } = process.env;
+        const { SITE_URL: site, CLIENT_URL: client, CLIENT_PATH: clientPath, ATOM: atom, LOGIN_SCREEN: loginScreen, SOCKET_URL: socket, CONFIG_DIR: dir, GAMEDATA_DIR: gamedata, TIMEZONE: timezone } = process.env;
 
         // Always set: the hotel's URLs. Only in a file created from the .example: the folder layout and modes.
         const urls = {
@@ -211,8 +213,9 @@ public static class OctaneInstaller
                 'group.badge.url': '%imagerdata%',
                 // Octane's own public/habbicons, so under /client/ with AtomCMS.
                 'habbicons.asset.root': `${clientPath}habbicons`,
-                // With AtomCMS the CMS logs in and opens the client with an SSO ticket.
-                ...(atom ? { 'login.screen.enabled': false } : {})
+                // With a CMS the CMS logs in and opens the client with an SSO ticket. Without one again (the CMS was
+                // removed), Octane's own login screen comes back.
+                ...(atom ? { 'login.screen.enabled': false } : loginScreen ? { 'login.screen.enabled': true } : {})
             },
             'ui-config': {
                 'camera.url': `${site}/gamedata/camera`,
