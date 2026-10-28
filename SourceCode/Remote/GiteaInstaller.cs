@@ -247,6 +247,51 @@ public static partial class GiteaInstaller
         return new GiteaResult(values.Int("PORT"), values["PASSWORD"], values["ADMIN"] == "existed", false);
     }
 
+    /// <summary>
+    /// Stops and removes the container, its network and the Traefik route. With <paramref name="deleteData"/> also
+    /// /opt/gitea (repositories, accounts, settings) and the image; otherwise /opt/gitea stays for an install later.
+    /// Checks through Traefik that the domain no longer reaches Gitea.
+    /// </summary>
+    public static Task RemoveAsync(ServerConnection connection, string? domain, bool https, bool deleteData, Action<string> log,
+        CancellationToken token = default)
+    {
+        string port = https ? "443" : "80";
+        string scheme = https ? "https" : "http";
+        string check = domain is null ? "" : $$"""
+            echo "> {{scheme}}://{{domain}}/ (through Traefik)"
+            code=$(curl -s --noproxy '*' -k --max-time 10 --resolve "{{domain}}:{{port}}:127.0.0.1" -o /dev/null -w '%{http_code}' "{{scheme}}://{{domain}}/" || true)
+            case "$code" in
+              404) echo "  HTTP 404: Traefik has no route for it any more" ;;
+              000|"") echo "  Nothing answers (Traefik does not run?)" ;;
+              *) echo "  HTTP $code: something still answers for it (docker ps, and the files in {{WebAccessInstaller.TraefikDirectory}}/dynamic)" ;;
+            esac
+            """;
+        string script = RemoteScript.Prelude + $$"""
+            g={{Directory}}
+            if [ -f "$g/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
+              echo "> docker compose down (Gitea and its network)"
+              docker compose -f "$g/compose.yaml" down --remove-orphans 2>&1 | grep -v '^ *$' | sed 's/^/  /' || true
+            fi
+            if docker inspect {{Container}} >/dev/null 2>&1; then docker rm -f {{Container}} >/dev/null && echo "  container {{Container}} removed"; fi
+            docker network rm gitea >/dev/null 2>&1 && echo "  network gitea removed" || true
+            if [ -f {{RouteFile}} ]; then
+              rm -f {{RouteFile}}
+              echo "> {{RouteFile}} removed: Traefik no longer answers for {{domain ?? "Gitea's domain"}}"
+            fi
+            if [ {{(deleteData ? "yes" : "no")}} = yes ]; then
+              if [ -d "$g" ]; then
+                echo "> Deleting $g ($(du -sh "$g" 2>/dev/null | cut -f1)): the repositories, accounts and settings"
+                rm -rf -- "$g"
+              fi
+              docker image rm {{Image}} >/dev/null 2>&1 && echo "  image {{Image}} removed" || true
+            elif [ -d "$g/data" ]; then
+              echo "  $g stays (repositories, accounts, settings, $(du -sh "$g/data" 2>/dev/null | cut -f1)): installing Gitea again uses it"
+            fi
+            {{check}}
+            """;
+        return RemoteScript.RunAsync(connection, script, log, "Removing Gitea failed", token);
+    }
+
     /// <summary>Through Traefik: waits up to 2 minutes for the certificate with https, then checks Gitea's health.</summary>
     public static async Task<bool> TestAsync(ServerConnection connection, GiteaSettings settings, Action<string> log, CancellationToken token = default)
     {

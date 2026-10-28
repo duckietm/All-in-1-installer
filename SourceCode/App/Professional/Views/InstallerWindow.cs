@@ -53,6 +53,7 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _customCmsWizard;
     private readonly ServerWizard _removeCmsWizard;
     private readonly ServerWizard _giteaWizard;
+    private readonly ServerWizard _removeGiteaWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -76,10 +77,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _giteaWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -111,6 +112,10 @@ public sealed class InstallerWindow : Window
         _giteaWizard = new ServerWizard(() => Session, [giteaStep],
             (host, _, _, _, steps) => FinishedView.BuildGitea(giteaStep.Settings, giteaStep.Result, GiteaStep.GiteaLoginPath(host), steps),
             "Your Git server", keyStep: false);
+        var removeGiteaStep = new RemoveGiteaStep();
+        _removeGiteaWizard = new ServerWizard(() => Session, [removeGiteaStep],
+            (_, _, _, _, steps) => FinishedView.BuildRemoveGitea(removeGiteaStep.RemovedDomain, removeGiteaStep.DataDeleted, steps),
+            "Gitea removed", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -251,7 +256,8 @@ public sealed class InstallerWindow : Window
             case Page.AtomCms: ShowAtomCmsWizard(); break;
             case Page.CustomCms: ShowCustomCmsWizard(); break;
             case Page.RemoveCms: ShowRemoveCmsWizard(); break;
-            case Page.Gitea: ShowGitea(); break;
+            case Page.Gitea: ShowGiteaWizard(); break;
+            case Page.RemoveGitea: ShowRemoveGiteaWizard(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -481,7 +487,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, Gitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, Gitea, RemoveGitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -496,6 +502,7 @@ public sealed class InstallerWindow : Window
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.CustomCms => ("Your own CMS", "Addon: your own CMS as the hotel's website, Octane on /client."),
             Page.Gitea => ("Gitea", "Addon: your own Git server in Docker, on a domain of its own behind Traefik."),
+            Page.RemoveGitea => ("Remove Gitea", "Addon: Gitea's container and route away; its data only when you choose."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
@@ -605,7 +612,26 @@ public sealed class InstallerWindow : Window
     private void ShowAtomCmsWizard() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
     private void ShowCustomCmsWizard() => ShowWizard(Page.CustomCms, _atomNavigation, _customCmsWizard);
     private void ShowRemoveCmsWizard() => ShowWizard(Page.RemoveCms, _atomNavigation, _removeCmsWizard);
-    private void ShowGitea() => ShowWizard(Page.Gitea, _giteaNavigation, _giteaWizard);
+    private enum GiteaChoice { Install, Remove }
+
+    /// <summary>Addons → Gitea: install (or update) or remove first, unless one of them is running.</summary>
+    private async void ShowGitea()
+    {
+        if (_giteaWizard.IsBusy) { ShowGiteaWizard(); return; }
+        if (_removeGiteaWizard.IsBusy) { ShowRemoveGiteaWizard(); return; }
+        GiteaChoice? choice = await ChoiceDialog.ShowAsync<GiteaChoice?>(this, "Gitea", "Gitea, your own Git server",
+            "Install Gitea (or update it, when it is installed), or remove it.", null,
+            new ChoiceDialog.Option<GiteaChoice?>("Install or update Gitea", "On a domain of its own, such as git.example.com; an update keeps the repositories and accounts.",
+                GiteaChoice.Install, Primary: true),
+            new ChoiceDialog.Option<GiteaChoice?>("Remove Gitea", "Stops it and removes its route; its repositories and accounts stay unless you choose to delete them.",
+                GiteaChoice.Remove),
+            new ChoiceDialog.Option<GiteaChoice?>("Cancel", "Stay on this page.", null));
+        if (choice == GiteaChoice.Install) ShowGiteaWizard();
+        else if (choice == GiteaChoice.Remove) ShowRemoveGiteaWizard();
+    }
+
+    private void ShowGiteaWizard() => ShowWizard(Page.Gitea, _giteaNavigation, _giteaWizard);
+    private void ShowRemoveGiteaWizard() => ShowWizard(Page.RemoveGitea, _giteaNavigation, _removeGiteaWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.

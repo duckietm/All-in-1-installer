@@ -856,6 +856,15 @@ Back up `/opt/gitea/data`.
 
 ![Gitea addon](docs/screenshots/gitea-step.png)
 
+**Removing Gitea**: **Addons → Gitea** asks first: **Install or update Gitea** or **Remove Gitea**. Removing stops
+and removes the container and its Docker network (`docker compose down`) and Traefik's route file, so the domain no
+longer reaches Gitea and its port is free again; the hotel, Traefik and NGINX keep running. The repositories, accounts
+and settings stay in `/opt/gitea` (installing again brings them back, with the same admin), unless you tick **Also
+delete the repositories, accounts and settings**: then `/opt/gitea`, the image and the saved admin password
+(`gitea.txt`) are deleted too. Remove the domain's A record yourself when you no longer need it.
+
+![Remove Gitea](docs/screenshots/gitea-remove.png)
+
 ### Deploy Assets
 
 **Deploy Assets** copies what the [All-in-1 downloader](https://github.com/duckietm/all-in-1-converter) downloaded to
@@ -1234,6 +1243,7 @@ SourceCode/
   App/Professional/Views/CustomCmsStep.cs CMS addon: your own CMS (GitHub link or ZIP, PHP or static, root folder)
   App/Professional/Views/RemoveCmsStep.cs CMS addon: remove the CMS, Octane on / again
   App/Professional/Views/GiteaStep.cs     Gitea addon: domain, Cloudflare, admin, DNS warning
+  App/Professional/Views/RemoveGiteaStep.cs Gitea addon: remove Gitea, its data only when asked
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata

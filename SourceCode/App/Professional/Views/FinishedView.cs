@@ -188,6 +188,25 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of Remove Gitea.</summary>
+    public static Control BuildRemoveGitea(string? domain, bool dataDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning, clean ? "Gitea is removed" : "Gitea was not removed",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : (domain is null ? "" : $"{domain} no longer reaches Gitea. ") +
+              (dataDeleted ? $"{GiteaInstaller.Directory} is deleted." : $"Its repositories, accounts and settings stay in {GiteaInstaller.Directory}."));
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var next = new StackPanel { Spacing = 6 };
+        next.Children.Add(Text(dataDeleted ? "Gitea again: Addons → Gitea → Install, with a new admin." : "Gitea again: Addons → Gitea → Install; it starts with the repositories and accounts that stayed.", 13));
+        if (domain is not null) next.Children.Add(Text($"Remove the A record of {domain} from your DNS when you no longer need it.", 13));
+        page.Children.Add(Section("Next", next));
+        return page;
+    }
+
     /// <summary>Last page of Remove the CMS.</summary>
     public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
     {
