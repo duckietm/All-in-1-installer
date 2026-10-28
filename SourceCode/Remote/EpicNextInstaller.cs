@@ -93,8 +93,10 @@ public static class EpicNextInstaller
         "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("$", "\\$") + "\"";
 
     /// <summary>
-    /// .env from .env.example when it is missing, with the keys this server decides: the hotel database with the cms
-    /// login, the site's address, RCON. A random AUTH_SECRET once; later runs keep it, so logins stay valid.
+    /// .env from .env.example when it is missing, with the keys this server decides: the hotel database, the site's
+    /// address, RCON. A random AUTH_SECRET once; later runs keep it, so logins stay valid. The database login is the first
+    /// that works of: the cms login saved on this computer, the one already in .env, AtomCMS' cms login, or else a MariaDB
+    /// account of its own (epicnext, only on the hotel database) made with root.
     /// </summary>
     public static Task ConfigureEnvAsync(ServerConnection connection, WebAccessSettings site, string hotelName,
         DatabaseCredentials? credentials, Action<string> log, CancellationToken token = default)
@@ -108,8 +110,6 @@ public static class EpicNextInstaller
             ("AUTH_TRUST_HOST", "true"),
             ("RCON_HOST", "127.0.0.1")
         };
-        if (credentials is not null)
-            values.Add(("DATABASE_URL", $"mysql://{Uri.EscapeDataString(credentials.CmsUser)}:{Uri.EscapeDataString(credentials.CmsPassword)}@127.0.0.1:3306/{Uri.EscapeDataString(credentials.Database)}"));
         string sets = string.Join('\n', values.Select(v => $"env_set {v.Key} {ServerConnection.ShellQuote(v.Value)}"));
 
         string script = RemoteScript.Prelude + $$"""
@@ -140,10 +140,44 @@ public static class EpicNextInstaller
             else
               echo "  AUTH_SECRET kept"
             fi
-            rcon=$(grep -sE '^rcon.port=' {{EmulatorInstaller.Directory}}/config.ini | cut -d= -f2 | tr -d '[:space:]')
+            ini={{EmulatorInstaller.Directory}}/config.ini
+            rcon=$(grep -sE '^rcon.port=' "$ini" | cut -d= -f2 | tr -d '[:space:]')
             env_set RCON_PORT "${rcon:-3001}"
-            grep -qE '^DATABASE_URL=mysql://[^:]+:[^@]+@' .env && ! grep -qE '^DATABASE_URL=mysql://user:password@' .env ||
-              fail "The database login for EpicNext is unknown: the MariaDB passwords of this server are not saved on this computer (configuration/database/<server>/mariadb.txt). Run the MariaDB step from this computer first, or set DATABASE_URL in {{Directory}}/.env yourself."
+            # Without Valkey/Redis on this server EpicNext keeps its cache in memory; a URL to nothing only gives errors.
+            if ss -Hltn 'sport = :6379' 2>/dev/null | grep -q .; then echo "  REDIS_URL kept (something listens on 6379)"; else env_set REDIS_URL ""; fi
+
+            # The database login: over TCP to 127.0.0.1, as EpicNext connects.
+            db=$(grep -sE '^db.database=' "$ini" | cut -d= -f2 | tr -d '[:space:]')
+            [ -n "$db" ] || fail "No db.database in $ini: run the Emulator step first."
+            db_ok() { [ -n "$1" ] && [ -n "$2" ] && MYSQL_PWD="$2" mariadb --protocol=tcp -h 127.0.0.1 -P 3306 -u "$1" -N -e 'SELECT 1 FROM users LIMIT 1' "$db" >/dev/null 2>&1; }
+            enc() { node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1"; }
+            dbuser= dbpass= from=
+            try_login() { if [ -z "$from" ] && db_ok "$1" "$2"; then dbuser=$1 dbpass=$2 from=$3; fi; }
+            try_login {{ServerConnection.ShellQuote(credentials?.CmsUser ?? "")}} {{ServerConnection.ShellQuote(credentials?.CmsPassword ?? "")}} "the cms login saved on this computer"
+            cur=$(grep -sE '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')
+            if [ -n "$cur" ]; then
+              { read -r u; read -r p; } < <(node -e 'try { const u = new URL(process.argv[1]); console.log(decodeURIComponent(u.username)); console.log(decodeURIComponent(u.password)) } catch { console.log(""); console.log("") }' "$cur")
+              [ "$u" = user ] && [ "$p" = password ] || try_login "$u" "$p" "the login already in .env"
+            fi
+            atom={{AtomCmsInstaller.Directory}}/.env
+            value() { grep -sE "^$1=" "$atom" | head -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/' | tr -d '\r'; }
+            try_login "$(value DB_USERNAME)" "$(value DB_PASSWORD)" "AtomCMS' cms login ($atom)"
+            if [ -z "$from" ]; then
+              # An account of its own, made with root (the socket login), with the cms account's rights on the hotel database only.
+              pw=$(openssl rand -hex 24)
+              mariadb <<SQL || fail "Making the MariaDB account epicnext failed (see above). Set DATABASE_URL in {{Directory}}/.env yourself and run this step again."
+            CREATE USER IF NOT EXISTS 'epicnext'@'localhost' IDENTIFIED BY '$pw';
+            ALTER USER 'epicnext'@'localhost' IDENTIFIED BY '$pw';
+            CREATE USER IF NOT EXISTS 'epicnext'@'127.0.0.1' IDENTIFIED BY '$pw';
+            ALTER USER 'epicnext'@'127.0.0.1' IDENTIFIED BY '$pw';
+            GRANT {{MariaDbInstaller.CmsPrivileges}} ON \`$db\`.* TO 'epicnext'@'localhost', 'epicnext'@'127.0.0.1';
+            FLUSH PRIVILEGES;
+            SQL
+              try_login epicnext "$pw" "a new MariaDB account epicnext (only on $db)"
+              [ -n "$from" ] || fail "The new MariaDB account epicnext cannot log in on 127.0.0.1:3306."
+            fi
+            echo "  Database login: $from"
+            env_set DATABASE_URL "mysql://$(enc "$dbuser"):$(enc "$dbpass")@127.0.0.1:3306/$(enc "$db")?charset=utf8mb4&connection_limit=25&connect_timeout=5"
             chmod 640 .env
             chown www-data:www-data .env
             """;

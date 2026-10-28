@@ -783,8 +783,10 @@ repository link is filled in; change it only when the repository has moved), the
 1. **Clone or update** the repository in `/var/www/epicnext` (git pull on a re-run).
 2. **Node.js and pnpm**: EpicNext needs Node.js 26.12.1 or newer (an older Node.js 26 from the Dev tools step is
    upgraded with apt) and the pnpm version its `package.json` pins, through corepack.
-3. **.env** from `.env.example` (the old one is kept as `.env.bak-<time>`): `DATABASE_URL` to the hotel database with
-   the `cms` account (EpicNext reads the emulator's tables), `HOTEL_NAME`, `APP_URL` and `AUTH_URL` (the site's
+3. **.env** from `.env.example` (the old one is kept as `.env.bak-<time>`): `DATABASE_URL` to the hotel database
+   (EpicNext reads the emulator's tables) with the first login that works: the `cms` login saved on this computer,
+   the one already in `.env`, AtomCMS' `cms` login, or else a MariaDB account of its own, `epicnext` (made with root,
+   with the cms account's rights on the hotel database only). `REDIS_URL` is emptied when no Valkey/Redis runs. `HOTEL_NAME`, `APP_URL` and `AUTH_URL` (the site's
    address), `AUTH_TRUST_HOST=true` (behind Traefik), a random `AUTH_SECRET` (made once, so logins stay valid), and
    `RCON_HOST`/`RCON_PORT` from the emulator's `config.ini`.
 4. **Build**: `/var/www/Gamedata` (where EpicNext looks for the gamedata) links to the hotel's gamedata, then

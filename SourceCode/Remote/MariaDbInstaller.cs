@@ -43,7 +43,7 @@ public static class MariaDbInstaller
 
     public const string ServerConfig = "/etc/mysql/mariadb.conf.d/50-server.cnf";
 
-    private const string CmsPrivileges =
+    internal const string CmsPrivileges =
         "EXECUTE, SELECT, SHOW VIEW, ALTER, ALTER ROUTINE, CREATE, CREATE ROUTINE, CREATE TEMPORARY TABLES, CREATE VIEW, " +
         "DELETE, DROP, EVENT, INDEX, INSERT, REFERENCES, TRIGGER, UPDATE, LOCK TABLES";
 

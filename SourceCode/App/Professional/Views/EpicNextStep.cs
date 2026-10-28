@@ -115,7 +115,7 @@ public sealed class EpicNextStep : InstallStep
         Run.Log($"  {site.Url}: Node.js {state.Server.NodeVersion}, Octane built");
         if (state.AtomTables) Run.Log("  WARNING: the hotel database has AtomCMS' website_* tables; EpicNext's tables with the same name keep AtomCMS' layout.");
         DatabaseCredentials? credentials = ClientConfiguration.LoadDatabaseCredentials(connection.Login.Host);
-        if (credentials is null) Run.Log("  The MariaDB passwords of this server are not saved on this computer: the DATABASE_URL already in .env is kept.");
+        if (credentials is null) Run.Log("  The MariaDB passwords of this server are not saved on this computer: the step looks for a database login on the server.");
         Run.Done(site.Url);
 
         await Task.Run(() => CustomCmsInstaller.CheckGitAccessAsync(connection, url, Run.Log));
