@@ -95,9 +95,10 @@ public sealed class RemoveCmsStep : InstallStep
         await Task.Run(() => OctaneInstaller.BuildAsync(connection, site, Run.Log));
         Run.Done(site.ClientUrl);
 
-        // The hotel site serves Octane on / first, then Traefik sends everything there again.
-        await Task.Run(() => OctaneInstaller.PublishAsync(connection, site, Run.Log));
+        // Traefik sends everything to the hotel site first: publishing checks Octane on / through Traefik, which would
+        // still reach the CMS otherwise.
         await Task.Run(() => WebAccessInstaller.ConfigureRoutesAsync(connection, site, Run.Log));
+        await Task.Run(() => OctaneInstaller.PublishAsync(connection, site, Run.Log));
         Run.Done("Octane on /");
 
         await Task.Run(() => CmsSite.RemoveAsync(connection, cms?.SiteName, delete ? cms?.Folder : null, Run.Log));

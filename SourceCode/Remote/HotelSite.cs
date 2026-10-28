@@ -225,6 +225,8 @@ public static class HotelSite
     public static string RealIpScript(WebAccessSettings site) => $$"""
         realip={{RealIpFile}}
         if [ {{(site.Cloudflare ? "yes" : "no")}} = yes ]; then
+          # A server clock that runs behind makes Cloudflare's certificate "not yet valid": correct it first.
+          type fix_clock >/dev/null 2>&1 && fix_clock
           cf=$( (curl -fsS --max-time 20 https://www.cloudflare.com/ips-v4; echo; curl -fsS --max-time 20 https://www.cloudflare.com/ips-v6) \
             | grep -E '^[0-9a-f.:]+/[0-9]+$' ) || true
           if [ "$(echo "$cf" | grep -c .)" -ge 10 ]; then
