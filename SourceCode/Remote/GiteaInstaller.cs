@@ -303,26 +303,31 @@ public static partial class GiteaInstaller
     public static async Task<bool> TestAsync(ServerConnection connection, GiteaSettings settings, Action<string> log, CancellationToken token = default)
     {
         string port = settings.Https ? "443" : "80";
+        // With https: whether Traefik passes the route already, while the certificate is not valid yet.
+        string insecure = settings.Https ? "healthy \"$(c -k \"$url/api/healthz\" 2>/dev/null || true)\" && route=yes" : "";
         string script = RemoteScript.Prelude + $$"""
             url={{settings.Url}}
             c() { curl -s --noproxy '*' --max-time 10 --resolve "{{settings.Domain}}:{{port}}:127.0.0.1" "$@"; }
-            cert=no
-            if [ {{(settings.Https ? "yes" : "no")}} = yes ]; then
-              echo "> Waiting for the Let's Encrypt certificate for {{settings.Domain}} (up to 2 minutes)"
-              for i in $(seq 1 24); do
-                if c -o /dev/null "$url/"; then cert=yes; echo "  certificate is valid after $((i * 5)) seconds"; break; fi
-                sleep 5
-              done
-              [ $cert = yes ] || echo "  No valid certificate yet: check the A record of {{settings.Domain}}, then docker logs traefik"
-              k=-k
+            # Gitea's own answer, not only a certificate: Traefik may hold a certificate for the domain already (from an
+            # earlier install) before it has loaded the new route, which it does a moment after the file changes.
+            healthy() { echo "$1" | grep -q '"status": *"pass"'; }
+            echo "> $url/api/healthz through Traefik{{(settings.Https ? ", with a valid Let's Encrypt certificate (up to 2 minutes)" : " (up to 2 minutes)")}}"
+            cert=no; route=no; body=
+            for i in $(seq 1 60); do
+              body=$(c "$url/api/healthz" 2>/dev/null || true)
+              if healthy "$body"; then cert=yes; route=yes; break; fi
+              {{insecure}}
+              sleep 2
+            done
+            if [ $cert = yes ]; then
+              echo "  Gitea is healthy after $((i * 2)) seconds{{(settings.Https ? ", and the certificate is valid" : "")}}"
+            elif [ $route = yes ]; then
+              cert=no
+              echo "  Gitea is healthy, but {{settings.Domain}} has no valid certificate yet: check its A record, then docker logs traefik"
             else
-              cert=yes
-              k=
+              fail "Traefik does not pass $url to Gitea: $(echo "${body:-no answer}" | head -c 200). See docker logs traefik and {{RouteFile}}."
             fi
-            echo "> $url/api/healthz (through Traefik)"
-            body=$(c $k "$url/api/healthz" || true)
-            echo "$body" | grep -q '"status": *"pass"' || fail "Traefik does not pass $url to Gitea: $(echo "$body" | head -c 200)"
-            echo "  Gitea is healthy"
+            {{(settings.Https ? "" : "cert=yes")}}
             echo "CERT=$cert"
             """;
         ScriptValues values = await RemoteScript.RunCapturingAsync(connection, script, log, "Testing Gitea failed", ["CERT"], token);
