@@ -17,9 +17,9 @@ public sealed record EpicNextState(AtomCmsState Server, string? HotelName, strin
 /// </summary>
 public static class EpicNextInstaller
 {
-    /// <summary>The installer's own repository, which carries EpicNext (with its routes on /cms_api) in <see cref="RepositoryFolder"/>.</summary>
-    public const string Repository = "https://github.com/duckietm/All-in-1-installer.git";
-    public const string RepositoryFolder = "NextCMS/epicnext-cms";
+    /// <summary>EpicNext's own repository; the CMS is its top folder (<see cref="RepositoryFolder"/> empty).</summary>
+    public const string Repository = "https://gitea.epicnabbo.nl/Remco/EpicNext-Cms.git";
+    public const string RepositoryFolder = "";
     /// <summary>A checkout of the repository when the CMS is in a folder of it; the folder is copied to <see cref="Directory"/>.</summary>
     public const string SourceDirectory = CustomCmsInstaller.Parent + "/epicnext-src";
     private const string SourceInfo = SourceDirectory + "/.all-in-1-source";

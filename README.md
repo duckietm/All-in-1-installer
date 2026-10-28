@@ -777,8 +777,8 @@ Captcha keys (Turnstile / reCAPTCHA) go in `/var/www/atomcms/.env`. To update At
 **Addons → CMS → EpicNext CMS** makes [EpicNext CMS](https://gitea.epicnabbo.nl/Remco/EpicNext-Cms) (Next.js, no PHP)
 the hotel's website, like AtomCMS. It runs on the server itself, **not in Docker**. It asks for the hotel's name and where to get EpicNext:
 a repository link, a branch (empty: the default branch) and the folder in the repository with EpicNext's
-`package.json`. By default that is `NextCMS/epicnext-cms` in this installer's own repository, the version with its
-routes on `/cms_api` (so `/api` stays Polaris'). For a folder, the step keeps a sparse checkout of just that folder in
+`package.json`. By default that is EpicNext's own repository (`https://gitea.epicnabbo.nl/Remco/EpicNext-Cms.git`),
+its top folder. For a folder, the step keeps a sparse checkout of just that folder in
 `/var/www/epicnext-src` and copies it to `/var/www/epicnext`, keeping `.env`, `node_modules`, the build, `storage` and
 imported assets; with an empty folder it clones the repository into `/var/www/epicnext` itself. Then:
 

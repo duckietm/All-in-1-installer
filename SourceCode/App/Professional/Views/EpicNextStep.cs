@@ -29,7 +29,7 @@ public sealed class EpicNextStep : InstallStep
         "Install EpicNext CMS",
         "EpicNext CMS (Next.js) becomes the hotel's website, the same way as AtomCMS: visitors register and log in there, and it opens Octane on /client. It runs on the server itself, not in Docker.",
         [
-            $"Gets EpicNext from git into {EpicNextInstaller.Directory}: by default the {EpicNextInstaller.RepositoryFolder} folder of the installer's own repository (its routes on /cms_api, so /api stays Polaris'). Later runs update it.",
+            $"Clones EpicNext into {EpicNextInstaller.Directory}, by default from its own repository ({EpicNextInstaller.Repository}); a folder of another repository works too. Later runs update it.",
             $"Node.js {EpicNextInstaller.NodeMinimum} or newer and pnpm (through corepack), then pnpm install, pnpm db:migrate (only EpicNext's own tables) and pnpm build, under its memory cap.",
             $".env: the hotel database with the cms login of the server installation, the site's address, a random AUTH_SECRET and RCON. Settings: the client URL (/client/index.html, Octane on this site) and the gamedata folder ({OctaneInstaller.Gamedata}). users.password is widened for EpicNext's password hashes.",
             $"Runs as the systemd service {EpicNextInstaller.Service} (user www-data, {EpicNextInstaller.Upstream}, started at boot). No PHP.",
@@ -66,7 +66,7 @@ public sealed class EpicNextStep : InstallStep
         where.Children.Add(folder);
         panel.Children.Add(where);
         panel.Children.Add(Text($"The https link of the repository (it must be public), the branch (empty: its default branch) and the folder with EpicNext's package.json (empty: the top folder). " +
-                                $"By default: {EpicNextInstaller.RepositoryFolder} in the installer's repository.", 12, "Pro.Subtle"));
+                                $"By default: EpicNext's own repository, its top folder.", 12, "Pro.Subtle"));
         return panel;
     }
 
