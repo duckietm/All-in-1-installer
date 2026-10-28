@@ -31,7 +31,7 @@ public sealed class AtomCmsStep : InstallStep
             "Sets the CMS' settings for this server: theme atom, nitro_path /client, the badge, group badge and furniture icon paths in /gamedata.",
             "Builds the atom theme and the housekeeping (npm ci, npm run build:atom).",
             "Octane moves to /client: vite --base=/client/ in package.json, client-mode.json with /client/configuration/, its login screen off (the CMS logs in), and a rebuild.",
-            $"NGINX serves {AtomCmsInstaller.Public} with PHP 8.5 and Octane on /client/; Traefik sends only Polaris' own /api paths to the emulator, AtomCMS keeps the rest of /api."
+            $"NGINX serves {AtomCmsInstaller.Public} with PHP 8.5 on its own port (the first free one from {CmsSite.FirstPort} to {CmsSite.LastPort}); the hotel site keeps Octane on /client/. Traefik sends only Polaris' own /api paths to the emulator, AtomCMS keeps the rest of /api."
         ],
         "Run the full server installation first (at least NGINX, PHP, MariaDB, Dev tools, the clones, Emulator, Web access and Octane), from this computer: the database login comes from configuration/database/<server>/mariadb.txt.",
         [
@@ -110,7 +110,7 @@ public sealed class AtomCmsStep : InstallStep
         Run.Log("> Checking the server ...");
         AtomCmsState state = await Task.Run(() => AtomCmsInstaller.InspectAsync(connection));
         if (Missing(state) is { } missing) throw new ServerConnectionException(missing);
-        WebAccessSettings site = state.Site! with { AtomCms = true };
+        WebAccessSettings site = state.Site! with { AtomCms = true, CustomCms = null };
         Run.Log($"  {site.Url}: PHP {state.PhpVersion}, Node.js {state.NodeVersion}, Octane built");
         Run.Done(site.Url);
 
@@ -154,9 +154,12 @@ public sealed class AtomCmsStep : InstallStep
         await Task.Run(() => OctaneInstaller.BuildAsync(connection, site, Run.Log));
         Run.Done(site.ClientUrl);
 
+        // AtomCMS gets its own NGINX site on a free port (85-95); the hotel site keeps Octane on /client/ and the assets.
+        int port = await Task.Run(() => CmsSite.ApplyAsync(connection, site, AtomCmsInstaller.SiteName, AtomCmsInstaller.Public, php: true, Run.Log));
+        site = site with { CustomCms = null, CmsPort = port };
         await Task.Run(() => WebAccessInstaller.ConfigureRoutesAsync(connection, site, Run.Log));
         await Task.Run(() => OctaneInstaller.PublishAsync(connection, site, Run.Log));
-        Run.Done("CMS on /, Octane on /client/");
+        Run.Done($"CMS on / (port {port}), Octane on /client/");
 
         await Task.Run(() => AtomCmsInstaller.TestAsync(connection, site, Run.Log));
         Run.Done("OK");

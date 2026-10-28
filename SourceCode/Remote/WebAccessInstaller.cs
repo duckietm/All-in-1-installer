@@ -1,11 +1,20 @@
 namespace AllInOneInstaller.Remote;
 
-/// <summary>How the hotel is reached from the internet. With AtomCMS the CMS is the site and Octane moves to /client.</summary>
-public sealed record WebAccessSettings(string Address, bool Https, bool Cloudflare, bool AtomCms = false)
+/// <summary>
+/// How the hotel is reached from the internet. With a CMS (AtomCMS, or your own CMS in /var/www/&lt;CustomCms&gt;) the CMS
+/// is the site and Octane moves to /client. <see cref="CmsPort"/> is the CMS' own NGINX site on 127.0.0.1 (85-95);
+/// 0 for an AtomCMS set up before that, which the hotel site on port 85 still serves itself.
+/// </summary>
+public sealed record WebAccessSettings(string Address, bool Https, bool Cloudflare, bool AtomCms = false, string? CustomCms = null, int CmsPort = 0)
 {
     public string Scheme => Https ? "https" : "http";
+    public bool HasCms => AtomCms || CustomCms is not null;
+    /// <summary>The CMS has its own NGINX site; Traefik sends it everything except /client, /gamedata, /custom and Polaris.</summary>
+    public bool CmsOnOwnPort => HasCms && CmsPort > 0;
+    /// <summary>"AtomCMS", the custom CMS' folder name, or null.</summary>
+    public string? CmsName => AtomCms ? "AtomCMS" : CustomCms;
     /// <summary>Where Octane is served, "/" or "/client/".</summary>
-    public string ClientPath => AtomCms ? "/client/" : "/";
+    public string ClientPath => HasCms ? "/client/" : "/";
     public string ClientUrl => Url + ClientPath;
     public string Url => $"{Scheme}://{(Address.Contains(':') ? $"[{Address}]" : Address)}";
     /// <summary>For a bare IP address Traefik answers for every host name.</summary>
@@ -14,7 +23,8 @@ public sealed record WebAccessSettings(string Address, bool Https, bool Cloudfla
     /// <summary>Reads /opt/traefik/hotel.env as printed with a conf_ prefix. Null before the web access step.</summary>
     public static WebAccessSettings? FromHotelEnv(ScriptValues values) =>
         values["conf_ADDRESS"] is { } address
-            ? new WebAccessSettings(address, values["conf_SCHEME"] == "https", values.Yes("conf_CLOUDFLARE"), values["conf_CMS"] == "atom")
+            ? new WebAccessSettings(address, values["conf_SCHEME"] == "https", values.Yes("conf_CLOUDFLARE"), values["conf_CMS"] == "atom",
+                values["conf_CMS"] == "custom" ? values["conf_CMS_NAME"] : null, values.Int("conf_CMS_PORT"))
             : null;
 }
 
@@ -273,10 +283,32 @@ public static class WebAccessInstaller
         string host = settings.IsIpAddress ? "" : $"Host(`{settings.Address}`) && ";
         string siteRule = settings.IsIpAddress ? "PathPrefix(`/`)" : $"Host(`{settings.Address}`)";
         string tls = settings.Https ? "\n      tls:\n        certResolver: letsencrypt" : "";
-        string polaris = settings.AtomCms
+        string polaris = settings.HasCms
             ? $"PathPrefix(`/ws`) || PathPrefix(`/nitro-sec`) || PathRegexp(`^/api/({string.Join('|', PolarisApiPaths)})(/|$)`)"
             : "PathPrefix(`/ws`) || PathPrefix(`/api`)";
-        string description = settings.AtomCms ? "/ws and Polaris' /api paths to Polaris, the rest (AtomCMS, /client) to NGINX" : "/ws and /api to Polaris, the rest to NGINX";
+        string description = settings.CmsOnOwnPort
+            ? $"/ws and Polaris' /api paths to Polaris, /client, /gamedata and /custom to the hotel site, the rest to {settings.CmsName} on port {settings.CmsPort}"
+            : settings.HasCms ? $"/ws and Polaris' /api paths to Polaris, the rest ({settings.CmsName}, /client) to NGINX" : "/ws and /api to Polaris, the rest to NGINX";
+        // With the CMS on its own port, the hotel site keeps Octane (/client) and the assets; the CMS gets the rest.
+        string cmsRouter = settings.CmsOnOwnPort ? $$"""
+
+                cms:
+                  rule: "{{siteRule}}"
+                  entryPoints: [{{entryPoint}}]
+                  service: cms
+                  priority: 1{{tls}}
+            """ : "";
+        // Whole folders only: a CMS page such as /customize or /clients stays the CMS'.
+        string hotelRule = settings.CmsOnOwnPort
+            ? host + "(" + string.Join(" || ", new[] { "client", "gamedata", "custom" }.Select(f => $"Path(`/{f}`) || PathPrefix(`/{f}/`)")) + ")"
+            : siteRule;
+        string cmsService = settings.CmsOnOwnPort ? $$"""
+
+                cms:
+                  loadBalancer:
+                    servers:
+                      - url: "http://127.0.0.1:{{settings.CmsPort}}"
+            """ : "";
         return $$"""
             echo "> $t/dynamic/hotel.yml: {{settings.Url}}{{description}}"
             cat > "$t/dynamic/hotel.yml" <<'EOF'
@@ -289,10 +321,10 @@ public static class WebAccessInstaller
                   service: polaris
                   priority: 100{{tls}}
                 hotel:
-                  rule: "{{siteRule}}"
+                  rule: "{{hotelRule}}"
                   entryPoints: [{{entryPoint}}]
                   service: nginx
-                  priority: 1{{tls}}
+                  priority: {{(settings.CmsOnOwnPort ? 50 : 1)}}{{tls}}{{cmsRouter}}
               services:
                 polaris:
                   loadBalancer:
@@ -301,19 +333,21 @@ public static class WebAccessInstaller
                 nginx:
                   loadBalancer:
                     servers:
-                      - url: "http://127.0.0.1:{{NginxPort}}"
+                      - url: "http://127.0.0.1:{{NginxPort}}"{{cmsService}}
             EOF
 
             cat > "$t/hotel.env" <<'EOF'
             ADDRESS={{settings.Address}}
             SCHEME={{settings.Scheme}}
             CLOUDFLARE={{(settings.Cloudflare ? "yes" : "no")}}
-            CMS={{(settings.AtomCms ? "atom" : "none")}}
+            CMS={{(settings.AtomCms ? "atom" : settings.CustomCms is not null ? "custom" : "none")}}
+            CMS_NAME={{settings.CustomCms ?? ""}}
+            CMS_PORT={{(settings.CmsOnOwnPort ? settings.CmsPort.ToString() : "")}}
             EOF
             """;
     }
 
-    /// <summary>Rewrites only the routes for the AtomCMS addon. Traefik itself keeps running.</summary>
+    /// <summary>Rewrites only the routes, for the CMS addon. Traefik itself keeps running.</summary>
     public static Task ConfigureRoutesAsync(ServerConnection connection, WebAccessSettings settings, Action<string> log,
         CancellationToken token = default)
     {

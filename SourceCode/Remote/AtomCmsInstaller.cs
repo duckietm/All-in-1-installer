@@ -30,6 +30,8 @@ public static class AtomCmsInstaller
     public const string Repository = "https://github.com/ObjectRetros/atomcms.git";
     public static readonly string Directory = ServerLayout.Current.AtomCms;
     public static readonly string Public = Directory + "/public";
+    /// <summary>Its NGINX site: /etc/nginx/sites-available/cms-atomcms.</summary>
+    public const string SiteName = "atomcms";
 
     // Node.js 26 comes from /usr/bin. Composer and artisan run without prompts.
     private const string Environment =
@@ -78,7 +80,8 @@ public static class AtomCmsInstaller
               echo "key=$(mariadb -N "$dbname" -e "SELECT installation_key FROM website_installation ORDER BY id LIMIT 1" 2>/dev/null)"
               echo "completed=$(mariadb -N "$dbname" -e "SELECT 1 FROM website_installation WHERE completed = 1 LIMIT 1" 2>/dev/null)"
             fi
-            echo "site=$(grep -qs 'root {{Public}};' {{HotelSite.File}} && echo yes)"
+            # Its own NGINX site (enabled), or the hotel site from before AtomCMS had one.
+            echo "site=$( { [ -L /etc/nginx/sites-enabled/cms-{{SiteName}} ] && grep -qs 'root {{Public}};' {{CmsSite.File(SiteName)}}; } || grep -qs 'root {{Public}};' {{HotelSite.File}} && echo yes)"
             """;
         CommandResult result = await connection.RunAsRootAsync(script, token);
         var values = new ScriptValues(result.Output);

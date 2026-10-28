@@ -51,7 +51,7 @@ public static class OctaneInstaller
     /// </summary>
     public static string PackageBaseCommand(WebAccessSettings site) =>
         "sed -i -E -e 's#(\"(start|build)\": \"vite) --base=[^ \"]+#\\1#'" +
-        (site.AtomCms ? $" -e 's#(\"(start|build)\": \"vite)( |\")#\\1 --base={site.ClientPath}\\3#'" : "") + " package.json";
+        (site.HasCms ? $" -e 's#(\"(start|build)\": \"vite)( |\")#\\1 --base={site.ClientPath}\\3#'" : "") + " package.json";
 
     public static string SocketUrl(WebAccessSettings site) => $"{(site.Https ? "wss" : "ws")}://{site.Url[(site.Url.IndexOf("://", StringComparison.Ordinal) + 3)..]}/ws";
 
@@ -120,11 +120,11 @@ public static class OctaneInstaller
             # The emulator's timezone (config.ini) for timezone.settings in a new renderer-config.json.
             tz=$(grep -oE 'serverTimezone=[^&[:space:]]+' {{EmulatorInstaller.Directory}}/config.ini 2>/dev/null | head -1 | cut -d= -f2)
             echo "> {{ConfigurationDirectory}}: {{string.Join(", ", ConfigurationFiles.Select(f => f + ".json"))}}"
-            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' CLIENT_PATH='{{site.ClientPath}}' ATOM='{{(site.AtomCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
+            SITE_URL='{{site.Url}}' CLIENT_URL='{{site.ClientUrl}}' CLIENT_PATH='{{site.ClientPath}}' ATOM='{{(site.HasCms ? "yes" : "")}}' SOCKET_URL='{{SocketUrl(site)}}' CONFIG_DIR='{{ConfigurationDirectory}}' GAMEDATA_DIR='{{Gamedata}}' \
               FILES='{{string.Join(' ', ConfigurationFiles)}}' TIMEZONE="$tz" node - <<'JS'
             {{ConfigureScript}}
             JS
-            echo "> {{Octane}}/package.json: {{(site.AtomCms ? $"vite --base={site.ClientPath} (Octane on {site.ClientPath})" : "vite without --base (Octane on /)")}}"
+            echo "> {{Octane}}/package.json: {{(site.HasCms ? $"vite --base={site.ClientPath} (Octane on {site.ClientPath})" : "vite without --base (Octane on /)")}}"
             cd {{Octane}}
             {{PackageBaseCommand(site)}}
             grep -E '"(start|build)": ' package.json | sed 's/^ */  /'

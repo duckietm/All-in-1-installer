@@ -61,8 +61,8 @@ public static class HotelSite
             }
         """;
 
-    // AtomCMS serves the site and Octane lives under /client/, which the CMS opens as /client/index.html?sso=...
-    private static readonly string AtomLocations = $$"""
+    // PHP for a CMS: Laravel-style front controller, PHP-FPM 8.5, no .htaccess files served.
+    internal static readonly string PhpLocations = $$"""
             client_max_body_size 20m;
 
             location / {
@@ -79,7 +79,10 @@ public static class HotelSite
             location ~ /\.ht {
                 deny all;
             }
+        """;
 
+    // A CMS serves the site and Octane lives under /client/, which the CMS opens as /client/index.html?sso=...
+    private static readonly string ClientLocations = $$"""
             location = /client {
                 return 301 /client/;
             }
@@ -114,6 +117,17 @@ public static class HotelSite
             }
         """;
 
+    // An AtomCMS from before the CMS had its own port: this site serves it, with Octane on /client/.
+    private static readonly string LegacyAtomLocations = PhpLocations + "\n" + ClientLocations;
+
+    // The CMS has its own site: Traefik only sends /client, /gamedata and /custom here.
+    private static readonly string CmsClientLocations = """
+            location / {
+                return 404;
+            }
+
+        """ + ClientLocations;
+
     /// <summary>@ROOT@ is substituted on the server.</summary>
     public static string Config(WebAccessSettings site)
     {
@@ -130,7 +144,8 @@ public static class HotelSite
             # The hotel website (written by All-in-1 Installer; the web access and Octane steps rewrite it).
             # Traefik (/opt/traefik) answers on ports 80/443 for {{site.Url}} (and does the TLS) and passes the
             # site to this server on 127.0.0.1:{{Port}}; /ws and Polaris' /api go straight to Polaris on 127.0.0.1:{{WebAccessInstaller.PolarisPort}}.
-            # {{(site.AtomCms ? $"AtomCMS ({AtomCmsInstaller.Public}) is the site, Octane is on /client/." : "Octane is the site.")}}
+            # {{(site.CmsOnOwnPort ? $"{site.CmsName} is the site (its own NGINX site on 127.0.0.1:{site.CmsPort}); this one serves Octane on /client/ and the assets."
+                : site.AtomCms ? $"AtomCMS ({AtomCmsInstaller.Public}) is the site, Octane is on /client/." : "Octane is the site.")}}
 
             map $http_origin $hotel_cors_origin {
                 default "";
@@ -167,7 +182,7 @@ public static class HotelSite
                 access_log {{LogDirectory}}/access.log;
                 error_log  {{LogDirectory}}/error.log;
 
-            {{(site.AtomCms ? AtomLocations : OctaneLocations)}}
+            {{(site.CmsOnOwnPort ? CmsClientLocations : site.AtomCms ? LegacyAtomLocations : OctaneLocations)}}
                 # The hotel's assets (copied in with the All-in-1 download tool) and the camera photos.
                 location /gamedata/ {
                     alias {{OctaneInstaller.Gamedata}}/;
@@ -237,7 +252,8 @@ public static class HotelSite
     /// Also disables other sites on 80/443 and checks 127.0.0.1:85. A null <paramref name="root"/> keeps the
     /// current root.
     /// </summary>
-    public static string WriteScript(WebAccessSettings site, string? root) => WriteScriptFor(site, site.AtomCms ? AtomCmsInstaller.Public : root);
+    public static string WriteScript(WebAccessSettings site, string? root) =>
+        WriteScriptFor(site, site.CmsOnOwnPort ? OctaneInstaller.Dist : site.AtomCms ? AtomCmsInstaller.Public : root);
 
     private static string WriteScriptFor(WebAccessSettings site, string? root) => $$"""
         [ -d /etc/nginx/sites-available ] || fail "NGINX is not installed with sites-available. Run the NGINX step first."
@@ -282,8 +298,9 @@ public static class HotelSite
         nginx -t >/dev/null 2>&1 || fail "nginx -t refuses the configuration (see above)."
         if [ -d /run/systemd/system ]; then systemctl reload nginx || systemctl restart nginx; else nginx -s reload 2>/dev/null || service nginx restart; fi
         sleep 1
-        code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' http://127.0.0.1:{{Port}}/ || true)
-        echo "  http://127.0.0.1:{{Port}}/ answers $code"
-        case "$code" in 200|302|403) ;; *) fail "NGINX does not answer on 127.0.0.1:{{Port}} (HTTP '$code')." ;; esac
+        # With the CMS on its own site this one only has /client (and the assets).
+        code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' http://127.0.0.1:{{Port}}{{(site.CmsOnOwnPort ? "/client/" : "/")}} || true)
+        echo "  http://127.0.0.1:{{Port}}{{(site.CmsOnOwnPort ? "/client/" : "/")}} answers $code"
+        case "$code" in 200|302|403{{(site.CmsOnOwnPort ? "|404" : "")}}) ;; *) fail "NGINX does not answer on 127.0.0.1:{{Port}} (HTTP '$code')." ;; esac
         """;
 }

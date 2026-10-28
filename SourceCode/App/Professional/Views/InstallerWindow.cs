@@ -49,6 +49,7 @@ public sealed class InstallerWindow : Window
     private readonly SettingsView _settings;
     private readonly ServerWizard _wizard;
     private readonly ServerWizard _atomWizard;
+    private readonly ServerWizard _customCmsWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -72,10 +73,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -94,6 +95,11 @@ public sealed class InstallerWindow : Window
         _atomWizard = new ServerWizard(() => Session, [atomStep],
             (_, _, site, _, steps) => FinishedView.BuildAtomCms(site, atomStep.InstallationKey, atomStep.InstallationCompleted, steps),
             "Web installer", keyStep: false);
+        var customCmsStep = new CustomCmsStep();
+        _customCmsWizard = new ServerWizard(() => Session, [customCmsStep],
+            (host, _, site, _, steps) => FinishedView.BuildCustomCms(site, customCmsStep.CmsName, customCmsStep.CmsRoot, customCmsStep.CmsUsesPhp,
+                ClientConfiguration.LoadDatabaseCredentials(host), host, steps),
+            "Database settings", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -231,7 +237,8 @@ public sealed class InstallerWindow : Window
         switch (_page)
         {
             case Page.Install: ShowInstallNewServer(); break;
-            case Page.AtomCms: ShowAtomCms(); break;
+            case Page.AtomCms: ShowAtomCmsWizard(); break;
+            case Page.CustomCms: ShowCustomCmsWizard(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -365,7 +372,7 @@ public sealed class InstallerWindow : Window
         _installNavigation = NavButton("Install New Server", Icons.ServerPlus, ShowInstallNewServer);
         nav.Children.Add(_installNavigation);
         nav.Children.Add(SidebarLabel("ADDONS"));
-        _atomNavigation = NavButton("AtomCMS", Icons.Puzzle, ShowAtomCms);
+        _atomNavigation = NavButton("CMS", Icons.Puzzle, ShowCms);
         nav.Children.Add(_atomNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
@@ -459,7 +466,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -472,6 +479,7 @@ public sealed class InstallerWindow : Window
                 ? "Log in to the Ubuntu / Debian server that will run the hotel."
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
+            Page.CustomCms => ("Your own CMS", "Addon: your own CMS as the hotel's website, Octane on /client."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
                 : $"This computer on the left, {host}:{GamedataFiles.Root} on the right."),
@@ -530,8 +538,8 @@ public sealed class InstallerWindow : Window
             _componentsHost,
             Text("ADDONS", 11, "Pro.Muted", FontWeight.SemiBold),
             TileGrid(
-                SmallTile("AtomCMS", "AtomCMS as the hotel's website; Octane moves to /client.",
-                    Icons.Puzzle, Color.Parse("#E8590C"), ShowAtomCms),
+                SmallTile("CMS", "AtomCMS or your own CMS as the hotel's website; Octane moves to /client.",
+                    Icons.Puzzle, Color.Parse("#E8590C"), ShowCms),
                 SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
                 SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
@@ -553,7 +561,27 @@ public sealed class InstallerWindow : Window
     }
 
     private void ShowInstallNewServer() => ShowWizard(Page.Install, _installNavigation, _wizard);
-    private void ShowAtomCms() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
+    private enum CmsChoice { Atom, Custom }
+
+    /// <summary>Addons → CMS: AtomCMS or your own CMS first, unless one of them is running.</summary>
+    private async void ShowCms()
+    {
+        if (_atomWizard.IsBusy) { ShowAtomCmsWizard(); return; }
+        if (_customCmsWizard.IsBusy) { ShowCustomCmsWizard(); return; }
+        CmsChoice? choice = await ChoiceDialog.ShowAsync<CmsChoice?>(this, "CMS", "Would you like another CMS?",
+            "The CMS is the hotel's website: visitors register and log in there, and it opens the hotel (Octane) on /client. " +
+            "The installer sets up AtomCMS completely. Your own CMS comes from a GitHub link or a ZIP file: the installer sets up NGINX " +
+            "(with PHP or as a static website), Traefik and Octane on /client for it, and you fill in its database settings.",
+            null,
+            new ChoiceDialog.Option<CmsChoice?>("AtomCMS", "The CMS of github.com/ObjectRetros/atomcms, set up completely (recommended).", CmsChoice.Atom, Primary: true),
+            new ChoiceDialog.Option<CmsChoice?>("My own CMS", "Another CMS or website: from a GitHub link or a ZIP file.", CmsChoice.Custom),
+            new ChoiceDialog.Option<CmsChoice?>("Cancel", "Stay on this page.", null));
+        if (choice == CmsChoice.Atom) ShowAtomCmsWizard();
+        else if (choice == CmsChoice.Custom) ShowCustomCmsWizard();
+    }
+
+    private void ShowAtomCmsWizard() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
+    private void ShowCustomCmsWizard() => ShowWizard(Page.CustomCms, _atomNavigation, _customCmsWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.

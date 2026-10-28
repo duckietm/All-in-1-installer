@@ -60,7 +60,7 @@ public sealed class OctaneStep : InstallStep
         }
         if (state.Built && state.ConfiguredSocketUrl == state.ExpectedSocketUrl && !state.LayoutConfigured)
             Detected.Show(ResultKind.Info, $"Octane will be rebuilt for {state.Site.ClientUrl}",
-                state.Site.AtomCms ? "AtomCMS is the site now: Octane moves to /client/." : "Octane is served from the site root.");
+                state.Site.HasCms ? $"{state.Site.CmsName} is the site now: Octane moves to /client/." : "Octane is served from the site root.");
         else if (state.Built && state.ConfiguredSocketUrl != state.ExpectedSocketUrl)
             Detected.Show(ResultKind.Info, "Octane is built for another address",
                 $"socket.url is {state.ConfiguredSocketUrl ?? "not set"}; it becomes {state.ExpectedSocketUrl}.");
@@ -80,7 +80,7 @@ public sealed class OctaneStep : InstallStep
         if (!state.RendererPresent) throw new ServerConnectionException($"{OctaneInstaller.Renderer} has no package.json. Run the Renderer clone step first.");
         if (state.NodeVersion is null) throw new ServerConnectionException("Node.js is not installed in /usr/bin. Run the Node.js step first.");
         Run.Log($"  {site.ClientUrl}: socket {OctaneInstaller.SocketUrl(site)}, Node.js {state.NodeVersion}");
-        if (site.AtomCms) Run.Log($"  AtomCMS is the site: Octane is built for {site.ClientPath} and opened by the CMS.");
+        if (site.HasCms) Run.Log($"  {site.CmsName} is the site: Octane is built for {site.ClientPath} and opened by the CMS.");
         Run.Done(site.Url);
 
         // Renderer first: Octane builds against its sources and node_modules.

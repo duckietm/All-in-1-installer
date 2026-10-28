@@ -692,6 +692,23 @@ The sidebar has an **ADDONS** section for things that go on top of a finished se
 The addons and Tools use the login from the start of the program: there is no separate login per page. **Back**
 returns to the dashboard and keeps the login (and the SQL Editor's database connection) open.
 
+### CMS
+
+**Addons → CMS** first asks **Would you like another CMS?**: **AtomCMS** (set up completely, below) or **My own
+CMS** (from a GitHub link or a ZIP file, see [Your own CMS](#your-own-cms)). Both work the same way for the hotel: the
+CMS is the website and Octane moves to **/client**, and both need a finished server installation. One CMS is the
+website at a time; switching keeps the other one's files.
+
+![The CMS question](docs/screenshots/cms-question.png)
+
+**Ports.** Every CMS gets its own NGINX site (`/etc/nginx/sites-available/cms-<name>`) on 127.0.0.1, on the first
+free port from **85 to 95** (85 is the hotel site, so usually 86); a CMS keeps its port when the addon runs again.
+Traefik sends `/ws` and Polaris' own `/api` paths to Polaris, `/client`, `/gamedata` and `/custom` to the hotel site
+on port 85, and the rest of the address to the CMS. `/opt/traefik/hotel.env` remembers the CMS (`CMS`, `CMS_NAME`,
+`CMS_PORT`), so the Web access and Octane steps keep this layout when they run again. The CMS' log lines go to the
+hotel site's logs, so **Debug → NGINX** shows them. An AtomCMS set up before CMSes had their own port keeps working
+as it was (served by the hotel site); running the AtomCMS addon again moves it to its own port.
+
 ### AtomCMS
 
 [AtomCMS](https://github.com/ObjectRetros/atomcms) becomes the hotel's website: visitors register and
@@ -737,11 +754,11 @@ It asks for the hotel's name, then:
    `<url>/gamedata/`, `apiBaseUrl` stays `<url>`, through Traefik), `renderer-config.json` gets
    `"login.screen.enabled": false` and `"habbicons.asset.root": "/client/habbicons"`, and Octane is rebuilt. `build.sh` puts the `--base` back after a git pull,
    and the Octane clone step undoes only that change before it pulls.
-7. **NGINX and Traefik**: the hotel site's root becomes `/var/www/atomcms/public` (PHP 8.5 through PHP-FPM),
-   with Octane's `dist/` on `/client/`; `/gamedata/` stays as it is. AtomCMS has an `/api` of its own, so
-   Traefik now sends only Polaris' paths to the emulator: `/ws`, `/nitro-sec` and
-   `/api/{auth,authx,badges,cms,emustats,health,housekeeping,maintenance,public,wired}`. Everything else goes to NGINX.
-   `/opt/traefik/hotel.env` gets `CMS=atom`, so the Web access and Octane steps keep this layout when they run again.
+7. **NGINX and Traefik**: AtomCMS' own NGINX site serves `/var/www/atomcms/public` (PHP 8.5 through PHP-FPM) on a
+   free port (see Ports above); the hotel site keeps Octane's `dist/` on `/client/` and `/gamedata/`. AtomCMS has an
+   `/api` of its own, so Traefik sends only Polaris' paths to the emulator: `/ws`, `/nitro-sec` and
+   `/api/{auth,authx,badges,cms,emustats,health,housekeeping,maintenance,public,wired}`.
+   `/opt/traefik/hotel.env` gets `CMS=atom` and the port.
 8. **Test** through Traefik: the CMS, `/client/`, AtomCMS' `/api/online-count` and Polaris' `/api/health`.
 9. **Installation key**: AtomCMS makes the key for its web installer on the first visit, so the step opens
    `/installation` and reads the key from `website_installation` (adding one itself if there is none). The key
@@ -753,6 +770,37 @@ administrator (``UPDATE users SET `rank` = 7 WHERE username = 'YourName';``); th
 Captcha keys (Turnstile / reCAPTCHA) go in `/var/www/atomcms/.env`. To update AtomCMS later, run the addon again.
 
 ![AtomCMS completed](docs/screenshots/atomcms-completed.png)
+
+### Your own CMS
+
+**Addons → CMS → My own CMS** makes your own CMS (or any website) the hotel's website, the same way as AtomCMS: the
+CMS on the site, Octane on **/client** (with `--base=/client/`, `/client/configuration/` and its login screen off,
+because the CMS logs in), and only Polaris' own `/api` paths to the emulator. It asks:
+
+- **Where it comes from**: a **GitHub link** (`https://github.com/owner/cms.git`; the server clones it, and a later
+  run updates it with `git pull`) or a **ZIP file** from this computer. A private repository cannot be cloned: the
+  step says so instead of waiting for a password; download it as a ZIP then. A ZIP with one folder at the top (like
+  GitHub's **Download ZIP**) is unpacked without that extra folder.
+- **Folder name**: the CMS goes to `/var/www/<name>`. Lower case letters and digits only, at most 12 (from a GitHub
+  link it is filled in with the repository's name). Names of the hotel's own folders are refused.
+- **PHP or static**: PHP gets PHP 8.5 through PHP-FPM, like AtomCMS; a static website (HTML, CSS, JavaScript) is
+  served as files.
+- **Root folder**: the folder inside the CMS with the start page (`index.php` / `index.html`), which visitors'
+  browsers get; everything outside it (such as the settings with passwords) stays hidden. Laravel-based CMSes use
+  `/public`; when the start page is in the top folder, enter `/`. A root that does not exist is refused, with the
+  folders that are there.
+
+A folder that already has other content is moved aside (`<folder>.bak-<date>`, nothing is deleted) when you choose to.
+The folder belongs to `www-data`. Then Octane is rebuilt for `/client`, the CMS gets its own NGINX site (see Ports
+above) and Traefik its route, and the CMS, `/client/` and Polaris' `/api/health` are tested through Traefik (an error
+page of the CMS is fine at this point: its database is not set yet).
+
+**The database is yours to set up**: the installer cannot know the settings of a CMS it does not know. The last page
+shows the login to use: the **cms** account the server installation made (host 127.0.0.1, port 3306, the hotel
+database, the user and its password, from `configuration/database/<server>/mariadb.txt`), never root. Packages your
+CMS needs (`composer install`, `npm run build`) run in **Tools → SSH terminal**, in the CMS folder.
+
+![Your own CMS](docs/screenshots/custom-cms-step.png)
 
 ### Deploy Assets
 
@@ -1128,7 +1176,8 @@ SourceCode/
   App/Professional/Views/WebAccessStep.cs Web access page (Cloudflare, http/https, address)
   App/Professional/Views/OctaneStep.cs    Octane page
   App/Professional/Views/HardenStep.cs    Harden page
-  App/Professional/Views/AtomCmsStep.cs   AtomCMS addon page
+  App/Professional/Views/AtomCmsStep.cs   CMS addon: AtomCMS
+  App/Professional/Views/CustomCmsStep.cs CMS addon: your own CMS (GitHub link or ZIP, PHP or static, root folder)
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata
@@ -1173,6 +1222,8 @@ SourceCode/
   Remote/SshLoginInstaller.cs             sshd: password login off (drop-in in sshd_config.d) or on again
   Remote/HotelSite.cs                     The hotel's NGINX site (Octane on /, or AtomCMS with Octane on /client/)
   Remote/AtomCmsInstaller.cs              AtomCMS: .env, composer, migrations and settings, theme build, tests
+  Remote/CustomCmsInstaller.cs            Your own CMS: Git access, ZIP, root folder, tests
+  Remote/CmsSite.cs                       A CMS' own NGINX site on the first free port from 85 to 95
   Remote/AssetSync.cs                     Deploy Assets: compare with /var/www/gamedata, upload as a tar stream
   Remote/UiTextsInstaller.cs              Installs UITexts_<language>.jsonc.example as gamedata/config/UITexts.jsonc
   Remote/EmulatorAssetsInstaller.cs       Polaris' / the installer's Assets (images, hotel view, badge parts) into gamedata, missing files only
