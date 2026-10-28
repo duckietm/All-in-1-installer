@@ -30,6 +30,9 @@ vi.mock("next/navigation", () => ({
 	},
 }));
 vi.mock("@/lib/auth", () => ({ auth: state.auth }));
+vi.mock("@/lib/admin/min-staff-rank", () => ({
+	getMinStaffRank: async () => 7,
+}));
 vi.mock("@/lib/rate-limit", () => ({
 	rateLimit: state.rateLimit,
 	clientIp: state.clientIp,
@@ -176,11 +179,23 @@ describe("buyShopArticle", () => {
 	});
 
 	it("raises the buyer rank when the package grants a higher rank", async () => {
-		state.articleRows = [{ ...ARTICLE, giveRank: 7 }];
+		state.articleRows = [{ ...ARTICLE, giveRank: 5 }];
 		await expect(buyShopArticle(shopForm())).rejects.toThrow(
 			"/shop?category=1&bought=1",
 		);
 		expect(state.update).toHaveBeenCalledWith(
+			User,
+			expect.objectContaining({ rank: 5 }),
+			expect.anything(),
+		);
+	});
+
+	it("never grants a staff rank, even when a package was saved with one", async () => {
+		state.articleRows = [{ ...ARTICLE, giveRank: 7 }];
+		await expect(buyShopArticle(shopForm())).rejects.toThrow(
+			"/shop?category=1&bought=1",
+		);
+		expect(state.update).not.toHaveBeenCalledWith(
 			User,
 			expect.objectContaining({ rank: 7 }),
 			expect.anything(),

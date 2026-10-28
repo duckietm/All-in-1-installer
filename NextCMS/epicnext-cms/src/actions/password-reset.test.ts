@@ -80,8 +80,8 @@ beforeEach(() => {
 
 describe("requestReset", () => {
 	it("sends a reset email when the user exists", async () => {
-		selectLimit.mockResolvedValue([{ id: 1 }]);
-		selectWhere.mockResolvedValue([{ id: 1 }]);
+		selectLimit.mockResolvedValue([{ id: 1, mail: "user@example.com" }]);
+		selectWhere.mockResolvedValue([{ id: 1, mail: "user@example.com" }]);
 
 		const fd = new FormData();
 		fd.set("email", "user@example.com");
@@ -105,6 +105,19 @@ describe("requestReset", () => {
 		fd.set("email", "unknown@example.com");
 
 		await expect(requestReset(fd)).rejects.toThrow("redirect");
+		expect(mockSendMail).not.toHaveBeenCalled();
+	});
+
+	it("does not send a link to a look-alike address the collation matches", async () => {
+		// utf8mb4_unicode_ci treats "exámple" and "example" as equal.
+		selectLimit.mockResolvedValue([{ id: 1, mail: "user@example.com" }]);
+		selectWhere.mockResolvedValue([{ id: 1, mail: "user@example.com" }]);
+
+		const fd = new FormData();
+		fd.set("email", "user@exámple.com");
+
+		await expect(requestReset(fd)).rejects.toThrow("redirect");
+		expect(insertOnDup).not.toHaveBeenCalled();
 		expect(mockSendMail).not.toHaveBeenCalled();
 	});
 

@@ -22,6 +22,12 @@ vi.mock("@/lib/permissions", async () => {
 	};
 });
 
+// The rank check reads the target from the database; here it only answers.
+const mockGuardRank = vi.hoisted(() =>
+	vi.fn(async () => ({ username: "bob", rank: 1 })),
+);
+vi.mock("@/lib/admin/rank-guard", () => ({ guardRank: mockGuardRank }));
+
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/admin/authorization-events", () => ({
 	logAuthorizationEvent: vi.fn(),
@@ -247,6 +253,21 @@ describe("disconnectUser", () => {
 		const result = await disconnectUser({ userId: 5, username: " " });
 		expect(result.ok).toBe(false);
 		expect(result.error).toBe("Validation failed");
+	});
+});
+
+describe("rank check on user-targeted actions", () => {
+	it("refuses to run a command as a user of the same or a higher rank", async () => {
+		const { ActionError } = await import("@/lib/safe-action-shared");
+		mockGuardRank.mockRejectedValueOnce(
+			new ActionError("Cannot modify user with equal or higher rank"),
+		);
+		const result = await executeCommand({
+			userId: 1,
+			command: ":giverank me 7",
+		});
+		expect(result.ok).toBe(false);
+		expect(mockExecuteCommand).not.toHaveBeenCalled();
 	});
 });
 

@@ -6,6 +6,12 @@ const state = vi.hoisted(() => ({
 	set: null as any,
 }));
 
+// The rank check reads the target from the database; here it only answers.
+const mockGuardRank = vi.hoisted(() =>
+	vi.fn(async () => ({ username: "bob", rank: 1 })),
+);
+vi.mock("@/lib/admin/rank-guard", () => ({ guardRank: mockGuardRank }));
+
 vi.mock("@/lib/db", async () => {
 	const schema = await import("@/db/schema");
 	const { createFakeDb } = await import("@/test/fake-db");

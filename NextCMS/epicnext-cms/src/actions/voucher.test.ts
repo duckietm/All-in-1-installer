@@ -42,13 +42,20 @@ const hoistedUpdateSetObj = vi.hoisted(() => ({
 	set: vi.fn(() => ({ where: hoistedUpdateWhere })),
 }));
 
-vi.mock("@/lib/db", () => ({
-	db: {
+const hoistedDb = vi.hoisted(() => {
+	const db = {
 		select: vi.fn(() => ({ from: hoistedSelectFrom })),
 		insert: vi.fn(() => ({ values: hoistedInsertValues })),
 		update: vi.fn(() => hoistedUpdateSetObj),
 		delete: vi.fn(() => ({ where: hoistedDeleteWhere })),
-	},
+		// The claim and the redemption row share one transaction.
+		transaction: vi.fn(async (fn) => fn(db)),
+	};
+	return db;
+});
+
+vi.mock("@/lib/db", () => ({
+	db: hoistedDb,
 	WebsiteShopVouchers: {
 		id: "voucher.id",
 		code: "voucher.code",
@@ -145,6 +152,7 @@ describe("redeem action", () => {
 			.mockResolvedValueOnce([]) // not used yet
 			.mockResolvedValueOnce([{ maxUses: 10, useCount: 3 }]); // updated count
 
+		hoistedUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
 		const result = await redeem(null, fakeForm({ code: "VALIDCODE" }));
 		expect(result?.ok).toBe(true);
 		expect(result?.message).toContain("500 credits");
@@ -155,5 +163,35 @@ describe("redeem action", () => {
 			500,
 		);
 		expect(db.insert).toHaveBeenCalled();
+	});
+
+	it("pays nothing when the voucher has no uses left", async () => {
+		hoistedSelectLimit
+			.mockResolvedValueOnce([
+				{ id: 10n, amount: 500, maxUses: 1, useCount: 0, expiresAt: null },
+			])
+			.mockResolvedValueOnce([]);
+		// Another redemption took the last use between the checks and the claim.
+		hoistedUpdateWhere.mockResolvedValue([{ affectedRows: 0 }]);
+		const result = await redeem(null, fakeForm({ code: "VALIDCODE" }));
+		expect(result?.ok).toBe(false);
+		expect(mockSendCurrency).not.toHaveBeenCalled();
+	});
+
+	it("pays nothing for a parallel second redemption by the same user", async () => {
+		hoistedSelectLimit
+			.mockResolvedValueOnce([
+				{ id: 10n, amount: 500, maxUses: 10, useCount: 2, expiresAt: null },
+			])
+			.mockResolvedValueOnce([]);
+		hoistedUpdateWhere.mockResolvedValue([{ affectedRows: 1 }]);
+		// The unique (user_id, voucher_id) key refuses the second row.
+		hoistedInsertValues.mockRejectedValueOnce(
+			Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY" }),
+		);
+		const result = await redeem(null, fakeForm({ code: "VALIDCODE" }));
+		expect(result?.ok).toBe(false);
+		expect(result?.message).toContain("only use each shop voucher once");
+		expect(mockSendCurrency).not.toHaveBeenCalled();
 	});
 });
