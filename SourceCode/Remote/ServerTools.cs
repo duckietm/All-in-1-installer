@@ -85,6 +85,35 @@ public static class ServerTools
     }
 
     /// <summary>
+    /// Pulls the newest traefik:v3 image and recreates the container when it changed. Its routes, settings and
+    /// certificates stay; the players are disconnected for a few seconds.
+    /// </summary>
+    public static Task UpdateTraefikAsync(ServerConnection connection, Action<string> log, CancellationToken token = default) =>
+        UpdateImageAsync(connection, "Traefik", WebAccessInstaller.TraefikDirectory, "traefik",
+            "docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print $2}'", "ss -Hltn 'sport = :80' | grep -q .", log, token);
+
+    /// <summary>docker compose pull and up -d in a service's folder, and a check that it runs (again).</summary>
+    internal static Task UpdateImageAsync(ServerConnection connection, string name, string directory, string container, string versionCommand,
+        string readyCheck, Action<string> log, CancellationToken token)
+    {
+        string script = RemoteScript.Prelude + $$"""
+            d={{directory}}
+            [ -f "$d/compose.yaml" ] || fail "{{name}} is not set up by the installer on this server ($d/compose.yaml is missing)."
+            before=$({{versionCommand}})
+            echo "> docker compose pull ({{name}} ${before:-?})"
+            docker compose -f "$d/compose.yaml" pull 2>&1 | grep -vE '^ *$' | tail -3 | sed 's/^/  /'
+            echo "> docker compose up -d   (recreates {{name}} only when its image changed)"
+            docker compose -f "$d/compose.yaml" up -d 2>&1 | grep -v '^ *$' | sed 's/^/  /'
+            for i in $(seq 1 30); do {{readyCheck}} && break; sleep 2; done
+            {{readyCheck}} || { docker logs --tail 20 {{container}} 2>&1 | sed 's/^/  /'; fail "{{name}} does not run after the update (see its log above)."; }
+            after=$({{versionCommand}})
+            if [ "$before" = "$after" ]; then echo "  {{name}} $after runs (it had the newest image)"; else echo "  {{name}} ${before:-?} → $after runs"; fi
+            docker image prune -f >/dev/null 2>&1 || true
+            """;
+        return RemoteScript.RunAsync(connection, script, log, $"Updating {name} failed", token);
+    }
+
+    /// <summary>
     /// Dumps the hotel database with CREATE DATABASE and USE to a .sql.gz and keeps the newest <see cref="KeptBackups"/>.
     /// </summary>
     public static async Task<DatabaseBackup> BackupDatabaseAsync(ServerConnection connection, Action<string> log, CancellationToken token = default)

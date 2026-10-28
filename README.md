@@ -1001,6 +1001,16 @@ port; **Log in to MariaDB** asks again.
 
 ## Settings
 
+**The dashboard's component list** shows what runs on the server, compared with what is newest: the emulator;
+**Octane and Octane Renderer** as one row (they depend on each other: both versions are shown, the new commits of both
+are counted together, and **Update** updates the renderer first, then Octane, then builds the client); AtomCMS when it is
+installed; and the Docker services **Traefik** and, once installed, **Gitea**. For those the check compares the image on
+the server with Docker Hub's newest for the same tag (`docker buildx imagetools inspect`, which reads only the
+registry's index: nothing is downloaded or changed), and shows **RESTART NEEDED** when a newer image is downloaded but
+the old container still runs. **Update** runs the matching tool on the Tools page.
+
+![The component list](docs/screenshots/dashboard-components.png)
+
 **Settings** (sidebar, under GENERAL):
 
 - **Look**: Hotel or Professional (see the top of this page).
@@ -1103,6 +1113,8 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
 | **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
 | **Update AtomCMS** | `git pull` in `/var/www/atomcms`, `composer install`, `php artisan migrate` (an installed AtomCMS only runs the new migrations; its settings and the hotel name stay) and the theme build. Octane is not touched |
+| **Update Traefik** | `docker compose pull` and `up -d` in `/opt/traefik`: the newest `traefik:v3` image, and a restart only when it changed (routes, settings and certificates stay; the players are disconnected for a few seconds) |
+| **Update Gitea** | the same for Gitea in `/opt/gitea` (`gitea/gitea:1`); the repositories and accounts stay |
 
 ### Import Plus database
 

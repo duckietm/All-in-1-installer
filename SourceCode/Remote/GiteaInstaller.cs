@@ -247,6 +247,11 @@ public static partial class GiteaInstaller
         return new GiteaResult(values.Int("PORT"), values["PASSWORD"], values["ADMIN"] == "existed", false);
     }
 
+    /// <summary>Pulls the newest gitea/gitea:1 and recreates the container when it changed; the data stays.</summary>
+    public static Task UpdateAsync(ServerConnection connection, Action<string> log, CancellationToken token = default) =>
+        ServerTools.UpdateImageAsync(connection, "Gitea", Directory, Container, $"docker exec {Container} gitea --version 2>/dev/null | awk '{{print $3}}'",
+            $"curl -fs --noproxy '*' --max-time 3 \"http://127.0.0.1:$(sed -n 's/^PORT=//p' {Directory}/.env)/api/healthz\" >/dev/null 2>&1", log, token);
+
     /// <summary>
     /// Stops and removes the container, its network and the Traefik route. With <paramref name="deleteData"/> also
     /// /opt/gitea (repositories, accounts, settings) and the image; otherwise /opt/gitea stays for an install later.

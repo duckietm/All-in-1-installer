@@ -34,6 +34,7 @@ public sealed class ToolsView
     private ServerConnection? _updatesCheckedFor;
     private ServerConnection? _lastUpdatesFor;
     private IReadOnlyList<RepositoryUpdate>? _lastUpdates;
+    private IReadOnlyList<ImageStatus>? _lastImages;
 
     /// <summary>A check for updates finished (after logging in, the Check for updates tool, or an update).</summary>
     public event Action<IReadOnlyList<RepositoryUpdate>>? UpdatesChecked;
@@ -42,17 +43,23 @@ public sealed class ToolsView
     public IReadOnlyList<RepositoryUpdate>? LastUpdates(ServerConnection connection) =>
         ReferenceEquals(_lastUpdatesFor, connection) ? _lastUpdates : null;
 
+    /// <summary>What the last check found for the Docker services (Traefik, Gitea), or null when it has not finished yet.</summary>
+    public IReadOnlyList<ImageStatus>? LastImages(ServerConnection connection) =>
+        ReferenceEquals(_lastUpdatesFor, connection) ? _lastImages : null;
+
     /// <summary>A tool runs: nothing else can start.</summary>
     public bool IsRunning => _running;
 
     /// <summary>What the dashboard's Update buttons update.</summary>
-    public enum Component { Emulator, Octane, AtomCms }
+    public enum Component { Emulator, Octane, AtomCms, Traefik, Gitea }
 
     /// <summary>Runs the update tool of a component, with its question and progress on the Tools page.</summary>
     public Task UpdateAsync(Component component) => component switch
     {
         Component.Emulator => RunToolAsync("Update emulator", UpdateEmulatorAsync),
         Component.Octane => RunToolAsync("Update Octane", UpdateOctaneAsync),
+        Component.Traefik => RunToolAsync("Update Traefik", UpdateTraefikAsync),
+        Component.Gitea => RunToolAsync("Update Gitea", UpdateGiteaAsync),
         _ => RunToolAsync("Update AtomCMS", UpdateAtomCmsAsync)
     };
 
@@ -114,8 +121,10 @@ public sealed class ToolsView
             Tool("Check for updates", "git fetch: what is new for the emulator, Octane and AtomCMS", Icons.Download, CheckUpdatesAsync),
             Tool("Update system", "apt update, upgrade and dist-upgrade", Icons.Cog, UpdateSystemAsync),
             Tool("Update emulator", "git pull, build.sh, start the new version", Icons.Server, UpdateEmulatorAsync),
-            Tool("Update Octane", "Renderer and Octane: git pull, fresh yarn install, build", Icons.Cube, UpdateOctaneAsync),
-            Tool("Update AtomCMS", "git pull, composer install, migrations, theme build", Icons.Puzzle, UpdateAtomCmsAsync));
+            Tool("Update Octane", "Octane-Renderer first, then Octane: git pull, fresh yarn install, build", Icons.Cube, UpdateOctaneAsync),
+            Tool("Update AtomCMS", "git pull, composer install, migrations, theme build", Icons.Puzzle, UpdateAtomCmsAsync),
+            Tool("Update Traefik", "The newest traefik:v3 image (Docker Hub)", Icons.Swap, UpdateTraefikAsync),
+            Tool("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", Icons.Git, UpdateGiteaAsync));
         updates.Children.Add(_updates);
         page.Children.Add(updates);
         page.Children.Add(_runHost);
@@ -615,6 +624,11 @@ public sealed class ToolsView
     {
         RunPanel run = StartRun("git fetch every clone");
         IReadOnlyList<RepositoryUpdate> updates = await Task.Run(() => ServerStatus.UpdatesAsync(connection));
+        _lastImages = await LoadImagesAsync(connection);
+        foreach (ImageStatus image in _lastImages)
+            run.Log($"  {image.Name} {image.Version ?? "?"} ({image.Image}): " +
+                    (image.Problem is { } problem ? problem : image.NewerOnHub ? $"a newer image on Docker Hub{(image.NewestVersion is null ? "" : $" ({image.NewestVersion})")}"
+                        : image.NotRestarted ? "a newer image is downloaded, not running yet" : "up to date"));
         foreach (RepositoryUpdate update in updates)
             run.Log($"  {update.Name}: on {update.Branch ?? "?"}, counted against {update.Counted ?? "?"} — " +
                     (update.SwitchesBranch ? $"updating switches it to {update.Target}; " : "") +
@@ -642,13 +656,22 @@ public sealed class ToolsView
         _updates.Bind(TextBlock.ForegroundProperty, "Pro.Subtle");
         try
         {
-            ShowUpdates(await Task.Run(() => ServerStatus.UpdatesAsync(connection)));
+            IReadOnlyList<RepositoryUpdate> updates = await Task.Run(() => ServerStatus.UpdatesAsync(connection));
+            _lastImages = await LoadImagesAsync(connection);
+            ShowUpdates(updates);
         }
         catch (Exception ex)
         {
             _updates.Text = $"Could not check for updates: {ex.Message}";
             _updates.Bind(TextBlock.ForegroundProperty, "Pro.Subtle");
         }
+    }
+
+    // The Docker services' check never stops the git one: a Docker Hub problem leaves them unchecked.
+    private static async Task<IReadOnlyList<ImageStatus>> LoadImagesAsync(ServerConnection connection)
+    {
+        try { return await Task.Run(() => ServerStatus.ImagesAsync(connection)); }
+        catch (ServerConnectionException) { return []; }
     }
 
     /// <summary>Puts what the check found on the update tools and on the line under them.</summary>
@@ -660,8 +683,21 @@ public sealed class ToolsView
         RepositoryUpdate[] For(params string[] directories) => updates.Where(u => directories.Contains(u.Directory)).ToArray();
 
         Caption("Update emulator", "git pull, build.sh, start the new version", For(EmulatorInstaller.Repository));
-        Caption("Update Octane", "Renderer and Octane: git pull, fresh yarn install, build",
+        Caption("Update Octane", "Octane-Renderer first, then Octane: git pull, fresh yarn install, build",
             For(OctaneInstaller.Octane, OctaneInstaller.Renderer));
+        foreach ((string tool, string description, string name) in new[]
+                 {
+                     ("Update Traefik", "The newest traefik:v3 image (Docker Hub)", "Traefik"),
+                     ("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", "Gitea")
+                 })
+        {
+            if (!_toolCaptions.TryGetValue(tool, out TextBlock? caption)) continue;
+            ImageStatus? image = _lastImages?.FirstOrDefault(i => i.Name == name);
+            caption.Text = image is null ? (name == "Gitea" ? $"not installed · {description}" : description)
+                : image.HasUpdate ? $"{(image.NewestVersion is { } v ? $"{v} available" : "update available")} · {description}"
+                : image.Problem is not null ? $"{image.Version} · {description}"
+                : $"{image.Version}, up to date · {description}";
+        }
         Caption("Update AtomCMS", "git pull, composer install, migrations, theme build", For(AtomCmsInstaller.Directory));
 
         RepositoryUpdate[] behind = updates.Where(u => u.HasUpdate).ToArray();
@@ -803,6 +839,32 @@ public sealed class ToolsView
         run.Done(site.ClientUrl);
         await FinishAsync(run, ResultKind.Success, $"Octane is updated on {site.ClientUrl}",
             $"Octane-Renderer {renderer}, Octane {octane}. Players get the new client when they reload the page.");
+        await CheckUpdatesQuietlyAsync(connection);
+    }
+
+    private async Task UpdateTraefikAsync(Window owner, ServerConnection connection)
+    {
+        if (!await ConfirmAsync(owner, "Update Traefik?",
+                "Downloads the newest traefik:v3 image and restarts Traefik when it changed. Its routes, settings and certificates stay; " +
+                "everyone in the hotel is disconnected for a few seconds.", "Update Traefik")) return;
+        RunPanel run = StartRun("docker compose pull and up -d");
+        await Task.Run(() => ServerTools.UpdateTraefikAsync(connection, run.Log));
+        run.Done("runs");
+        await FinishAsync(run, ResultKind.Success, "Traefik is updated", "It runs with the newest traefik:v3 image; its routes and certificates are the same.");
+        await CheckUpdatesQuietlyAsync(connection);
+    }
+
+    private async Task UpdateGiteaAsync(Window owner, ServerConnection connection)
+    {
+        GiteaState state = await Task.Run(() => GiteaInstaller.InspectAsync(connection));
+        if (state.Domain is null) throw new ServerConnectionException("Gitea is not installed on this server: install it with Addons → Gitea.");
+        if (!await ConfirmAsync(owner, "Update Gitea?",
+                $"Downloads the newest {GiteaInstaller.Image} image and restarts Gitea when it changed. The repositories, accounts and settings in " +
+                $"{GiteaInstaller.Directory}/data stay; {state.Domain} is away for a few seconds.", "Update Gitea")) return;
+        RunPanel run = StartRun("docker compose pull and up -d");
+        await Task.Run(() => GiteaInstaller.UpdateAsync(connection, run.Log));
+        run.Done("runs");
+        await FinishAsync(run, ResultKind.Success, "Gitea is updated", $"{state.Domain} runs the newest {GiteaInstaller.Image} image; the repositories and accounts are the same.");
         await CheckUpdatesQuietlyAsync(connection);
     }
 
