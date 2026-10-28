@@ -177,7 +177,10 @@ public static class EpicNextInstaller
             rcon=$(grep -sE '^rcon.port=' "$ini" | cut -d= -f2 | tr -d '[:space:]')
             env_set RCON_PORT "${rcon:-3001}"
             # Without Valkey/Redis on this server EpicNext keeps its cache in memory; a URL to nothing only gives errors.
-            if ss -Hltn 'sport = :6379' 2>/dev/null | grep -q .; then echo "  REDIS_URL kept (something listens on 6379)"; else env_set REDIS_URL ""; fi
+            if ss -Hltn 'sport = :6379' 2>/dev/null | grep -q .; then echo "  REDIS_URL kept (something listens on 6379)"; else
+              sed -i -E 's/^REDIS_URL=/# REDIS_URL=/' .env
+              echo "  REDIS_URL left unset (no Valkey/Redis on 6379)"
+            fi
 
             # The database login: over TCP to 127.0.0.1, as EpicNext connects.
             db=$(grep -sE '^db.database=' "$ini" | cut -d= -f2 | tr -d '[:space:]')
@@ -211,6 +214,13 @@ public static class EpicNextInstaller
             fi
             echo "  Database login: $from"
             env_set DATABASE_URL "mysql://$(enc "$dbuser"):$(enc "$dbpass")@127.0.0.1:3306/$(enc "$db")?charset=utf8mb4&connection_limit=25&connect_timeout=5"
+            # EpicNext's checks (src/env.ts) refuse an empty value for a URL or a number (such as DISCORD_WEBHOOK_URL= from
+            # .env.example), while an unset one is fine: empty settings are commented out.
+            empty=$(grep -cE '^[A-Za-z0-9_]+=("")?[[:space:]]*$' .env || true)
+            if [ "$empty" -gt 0 ]; then
+              sed -i -E 's/^([A-Za-z0-9_]+)=("")?[[:space:]]*$/# \1=   (empty: left unset by All-in-1 Installer)/' .env
+              echo "  $empty empty settings left unset (commented out): EpicNext refuses empty values"
+            fi
             chmod 640 .env
             chown www-data:www-data .env
             """;
@@ -281,6 +291,23 @@ public static class EpicNextInstaller
             else
               echo "  (no $draft in this version: the migrations make all tables)"
             fi
+            # The settings checks the build runs, in seconds instead of after minutes of building.
+            echo "> Checking .env against EpicNext's settings (src/env.ts)"
+            check=$(mktemp --suffix=.mts)
+            cat > "$check" <<'TS'
+            await import("{{Directory}}/scripts/load-env.ts");
+            try {
+            	await import("{{Directory}}/src/env.ts");
+            	console.log("  .env OK");
+            } catch (error) {
+            	const issues = (error as { issues?: { path: string[]; message: string }[] }).issues;
+            	for (const issue of issues ?? []) console.log(`  ${issue.path.join(".")}: ${issue.message}`);
+            	if (!issues) console.log(`  ${(error as Error).message}`);
+            	process.exit(1);
+            }
+            TS
+            run corepack pnpm exec tsx "$check" || { rm -f "$check"; fail "{{Directory}}/.env does not pass EpicNext's checks (see above): fix those settings and run this step again."; }
+            rm -f "$check"
             echo "> pnpm db:migrate (only the CMS' own tables; the emulator's stay as they are)"
             run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
