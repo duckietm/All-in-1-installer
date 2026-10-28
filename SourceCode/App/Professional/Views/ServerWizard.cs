@@ -44,6 +44,9 @@ public sealed class ServerWizard
     private readonly Button _openSite = new() { Padding = new Thickness(22, 9), Classes = { "primary" } };
     private Control? _finishView;
     private string? _siteUrl;
+
+    /// <summary>The address the finish page's Open button opens; without it, the hotel's.</summary>
+    public Func<string?>? OpenUrl { get; init; }
     private readonly StackPanel _buttons = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
     private readonly Control _notConnected;
 
@@ -483,7 +486,7 @@ public sealed class ServerWizard
         try
         {
             WebAccessState web = await Task.Run(() => WebAccessInstaller.InspectAsync(connection));
-            _siteUrl = web.Configured?.Url;
+            _siteUrl = OpenUrl?.Invoke() ?? web.Configured?.Url;
             string host = connection.Login.Host;
             string? ppk = Directory.Exists(ClientConfiguration.KeysDirectory(host))
                 ? Directory.GetFiles(ClientConfiguration.KeysDirectory(host), "*.ppk").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()

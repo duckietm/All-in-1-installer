@@ -111,7 +111,11 @@ public sealed class InstallerWindow : Window
         var giteaStep = new GiteaStep();
         _giteaWizard = new ServerWizard(() => Session, [giteaStep],
             (host, _, _, _, steps) => FinishedView.BuildGitea(giteaStep.Settings, giteaStep.Result, GiteaStep.GiteaLoginPath(host), steps),
-            "Your Git server", keyStep: false);
+            "Your Git server", keyStep: false)
+        {
+            // Gitea's own domain, not the hotel's.
+            OpenUrl = () => giteaStep.Settings?.Url
+        };
         var removeGiteaStep = new RemoveGiteaStep();
         _removeGiteaWizard = new ServerWizard(() => Session, [removeGiteaStep],
             (_, _, _, _, steps) => FinishedView.BuildRemoveGitea(removeGiteaStep.RemovedDomain, removeGiteaStep.DataDeleted, steps),

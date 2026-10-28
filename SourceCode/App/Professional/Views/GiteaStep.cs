@@ -109,6 +109,8 @@ public sealed class GiteaStep : InstallStep
         }
         if (state.Installed)
         {
+            // Skipped as installed: the finish page and its Open button still need Gitea's address.
+            Settings = new GiteaSettings(state.Domain!, state.Site!.Https, state.Cloudflare ?? false, "", "");
             Detected.Show(ResultKind.Success, $"Gitea {state.Version} runs on {(state.Site!.Https ? "https" : "http")}://{state.Domain}",
                 "You can skip this step, or update Gitea (its repositories and accounts stay).");
             return true;
