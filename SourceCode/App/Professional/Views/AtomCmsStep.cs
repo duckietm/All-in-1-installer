@@ -110,7 +110,7 @@ public sealed class AtomCmsStep : InstallStep
         Run.Log("> Checking the server ...");
         AtomCmsState state = await Task.Run(() => AtomCmsInstaller.InspectAsync(connection));
         if (Missing(state) is { } missing) throw new ServerConnectionException(missing);
-        WebAccessSettings site = state.Site! with { AtomCms = true, CustomCms = null };
+        WebAccessSettings site = state.Site! with { AtomCms = true, CustomCms = null, EpicNext = false };
         Run.Log($"  {site.Url}: PHP {state.PhpVersion}, Node.js {state.NodeVersion}, Octane built");
         Run.Done(site.Url);
 

@@ -5,14 +5,15 @@ namespace AllInOneInstaller.Remote;
 /// is the site and Octane moves to /client. <see cref="CmsPort"/> is the CMS' own NGINX site on 127.0.0.1 (85-95);
 /// 0 for an AtomCMS set up before that, which the hotel site on port 85 still serves itself.
 /// </summary>
-public sealed record WebAccessSettings(string Address, bool Https, bool Cloudflare, bool AtomCms = false, string? CustomCms = null, int CmsPort = 0)
+public sealed record WebAccessSettings(string Address, bool Https, bool Cloudflare, bool AtomCms = false, string? CustomCms = null, int CmsPort = 0,
+    bool EpicNext = false)
 {
     public string Scheme => Https ? "https" : "http";
-    public bool HasCms => AtomCms || CustomCms is not null;
+    public bool HasCms => AtomCms || EpicNext || CustomCms is not null;
     /// <summary>The CMS has its own NGINX site; Traefik sends it everything except /client, /gamedata, /custom and Polaris.</summary>
     public bool CmsOnOwnPort => HasCms && CmsPort > 0;
     /// <summary>"AtomCMS", the custom CMS' folder name, or null.</summary>
-    public string? CmsName => AtomCms ? "AtomCMS" : CustomCms;
+    public string? CmsName => AtomCms ? "AtomCMS" : EpicNext ? "EpicNext CMS" : CustomCms;
     /// <summary>Where Octane is served, "/" or "/client/".</summary>
     public string ClientPath => HasCms ? "/client/" : "/";
     public string ClientUrl => Url + ClientPath;
@@ -24,7 +25,7 @@ public sealed record WebAccessSettings(string Address, bool Https, bool Cloudfla
     public static WebAccessSettings? FromHotelEnv(ScriptValues values) =>
         values["conf_ADDRESS"] is { } address
             ? new WebAccessSettings(address, values["conf_SCHEME"] == "https", values.Yes("conf_CLOUDFLARE"), values["conf_CMS"] == "atom",
-                values["conf_CMS"] == "custom" ? values["conf_CMS_NAME"] : null, values.Int("conf_CMS_PORT"))
+                values["conf_CMS"] == "custom" ? values["conf_CMS_NAME"] : null, values.Int("conf_CMS_PORT"), values["conf_CMS"] == "epicnext")
             : null;
 }
 
@@ -298,9 +299,11 @@ public static class WebAccessInstaller
                   service: cms
                   priority: 1{{tls}}
             """ : "";
-        // Whole folders only: a CMS page such as /customize or /clients stays the CMS'.
+        // Whole folders only: a CMS page such as /customize or /clients stays the CMS'. EpicNext has a page of its own on
+        // /client (it loads Octane from /client/), so only /client/ goes to the hotel site there.
         string hotelRule = settings.CmsOnOwnPort
-            ? host + "(" + string.Join(" || ", new[] { "client", "gamedata", "custom" }.Select(f => $"Path(`/{f}`) || PathPrefix(`/{f}/`)")) + ")"
+            ? host + "(" + string.Join(" || ", new[] { "client", "gamedata", "custom" }
+                .Select(f => f == "client" && settings.EpicNext ? "PathPrefix(`/client/`)" : $"Path(`/{f}`) || PathPrefix(`/{f}/`)")) + ")"
             : siteRule;
         string cmsService = settings.CmsOnOwnPort ? $$"""
 
@@ -340,7 +343,7 @@ public static class WebAccessInstaller
             ADDRESS={{settings.Address}}
             SCHEME={{settings.Scheme}}
             CLOUDFLARE={{(settings.Cloudflare ? "yes" : "no")}}
-            CMS={{(settings.AtomCms ? "atom" : settings.CustomCms is not null ? "custom" : "none")}}
+            CMS={{(settings.AtomCms ? "atom" : settings.EpicNext ? "epicnext" : settings.CustomCms is not null ? "custom" : "none")}}
             CMS_NAME={{settings.CustomCms ?? ""}}
             CMS_PORT={{(settings.CmsOnOwnPort ? settings.CmsPort.ToString() : "")}}
             EOF

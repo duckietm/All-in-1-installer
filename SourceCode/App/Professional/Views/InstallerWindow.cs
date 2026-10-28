@@ -51,6 +51,7 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _wizard;
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _customCmsWizard;
+    private readonly ServerWizard _epicNextWizard;
     private readonly ServerWizard _removeCmsWizard;
     private readonly ServerWizard _giteaWizard;
     private readonly ServerWizard _removeGiteaWizard;
@@ -77,10 +78,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _epicNextWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.EpicNext => _epicNextWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -104,6 +105,10 @@ public sealed class InstallerWindow : Window
             (host, _, site, _, steps) => FinishedView.BuildCustomCms(site, customCmsStep.CmsName, customCmsStep.CmsRoot, customCmsStep.CmsUsesPhp,
                 ClientConfiguration.LoadDatabaseCredentials(host), host, steps),
             "Database settings", keyStep: false);
+        var epicNextStep = new EpicNextStep();
+        _epicNextWizard = new ServerWizard(() => Session, [epicNextStep],
+            (_, _, site, _, steps) => FinishedView.BuildEpicNext(site, epicNextStep.AtomTables, steps),
+            "First admin", keyStep: false);
         var removeCmsStep = new RemoveCmsStep();
         _removeCmsWizard = new ServerWizard(() => Session, [removeCmsStep],
             (_, _, site, _, steps) => FinishedView.BuildRemoveCms(site, removeCmsStep.RemovedName, removeCmsStep.FilesDeleted, steps),
@@ -259,6 +264,7 @@ public sealed class InstallerWindow : Window
             case Page.Install: ShowInstallNewServer(); break;
             case Page.AtomCms: ShowAtomCmsWizard(); break;
             case Page.CustomCms: ShowCustomCmsWizard(); break;
+            case Page.EpicNext: ShowEpicNextWizard(); break;
             case Page.RemoveCms: ShowRemoveCmsWizard(); break;
             case Page.Gitea: ShowGiteaWizard(); break;
             case Page.RemoveGitea: ShowRemoveGiteaWizard(); break;
@@ -491,7 +497,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, Gitea, RemoveGitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, EpicNext, RemoveCms, Gitea, RemoveGitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -505,6 +511,7 @@ public sealed class InstallerWindow : Window
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.CustomCms => ("Your own CMS", "Addon: your own CMS as the hotel's website, Octane on /client."),
+            Page.EpicNext => ("EpicNext CMS", "Addon: EpicNext CMS (Next.js) as the hotel's website, Octane on /client."),
             Page.Gitea => ("Gitea", "Addon: your own Git server in Docker, on a domain of its own behind Traefik."),
             Page.RemoveGitea => ("Remove Gitea", "Addon: Gitea's container and route away; its data only when you choose."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
@@ -591,30 +598,34 @@ public sealed class InstallerWindow : Window
     }
 
     private void ShowInstallNewServer() => ShowWizard(Page.Install, _installNavigation, _wizard);
-    private enum CmsChoice { Atom, Custom, Remove }
+    private enum CmsChoice { Atom, EpicNext, Custom, Remove }
 
     /// <summary>Addons → CMS: AtomCMS or your own CMS first, unless one of them is running.</summary>
     private async void ShowCms()
     {
         if (_atomWizard.IsBusy) { ShowAtomCmsWizard(); return; }
         if (_customCmsWizard.IsBusy) { ShowCustomCmsWizard(); return; }
+        if (_epicNextWizard.IsBusy) { ShowEpicNextWizard(); return; }
         if (_removeCmsWizard.IsBusy) { ShowRemoveCmsWizard(); return; }
         CmsChoice? choice = await ChoiceDialog.ShowAsync<CmsChoice?>(this, "CMS", "Would you like another CMS?",
             "The CMS is the hotel's website: visitors register and log in there, and it opens the hotel (Octane) on /client. " +
-            "The installer sets up AtomCMS completely. Your own CMS comes from a GitHub link or a ZIP file: the installer sets up NGINX " +
+            "The installer sets up AtomCMS and EpicNext CMS completely. Your own CMS comes from a GitHub link or a ZIP file: the installer sets up NGINX " +
             "(with PHP or as a static website), Traefik and Octane on /client for it, and you fill in its database settings.",
             null,
             new ChoiceDialog.Option<CmsChoice?>("AtomCMS", "The CMS of github.com/ObjectRetros/atomcms, set up completely (recommended).", CmsChoice.Atom, Primary: true),
+            new ChoiceDialog.Option<CmsChoice?>("EpicNext CMS", "The Next.js CMS of gitea.epicnabbo.nl/Remco/EpicNext-Cms, built and run on the server (no PHP, no Docker).", CmsChoice.EpicNext),
             new ChoiceDialog.Option<CmsChoice?>("My own CMS", "Another CMS or website: from a GitHub link or a ZIP file.", CmsChoice.Custom),
             new ChoiceDialog.Option<CmsChoice?>("Remove the CMS", "Octane is the website again, with its own login; NGINX and Traefik as after the server installation.", CmsChoice.Remove),
             new ChoiceDialog.Option<CmsChoice?>("Cancel", "Stay on this page.", null));
         if (choice == CmsChoice.Atom) ShowAtomCmsWizard();
+        else if (choice == CmsChoice.EpicNext) ShowEpicNextWizard();
         else if (choice == CmsChoice.Custom) ShowCustomCmsWizard();
         else if (choice == CmsChoice.Remove) ShowRemoveCmsWizard();
     }
 
     private void ShowAtomCmsWizard() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
     private void ShowCustomCmsWizard() => ShowWizard(Page.CustomCms, _atomNavigation, _customCmsWizard);
+    private void ShowEpicNextWizard() => ShowWizard(Page.EpicNext, _atomNavigation, _epicNextWizard);
     private void ShowRemoveCmsWizard() => ShowWizard(Page.RemoveCms, _atomNavigation, _removeCmsWizard);
     private enum GiteaChoice { Install, Remove }
 
@@ -1265,9 +1276,10 @@ public sealed class InstallerWindow : Window
             var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
             if (image.HasUpdate)
             {
-                Border chip = Chip(image.NewestVersion is { } v ? $"{v.TrimStart('v')} AVAILABLE" : image.NewerOnHub ? "UPDATE AVAILABLE" : "RESTART NEEDED",
+                Border chip = Chip(image.NewestVersion is { } v ? $"{v.TrimStart('v')} AVAILABLE" : image.NewerOnHub ? "UPDATE AVAILABLE" : "NEW IMAGE WAITING",
                     "Pro.WarningBack", "Pro.WarningText");
-                ToolTip.SetTip(chip, image.NewerOnHub ? $"Docker Hub has a newer {image.Image}." : "A newer image is downloaded, but the container still runs the old one.");
+                ToolTip.SetTip(chip, image.NewerOnHub ? $"Docker Hub has a newer {image.Image}."
+                    : $"A newer {image.Image} is downloaded, but the container still runs the old one. Update starts the new one; a docker restart keeps the old image (it restarts the same container).");
                 state.Children.Add(chip);
                 var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
                 ToolTip.SetTip(button, traefik ? "Pulls the newest image and restarts Traefik: the players are disconnected for a few seconds."

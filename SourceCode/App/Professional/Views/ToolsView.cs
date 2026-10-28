@@ -628,7 +628,7 @@ public sealed class ToolsView
         foreach (ImageStatus image in _lastImages)
             run.Log($"  {image.Name} {image.Version ?? "?"} ({image.Image}): " +
                     (image.Problem is { } problem ? problem : image.NewerOnHub ? $"a newer image on Docker Hub{(image.NewestVersion is null ? "" : $" ({image.NewestVersion})")}"
-                        : image.NotRestarted ? "a newer image is downloaded, not running yet" : "up to date"));
+                        : image.NotRestarted ? "a newer image is downloaded, but the container still runs the old one (Update starts it)" : "up to date"));
         foreach (RepositoryUpdate update in updates)
             run.Log($"  {update.Name}: on {update.Branch ?? "?"}, counted against {update.Counted ?? "?"} — " +
                     (update.SwitchesBranch ? $"updating switches it to {update.Target}; " : "") +

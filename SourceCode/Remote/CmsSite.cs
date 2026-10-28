@@ -1,7 +1,7 @@
 namespace AllInOneInstaller.Remote;
 
 /// <summary>
-/// A CMS' own NGINX site (AtomCMS or your own CMS) on 127.0.0.1, on the first free port from 85 to 95. Traefik sends it
+/// A CMS' own NGINX site (AtomCMS, EpicNext or your own CMS) on 127.0.0.1, on the first free port from 85 to 95. Traefik sends it
 /// the hotel's address except /client, /gamedata and /custom (the hotel site on port 85) and Polaris' paths.
 /// </summary>
 public static class CmsSite
@@ -12,7 +12,7 @@ public static class CmsSite
     /// <summary>/etc/nginx/sites-available/cms-&lt;name&gt;.</summary>
     public static string File(string name) => $"/etc/nginx/sites-available/cms-{name}";
 
-    private static string Config(WebAccessSettings site, string name, string root, bool php)
+    private static string Config(WebAccessSettings site, string name, string root, bool php, string? proxy)
     {
         string serverName = site.IsIpAddress ? "_" : site.Address.StartsWith("www.", StringComparison.Ordinal)
             ? $"{site.Address} {site.Address[4..]}" : $"{site.Address} www.{site.Address}";
@@ -27,17 +27,40 @@ public static class CmsSite
                     deny all;
                 }
             """;
+        // A CMS with a server of its own (EpicNext's Next.js) gets every request, websockets and Server-Sent Events included.
+        string proxyLocations = $$"""
+                client_max_body_size 20m;
+
+                location / {
+                    proxy_pass {{proxy}};
+                    proxy_http_version 1.1;
+                    proxy_set_header Host              $host;
+                    proxy_set_header X-Real-IP         $remote_addr;
+                    # The visitor, as real_ip found it behind Traefik (and Cloudflare).
+                    proxy_set_header X-Forwarded-For   $remote_addr;
+                    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+                    proxy_set_header X-Forwarded-Host  $host;
+                    proxy_set_header Upgrade           $http_upgrade;
+                    proxy_set_header Connection        "upgrade";
+                    proxy_buffering    off;
+                    proxy_read_timeout 3600s;
+                }
+            """;
+        string what = proxy is not null ? $"Passed to {proxy}" : php ? $"PHP 8.5 from {root}" : $"A static website from {root}";
+        // A blank line after server_name, then root and index.
+        string files = proxy is not null ? "" : "\n" + $$"""
+
+                root {{root}};
+                index {{(php ? "index.php index.html" : "index.html index.htm")}};
+            """;
         return $$"""
-            # {{name}}: the hotel's website (written by All-in-1 Installer, Addons → CMS). {{(php ? "PHP 8.5" : "A static website")}} from {{root}}.
+            # {{name}}: the hotel's website (written by All-in-1 Installer, Addons → CMS). {{what}}.
             # Traefik (/opt/traefik) passes {{site.Url}} here, except /client, /gamedata and /custom (the hotel site on
             # 127.0.0.1:{{HotelSite.Port}}) and Polaris' /ws and /api paths.
 
             server {
                 listen 127.0.0.1:@PORT@;
-                server_name {{serverName}};
-
-                root {{root}};
-                index {{(php ? "index.php index.html" : "index.html index.htm")}};
+                server_name {{serverName}};{{files}}
 
                 autoindex     off;
                 server_tokens off;
@@ -54,7 +77,7 @@ public static class CmsSite
                 access_log {{HotelSite.LogDirectory}}/access.log;
                 error_log  {{HotelSite.LogDirectory}}/error.log;
 
-            {{(php ? HotelSite.PhpLocations : StaticLocations)}}
+            {{(proxy is not null ? proxyLocations : php ? HotelSite.PhpLocations : StaticLocations)}}
             }
             """;
     }
@@ -63,7 +86,7 @@ public static class CmsSite
     /// Writes and enables the site, on the port it had or the first free one from 85 to 95, and disables the site of
     /// another CMS (its files stay). Prints PORT=. Does not change Traefik.
     /// </summary>
-    public static string WriteScript(WebAccessSettings site, string name, string root, bool php) => $$"""
+    public static string WriteScript(WebAccessSettings site, string name, string root, bool php, string? proxy = null) => $$"""
         [ -d /etc/nginx/sites-available ] || fail "NGINX is not installed with sites-available. Run the NGINX step first."
         f={{File(name)}}
         {{LocalPorts.Functions}}
@@ -73,9 +96,9 @@ public static class CmsSite
         install -d -m 755 {{HotelSite.LogDirectory}}
         # The proxies the visitor's address is read past: servers set up before this file existed do not have it yet.
         {{HotelSite.RealIpScript(site)}}
-        echo "> $f: listen 127.0.0.1:$port, root {{root}} ({{(php ? "PHP" : "static")}})"
+        echo "> $f: listen 127.0.0.1:$port, {{(proxy is not null ? $"passed to {proxy}" : $"root {root} ({(php ? "PHP" : "static")})")}}"
         cat > "$f" <<'SITE'
-        {{Config(site, name, root, php)}}
+        {{Config(site, name, root, php, proxy)}}
         SITE
         sed -i "s#@PORT@#$port#" "$f"
         enabled=/etc/nginx/sites-enabled/cms-{{name}}
@@ -94,6 +117,11 @@ public static class CmsSite
           rm -f "$other"
           echo "  $(basename "$other") is no longer the website (disabled; its files and sites-available/$(basename "$other") stay)"
         done
+        # EpicNext runs a server of its own: off with its site.
+        if [ {{name}} != {{EpicNextInstaller.SiteName}} ] && [ -d /run/systemd/system ] && systemctl is-enabled --quiet {{EpicNextInstaller.Service}} 2>/dev/null; then
+          systemctl disable --now {{EpicNextInstaller.Service}} >/dev/null 2>&1 || true
+          echo "  {{EpicNextInstaller.Service}} stopped and off at boot (its files stay)"
+        fi
         if [ -d /run/systemd/system ]; then systemctl reload nginx || systemctl restart nginx; else nginx -s reload 2>/dev/null || service nginx restart; fi
         sleep 1
         code=$(curl -s --noproxy '*' -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/" || true)
@@ -138,9 +166,9 @@ public static class CmsSite
 
     /// <summary>Runs <see cref="WriteScript"/>; returns the port.</summary>
     public static async Task<int> ApplyAsync(ServerConnection connection, WebAccessSettings site, string name, string root, bool php,
-        Action<string> log, CancellationToken token = default)
+        Action<string> log, CancellationToken token = default, string? proxy = null)
     {
-        ScriptValues values = await RemoteScript.RunCapturingAsync(connection, RemoteScript.Prelude + WriteScript(site, name, root, php), log,
+        ScriptValues values = await RemoteScript.RunCapturingAsync(connection, RemoteScript.Prelude + WriteScript(site, name, root, php, proxy), log,
             $"Setting up the NGINX site for {name} failed", ["PORT"], token);
         return values.Int("PORT") is > 0 and var port ? port : throw new ServerConnectionException($"The NGINX site for {name} has no port.");
     }

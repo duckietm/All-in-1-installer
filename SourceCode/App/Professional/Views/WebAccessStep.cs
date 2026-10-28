@@ -146,7 +146,8 @@ public sealed partial class WebAccessStep : InstallStep
         // The CMS addon stays in place (CMS on the site, Octane on /client).
         settings = settings with
         {
-            AtomCms = state.Configured?.AtomCms == true, CustomCms = state.Configured?.CustomCms, CmsPort = state.Configured?.CmsPort ?? 0
+            AtomCms = state.Configured?.AtomCms == true, CustomCms = state.Configured?.CustomCms, CmsPort = state.Configured?.CmsPort ?? 0,
+            EpicNext = state.Configured?.EpicNext == true
         };
         Run.Log($"  {settings.Url}, Cloudflare: {(settings.Cloudflare ? "yes" : "no")}");
         Run.Log(state.DockerVersion is null ? "  Docker Engine is not installed yet." : $"  Docker {state.DockerVersion} is installed.");
