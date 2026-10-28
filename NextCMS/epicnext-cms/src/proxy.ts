@@ -118,7 +118,7 @@ export const config = {
 	// carry their own long-lived Cache-Control and must not be rewritten by the
 	// HTML/asset cache logic. In production the edge proxy also fronts
 	// `/imaging` straight to the renderer, so the CMS route never sees that
-	// traffic; `/api/imaging/*` (avatars, badges) is NOT excluded and therefore
+	// traffic; `/cms_api/imaging/*` (avatars, badges) is NOT excluded and therefore
 	// still passes through the anti-DDoS gate and keeps its asset headers.
 	matcher: [
 		"/((?!_next/static|_next/image|assets|favicon.ico|swf|nitro-assets|imaging|images).*)",

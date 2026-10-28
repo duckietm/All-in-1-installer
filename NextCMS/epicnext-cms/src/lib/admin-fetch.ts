@@ -1,5 +1,5 @@
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const CSRF_ENDPOINT = "/api/admin/csrf";
+const CSRF_ENDPOINT = "/cms_api/admin/csrf";
 const CSRF_ERROR = "Invalid or missing CSRF token";
 const CSRF_TOKEN_LENGTH = 64;
 

@@ -140,7 +140,7 @@ test.describe("rejects malformed figures", () => {
 		test(name, async ({ request }) => {
 			const response = await getThroughEdge(
 				request,
-				`/api/imaging/avatar${query}`,
+				`/cms_api/imaging/avatar${query}`,
 			);
 			expect(response.status()).toBe(400);
 		});
@@ -171,14 +171,14 @@ test("collapses a burst of concurrent requests for one figure", async ({
 test("the badge endpoint serves an image and revalidates", async ({
 	request,
 }) => {
-	const first = await getThroughEdge(request, "/api/imaging/badge?code=ADM");
+	const first = await getThroughEdge(request, "/cms_api/imaging/badge?code=ADM");
 	expect(first.status()).toBe(200);
 	expect(first.headers()["content-type"]).toContain("image/");
 	expect(first.headers()["access-control-allow-origin"]).toBe("*");
 	const etag = first.headers().etag;
 	expect(etag).toBeTruthy();
 
-	const second = await getThroughEdge(request, "/api/imaging/badge?code=ADM", {
+	const second = await getThroughEdge(request, "/cms_api/imaging/badge?code=ADM", {
 		headers: { "if-none-match": etag as string },
 	});
 	expect(second.status()).toBe(304);
@@ -189,7 +189,7 @@ test("the badge endpoint can resolve from a local source", async ({
 }) => {
 	const response = await getThroughEdge(
 		request,
-		"/api/imaging/badge?code=ADM&source=local",
+		"/cms_api/imaging/badge?code=ADM&source=local",
 	);
 	expect(response.status()).toBe(200);
 	expect(response.headers()["content-type"]).toContain("image/");
@@ -208,7 +208,7 @@ test.describe("rejects malformed badge codes", () => {
 		test(name, async ({ request }) => {
 			const response = await getThroughEdge(
 				request,
-				`/api/imaging/badge${query}`,
+				`/cms_api/imaging/badge${query}`,
 			);
 			expect(response.status()).toBe(400);
 		});
@@ -218,7 +218,7 @@ test.describe("rejects malformed badge codes", () => {
 test("the badge preflight advertises GET", async ({ request }) => {
 	const response = await fetchThroughEdge(
 		request,
-		"/api/imaging/badge?code=ADM",
+		"/cms_api/imaging/badge?code=ADM",
 		{
 			method: "OPTIONS",
 		},

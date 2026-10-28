@@ -29,7 +29,7 @@ describe("theme import/export format", () => {
 					color_primary_dark: "#fb7185",
 					custom_css: "body{}",
 					unknown_key: "ignored",
-					background_image: "/api/media/bg.png",
+					background_image: "/cms_api/media/bg.png",
 					bad_color: "url(javascript:alert(1))",
 				},
 			},
@@ -41,12 +41,12 @@ describe("theme import/export format", () => {
 				color_primary: "#e11d48",
 				color_primary_dark: "#fb7185",
 				custom_css: "body{}",
-				background_image: "/api/media/bg.png",
+				background_image: "/cms_api/media/bg.png",
 			},
 		});
 	});
 
-	it("normalises the /api/themes/export palette shape", () => {
+	it("normalises the /cms_api/themes/export palette shape", () => {
 		const result = normalizeImportedTheme({
 			palette: {
 				light: { color_primary: "#f59e0b", color_text: "#0f172a" },

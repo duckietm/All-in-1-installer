@@ -19,7 +19,7 @@ export function useFurnitureInspection(classnames: string[]) {
 				const names = JSON.parse(key).classnames as string[];
 				const inspected: FurnitureInspection[] = [];
 				for (let offset = 0; offset < names.length; offset += 500) {
-					const res = await adminFetch("/api/admin/studio/inspect", {
+					const res = await adminFetch("/cms_api/admin/studio/inspect", {
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({

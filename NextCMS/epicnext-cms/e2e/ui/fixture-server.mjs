@@ -241,7 +241,7 @@ const server = createServer(async (req, res) => {
 			}
 			body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
 		}
-		if (url.pathname === "/api/admin/studio/import-jobs") {
+		if (url.pathname === "/cms_api/admin/studio/import-jobs") {
 			if (req.method === "PATCH") {
 				const job = jobs.get(body.id);
 				if (job) job.state = "cancelled";
@@ -253,7 +253,7 @@ const server = createServer(async (req, res) => {
 				nextCursor: null,
 			});
 		}
-		if (url.pathname === "/api/admin/import/official/sync-all") {
+		if (url.pathname === "/cms_api/admin/import/official/sync-all") {
 			if (!jobs.has(body.id))
 				jobs.set(body.id, {
 					id: body.id,
@@ -279,7 +279,7 @@ const server = createServer(async (req, res) => {
 			await new Promise((resolve) => setTimeout(resolve, 150));
 			return json(res, { ok: true, job: jobs.get(body.id) });
 		}
-		if (url.pathname === "/api/media") return json(res, { files: [] });
+		if (url.pathname === "/cms_api/media") return json(res, { files: [] });
 		if (url.pathname.startsWith("/fixture/actions/")) {
 			const name = url.pathname.split("/").at(-1);
 			if (name === "load-recovery")

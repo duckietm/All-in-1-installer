@@ -285,7 +285,7 @@ export async function uploadBackground(formData: FormData): Promise<void> {
 		const filePath = resolveMediaPath(name);
 		if (filePath.startsWith(MEDIA_ROOT + path.sep)) {
 			await writeFile(filePath, Buffer.from(bytes));
-			await writeSetting("background_image", `/api/media/${name}`);
+			await writeSetting("background_image", `/cms_api/media/${name}`);
 			await writeSetting(
 				"background_position",
 				BACKGROUND_DEFAULTS.background_position,
@@ -301,7 +301,7 @@ export async function uploadBackground(formData: FormData): Promise<void> {
 			siteSettings.reload();
 			revalidatePath("/", "layout");
 			revalidatePath(MANAGER_PATH);
-			revalidatePath("/api/media");
+			revalidatePath("/cms_api/media");
 			uploaded = true;
 		}
 	} catch {

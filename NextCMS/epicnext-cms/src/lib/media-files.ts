@@ -5,7 +5,7 @@ export type MediaFile = {
 	uploaded: number;
 };
 
-/** Only allow safe, relative /api/media URLs as image src. */
+/** Only allow safe, relative /cms_api/media URLs as image src. */
 export function validImageUrl(url: string): string {
 	if (!url.startsWith("/")) return "";
 	if (/[<>"']/.test(url)) return "";
@@ -13,10 +13,10 @@ export function validImageUrl(url: string): string {
 	return url;
 }
 
-/** Load the media library from /api/media, tolerating transient failures. */
+/** Load the media library from /cms_api/media, tolerating transient failures. */
 export async function loadMediaFiles(): Promise<MediaFile[]> {
 	try {
-		const res = await fetch("/api/media");
+		const res = await fetch("/cms_api/media");
 		const data = await res.json();
 		return Array.isArray(data?.files) ? (data.files as MediaFile[]) : [];
 	} catch {

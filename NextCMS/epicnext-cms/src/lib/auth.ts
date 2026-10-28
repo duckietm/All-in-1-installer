@@ -20,6 +20,7 @@ import {
 
 export { invalidateLoginCache };
 
+import { AUTH_BASE_PATH } from "@/lib/auth/base-path";
 import { verify2faChallenge } from "@/lib/auth/twofactor-verification";
 import { recordWebsiteLogin } from "@/lib/auth/website-login-log";
 import { db, User } from "@/lib/db";
@@ -27,6 +28,7 @@ import { logger } from "@/lib/logger";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 const nextAuth = NextAuth({
+	basePath: AUTH_BASE_PATH,
 	trustHost: true,
 	secret: env.AUTH_SECRET,
 	session: { strategy: "jwt", maxAge: 24 * 60 * 60 },

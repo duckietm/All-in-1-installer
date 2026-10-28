@@ -162,7 +162,7 @@ export function SortableTree({
 	const loadChildren = useCallback(
 		async (parentId: number): Promise<TreeNodeData[]> => {
 			const res = await fetch(
-				`/api/admin/catalog/tree?parentId=${parentId}${catQs}`,
+				`/cms_api/admin/catalog/tree?parentId=${parentId}${catQs}`,
 			);
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) throw new Error(data.error || "Failed to load pages");
@@ -240,7 +240,7 @@ export function SortableTree({
 			setSearching(true);
 			try {
 				const res = await fetch(
-					`/api/admin/catalog/tree?search=${encodeURIComponent(searchQuery.trim())}${catQs}`,
+					`/cms_api/admin/catalog/tree?search=${encodeURIComponent(searchQuery.trim())}${catQs}`,
 					{ signal: controller.signal },
 				);
 				if (!res.ok) throw new Error("Search failed");

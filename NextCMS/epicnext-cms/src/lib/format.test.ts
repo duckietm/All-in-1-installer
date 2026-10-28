@@ -28,7 +28,7 @@ describe("avatarImageUrl", () => {
 		expect(url).toContain("figure=hr-100");
 		expect(url).toContain("size=l");
 		expect(url).toContain("headonly=1");
-		expect(url.startsWith("/api/imaging/avatar?")).toBe(true);
+		expect(url.startsWith("/cms_api/imaging/avatar?")).toBe(true);
 	});
 
 	it("preserves the exact user look instead of replacing it with a default figure", () => {

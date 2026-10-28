@@ -1,8 +1,8 @@
 export type DdosCategory = "pages" | "api" | "auth";
 
 /**
- * Bucket a request path for rate limiting. Everything under `/api/` that is not
- * an auth route counts as `api` — including `/api/imaging/*` (avatars, badges).
+ * Bucket a request path for rate limiting. Everything under `/cms_api/` that is not
+ * an auth route counts as `api` — including `/cms_api/imaging/*` (avatars, badges).
  * That is intentional: imaging is a deliberate high-volume, cacheable surface,
  * so it gets the wider api budget rather than the page budget. The bare
  * `/imaging` renderer path never reaches this gate (it is excluded by the proxy
@@ -10,8 +10,8 @@ export type DdosCategory = "pages" | "api" | "auth";
  */
 export function classifyDdos(pathname: string): DdosCategory {
 	if (
-		pathname === "/api/auth" ||
-		pathname.startsWith("/api/auth/") ||
+		pathname === "/cms_api/auth" ||
+		pathname.startsWith("/cms_api/auth/") ||
 		pathname === "/login" ||
 		pathname.startsWith("/login/") ||
 		pathname === "/register" ||
@@ -21,7 +21,7 @@ export function classifyDdos(pathname: string): DdosCategory {
 	) {
 		return "auth";
 	}
-	if (pathname.startsWith("/api/")) return "api";
+	if (pathname.startsWith("/cms_api/")) return "api";
 	return "pages";
 }
 

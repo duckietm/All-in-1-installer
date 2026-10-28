@@ -18,7 +18,7 @@ test("attachment upload and double-click resume send one retry and refresh histo
 	page,
 }) => {
 	let retries = 0;
-	await page.route("**/api/admin/studio/import-attachment", async (route) => {
+	await page.route("**/cms_api/admin/studio/import-attachment", async (route) => {
 		expect(route.request().method()).toBe("POST");
 		expect(route.request().postData()).toContain('name="classname"');
 		expect(route.request().postData()).toContain("fixture_chair");
@@ -27,7 +27,7 @@ test("attachment upload and double-click resume send one retry and refresh histo
 		);
 		await route.fulfill({ json: { ok: true, attachmentId } });
 	});
-	await page.route("**/api/admin/studio/import-jobs", async (route) => {
+	await page.route("**/cms_api/admin/studio/import-jobs", async (route) => {
 		retries++;
 		expect(route.request().method()).toBe("PATCH");
 		expect(route.request().postDataJSON()).toEqual({
@@ -82,11 +82,11 @@ for (const scenario of [
 		page,
 	}) => {
 		let retries = 0;
-		await page.route("**/api/admin/studio/import-jobs", async (route) => {
+		await page.route("**/cms_api/admin/studio/import-jobs", async (route) => {
 			retries++;
 			await route.fulfill({ json: { ok: true } });
 		});
-		await page.route("**/api/admin/studio/import-attachment", (route) =>
+		await page.route("**/cms_api/admin/studio/import-attachment", (route) =>
 			scenario.status
 				? route.fulfill({
 						status: scenario.status,

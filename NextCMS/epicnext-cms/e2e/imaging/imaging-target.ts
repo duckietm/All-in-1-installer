@@ -71,7 +71,7 @@ export const FIGURE =
 	"hr-11782-40-40.hd-180-7-14.ch-11592-66.lg-10726-79-1408.sh-11764-1408.ha-11958-70-1408.wa-2007-0.0";
 
 export const avatarPath = (params: Record<string, string> = {}) =>
-	`/api/imaging/avatar?${new URLSearchParams({ figure: FIGURE, ...params })}`;
+	`/cms_api/imaging/avatar?${new URLSearchParams({ figure: FIGURE, ...params })}`;
 
 /** Public imager endpoint served through the edge proxy (imager container). */
 export const IMAGER_PATH = (params: Record<string, string> = {}) =>

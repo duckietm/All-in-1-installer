@@ -24,7 +24,7 @@ export function CatalogGitConfiguration({ onSaved }: { onSaved: () => void }) {
 		const abort = new AbortController();
 		void (async () => {
 			try {
-				const res = await adminFetch("/api/admin/catalog-export/config", {
+				const res = await adminFetch("/cms_api/admin/catalog-export/config", {
 					signal: abort.signal,
 					cache: "no-store",
 				});
@@ -43,7 +43,7 @@ export function CatalogGitConfiguration({ onSaved }: { onSaved: () => void }) {
 		setError("");
 		setMessage("");
 		try {
-			const res = await adminFetch("/api/admin/catalog-export/config", {
+			const res = await adminFetch("/cms_api/admin/catalog-export/config", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ ...config, token, action }),

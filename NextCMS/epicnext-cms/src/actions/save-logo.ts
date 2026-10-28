@@ -32,7 +32,7 @@ export async function saveLogo(
 		await mkdir(baseDir, { recursive: true });
 		await writeFile(filePath, buffer);
 
-		const url = `/api/media/logo/${filename}`;
+		const url = `/cms_api/media/logo/${filename}`;
 
 		await db
 			.insert(WebsiteSetting)

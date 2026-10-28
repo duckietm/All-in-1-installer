@@ -30,7 +30,7 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		decision: "REBUILD",
 		capabilities: { read: [PERMS.ROOMS_VIEW], mutate: [] },
 		dependencies: {
-			queries: ["fetchAdminList", "Rooms", "GET /api/admin/export?type=rooms"],
+			queries: ["fetchAdminList", "Rooms", "GET /cms_api/admin/export?type=rooms"],
 			mutations: [],
 		},
 		auditRequirement: "NONE",
@@ -375,7 +375,7 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		dependencies: {
 			queries: ["runCatalogAudit"],
 			mutations: [
-				"POST /api/admin/import/audit",
+				"POST /cms_api/admin/import/audit",
 				"applyCatalogSql",
 				"ensureDirectories",
 				"repairDuplicateClassnames",
@@ -404,14 +404,14 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/import/badges",
+				"GET /cms_api/admin/import/badges",
 				"getBadgeData",
 				"searchBadges",
 				"WebsiteBadges",
 			],
 			mutations: [
 				"importBadgeSynced",
-				"POST /api/admin/import/badges",
+				"POST /cms_api/admin/import/badges",
 				"updateBadge",
 			],
 		},
@@ -434,15 +434,15 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/import/clone",
-				"GET /api/admin/import/clone/icon",
+				"GET /cms_api/admin/import/clone",
+				"GET /cms_api/admin/import/clone/icon",
 				"getCloneList",
 				"listSources",
 			],
 			mutations: [
-				"DELETE /api/admin/import/clone",
-				"POST /api/admin/import/clone",
-				"POST /api/admin/import/clone/batch",
+				"DELETE /cms_api/admin/import/clone",
+				"POST /cms_api/admin/import/clone",
+				"POST /cms_api/admin/import/clone/batch",
 				"cloneSingleFurni",
 				"rcon.updateCatalog",
 				"rcon.updateItems",
@@ -468,15 +468,15 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/import/clothing",
-				"GET /api/admin/import/clothing/sets",
+				"GET /cms_api/admin/import/clothing",
+				"GET /cms_api/admin/import/clothing/sets",
 				"getClothingSetList",
 				"getFigureList",
 			],
 			mutations: [
-				"DELETE /api/admin/import/clothing",
-				"POST /api/admin/import/clothing/batch",
-				"POST /api/admin/import/clothing/sets/batch",
+				"DELETE /cms_api/admin/import/clothing",
+				"POST /cms_api/admin/import/clothing/batch",
+				"POST /cms_api/admin/import/clothing/sets/batch",
 				"importClothingSet",
 				"importSingleFigure",
 			],
@@ -497,11 +497,11 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 			mutate: [PERMS.ASSETS_IMPORT],
 		},
 		dependencies: {
-			queries: ["GET /api/admin/import/effects", "getEffectList"],
+			queries: ["GET /cms_api/admin/import/effects", "getEffectList"],
 			mutations: [
-				"DELETE /api/admin/import/effects",
+				"DELETE /cms_api/admin/import/effects",
 				"importSingleEffect",
-				"POST /api/admin/import/effects/batch",
+				"POST /cms_api/admin/import/effects/batch",
 			],
 		},
 		auditRequirement: "PRIVILEGED_MUTATION",
@@ -521,8 +521,8 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/import/clone",
-				"GET /api/admin/import/furni",
+				"GET /cms_api/admin/import/clone",
+				"GET /cms_api/admin/import/furni",
 				"getHabboGamedataHotel",
 				"readFullTree",
 				"previewAutoCatalog",
@@ -530,10 +530,10 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 			],
 			mutations: [
 				"deleteImportedFurni",
-				"PATCH /api/admin/import/furni",
-				"POST /api/admin/import/furni",
-				"POST /api/admin/import/furni/batch",
-				"PUT /api/admin/import/furni/nitro-editor",
+				"PATCH /cms_api/admin/import/furni",
+				"POST /cms_api/admin/import/furni",
+				"POST /cms_api/admin/import/furni/batch",
+				"PUT /cms_api/admin/import/furni/nitro-editor",
 				"rcon.updateCatalog",
 				"rcon.updateItems",
 				"setFurnidataTranslateEnabled",
@@ -584,14 +584,14 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 			mutate: [PERMS.ASSETS_IMPORT],
 		},
 		dependencies: {
-			queries: ["GET /api/admin/studio/nitro-cleanup", "scanFakeBrokenNitros"],
+			queries: ["GET /cms_api/admin/studio/nitro-cleanup", "scanFakeBrokenNitros"],
 			mutations: [
 				"autoCleanFakeNitros",
-				"DELETE /api/admin/studio/nitro-cleanup",
+				"DELETE /cms_api/admin/studio/nitro-cleanup",
 				"clearFurniImportCache",
 				"deleteNitroCleanupFiles",
-				"POST /api/admin/studio/nitro-cleanup/auto-clean",
-				"POST /api/admin/studio/nitro-cleanup/rebuild",
+				"POST /cms_api/admin/studio/nitro-cleanup/auto-clean",
+				"POST /cms_api/admin/studio/nitro-cleanup/rebuild",
 				"repairBrokenNitros",
 			],
 		},
@@ -614,14 +614,14 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/import/pets",
-				"GET /api/admin/import/pets/icon",
+				"GET /cms_api/admin/import/pets",
+				"GET /cms_api/admin/import/pets/icon",
 				"getPetList",
 			],
 			mutations: [
-				"DELETE /api/admin/import/pets",
+				"DELETE /cms_api/admin/import/pets",
 				"importSinglePet",
-				"POST /api/admin/import/pets/batch",
+				"POST /cms_api/admin/import/pets/batch",
 			],
 		},
 		auditRequirement: "PRIVILEGED_MUTATION",
@@ -642,7 +642,7 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		dependencies: {
 			queries: [],
 			mutations: [
-				"POST /api/admin/import/furni/repair-icons",
+				"POST /cms_api/admin/import/furni/repair-icons",
 				"repairMissingIcons",
 			],
 		},
@@ -668,7 +668,7 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 			mutations: [
 				"appendFurniEntriesBatch",
 				"cloneSingleFurni",
-				"POST /api/admin/import/clone/sync-all",
+				"POST /cms_api/admin/import/clone/sync-all",
 			],
 		},
 		auditRequirement: "PRIVILEGED_MUTATION",
@@ -690,7 +690,7 @@ export const hotelMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [],
-			mutations: ["POST /api/admin/import/furni/upload", "uploadSingleFurni"],
+			mutations: ["POST /cms_api/admin/import/furni/upload", "uploadSingleFurni"],
 		},
 		auditRequirement: "PRIVILEGED_MUTATION",
 		localization: "PARTIAL",

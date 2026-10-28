@@ -34,12 +34,12 @@ export async function saveFavicon(
 		await mkdir(baseDir, { recursive: true });
 		await writeFile(filePath, buffer);
 
-		const url = `/api/media/favicon/${filename}`;
+		const url = `/cms_api/media/favicon/${filename}`;
 
 		// Remove old favicon file if it exists
 		const oldUrl = await siteSettings.get("cms_favicon");
-		if (oldUrl?.startsWith("/api/media/favicon/")) {
-			const oldName = oldUrl.replace("/api/media/favicon/", "");
+		if (oldUrl?.startsWith("/cms_api/media/favicon/")) {
+			const oldName = oldUrl.replace("/cms_api/media/favicon/", "");
 			if (!oldName.includes("..") && !oldName.includes("/")) {
 				const oldPath = path.resolve(baseDir, oldName);
 				if (oldPath.startsWith(baseDir + path.sep)) {
@@ -75,9 +75,9 @@ export async function deleteFavicon(): Promise<{
 	await requirePermission(PERMS.SETTINGS_EDIT);
 	try {
 		const oldUrl = await siteSettings.get("cms_favicon");
-		if (oldUrl?.startsWith("/api/media/favicon/")) {
+		if (oldUrl?.startsWith("/cms_api/media/favicon/")) {
 			const baseDir = resolveMediaPath("favicon");
-			const oldName = oldUrl.replace("/api/media/favicon/", "");
+			const oldName = oldUrl.replace("/cms_api/media/favicon/", "");
 			if (!oldName.includes("..") && !oldName.includes("/")) {
 				const oldPath = path.resolve(baseDir, oldName);
 				if (oldPath.startsWith(baseDir + path.sep)) {

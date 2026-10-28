@@ -13,7 +13,7 @@ const items = Array.from({ length: 60 }, (_, index) => ({
 	iconUrl: "/fixture/cover.svg",
 }));
 async function mockStudio(page: Page) {
-	await page.route("**/api/**", async (route) => {
+	await page.route("**/cms_api/**", async (route) => {
 		const url = new URL(route.request().url());
 		if (url.pathname.endsWith("/inspect"))
 			return route.fulfill({
@@ -147,7 +147,7 @@ test("an older search response cannot replace newer furniture", async ({
 	page,
 }) => {
 	await mockStudio(page);
-	await page.route("**/api/admin/import/furni?*", async (route) => {
+	await page.route("**/cms_api/admin/import/furni?*", async (route) => {
 		const search = new URL(route.request().url()).searchParams.get("search");
 		if (!search) return route.fallback();
 		if (search === "old")

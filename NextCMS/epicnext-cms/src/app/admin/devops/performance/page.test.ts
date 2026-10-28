@@ -52,7 +52,7 @@ it("renders filtered slow records and explains incomplete streaming timings", as
 		samples: [
 			{
 				operationId: "slow-op",
-				route: "/api/admin/studio",
+				route: "/cms_api/admin/studio",
 				method: "GET",
 				status: 200,
 				at: 1000,
@@ -61,7 +61,7 @@ it("renders filtered slow records and explains incomplete streaming timings", as
 			},
 			{
 				operationId: "fast-op",
-				route: "/api/admin/users",
+				route: "/cms_api/admin/users",
 				method: "GET",
 				status: 200,
 				at: 1001,

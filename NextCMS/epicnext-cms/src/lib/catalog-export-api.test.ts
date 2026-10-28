@@ -57,7 +57,7 @@ describe("catalog API completion tracking", () => {
 		);
 		const route = withAdmin({}, async () => response);
 		const returned = await route(
-			new NextRequest("http://localhost/api/admin/import/furni/batch", {
+			new NextRequest("http://localhost/cms_api/admin/import/furni/batch", {
 				method: "POST",
 			}),
 		);
@@ -75,14 +75,14 @@ describe("catalog API completion tracking", () => {
 		expect(
 			(
 				await route(
-					new NextRequest("http://localhost/api/admin/import/furni", {
+					new NextRequest("http://localhost/cms_api/admin/import/furni", {
 						method: "POST",
 					}),
 				)
 			).status,
 		).toBe(401);
 		expect(handler).not.toHaveBeenCalled();
-		await route(new NextRequest("http://localhost/api/admin/import/furni"));
+		await route(new NextRequest("http://localhost/cms_api/admin/import/furni"));
 		expect(await catalogExportQueue().batch()).toHaveLength(0);
 	});
 });

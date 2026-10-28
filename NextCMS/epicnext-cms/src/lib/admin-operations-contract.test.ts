@@ -114,8 +114,8 @@ describe("admin operations route contract", () => {
 		["analytics/export", "PERMS.ANALYTICS_EXPORT"],
 		["devops/health", "PERMS.DEVOPS_VIEW"],
 		["users/actions", "PERMS.USERS_EDIT"],
-	])("provides and guards /api/admin/%s", (route, permission) => {
-		const path = `src/app/api/admin/${route}/route.ts`;
+	])("provides and guards /cms_api/admin/%s", (route, permission) => {
+		const path = `src/app/cms_api/admin/${route}/route.ts`;
 		expect(existsSync(path), path).toBe(true);
 		expect(readFileSync(path, "utf8"), path).toContain(permission);
 	});
@@ -159,7 +159,7 @@ describe("admin operations route contract", () => {
 			"fetchOpsHealth",
 		);
 		expect(
-			readFileSync("src/app/api/admin/devops/health/route.ts", "utf8"),
+			readFileSync("src/app/cms_api/admin/devops/health/route.ts", "utf8"),
 		).toContain("fetchOpsHealth");
 	});
 });

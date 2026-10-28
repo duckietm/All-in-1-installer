@@ -18,7 +18,7 @@ export function HealthCheckClient() {
 		setChecking(true);
 		setStatus("checking");
 		try {
-			const res = await fetch("/api/admin/devops/health");
+			const res = await fetch("/cms_api/admin/devops/health");
 			if (res.ok) {
 				const data = await res.json();
 				setStatus(data.emulator ? "online" : "offline");

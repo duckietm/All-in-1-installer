@@ -75,7 +75,7 @@ export function QuickAddFurni({
 		setLoading(true);
 		const ac = new AbortController();
 		fetch(
-			`/api/admin/furni/search?q=${encodeURIComponent(debounced)}&limit=30`,
+			`/cms_api/admin/furni/search?q=${encodeURIComponent(debounced)}&limit=30`,
 			{
 				signal: ac.signal,
 			},

@@ -215,10 +215,10 @@ export function OrganizeImportsDialog({
 		const timeout = setTimeout(() => controller.abort(), 45000);
 		try {
 			const [data, tree] = await Promise.all([
-				fetch(`/api/admin/import/organize?days=${rangeDays}`, {
+				fetch(`/cms_api/admin/import/organize?days=${rangeDays}`, {
 					signal: controller.signal,
 				}).then((r) => r.json()),
-				fetch("/api/admin/catalog/tree?parentId=-1", {
+				fetch("/cms_api/admin/catalog/tree?parentId=-1", {
 					signal: controller.signal,
 				}).then((r) => r.json()),
 			]);
@@ -345,7 +345,7 @@ export function OrganizeImportsDialog({
 		setDestSearchLoading(true);
 		const ac = new AbortController();
 		fetch(
-			`/api/admin/catalog/tree?search=${encodeURIComponent(destDebounced)}`,
+			`/cms_api/admin/catalog/tree?search=${encodeURIComponent(destDebounced)}`,
 			{ signal: ac.signal },
 		)
 			.then((r) => r.json())
@@ -377,7 +377,7 @@ export function OrganizeImportsDialog({
 		}
 		const ac = new AbortController();
 		setDestDupesLoading(true);
-		fetch(`/api/admin/catalog/items?pageId=${destinationPageId}`, {
+		fetch(`/cms_api/admin/catalog/items?pageId=${destinationPageId}`, {
 			signal: ac.signal,
 		})
 			.then((r) => r.json())

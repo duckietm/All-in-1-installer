@@ -20,7 +20,7 @@ export function BreadcrumbBar({
 			return;
 		}
 		const ac = new AbortController();
-		fetch(`/api/admin/catalog/tree?ancestors=${selectedPageId}${catQs}`, {
+		fetch(`/cms_api/admin/catalog/tree?ancestors=${selectedPageId}${catQs}`, {
 			signal: ac.signal,
 		})
 			.then((r) => r.json())

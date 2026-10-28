@@ -22,7 +22,7 @@ import {
 import { adminFetch } from "@/lib/admin-fetch";
 import { IMPORT_PHASES, type ImportJob } from "@/lib/furni/import-job";
 
-const endpoint = "/api/admin/studio/import-jobs";
+const endpoint = "/cms_api/admin/studio/import-jobs";
 const historyTimeoutMs = 15_000;
 const jobSchema = zLooseObject({
 	id: zUuid(),

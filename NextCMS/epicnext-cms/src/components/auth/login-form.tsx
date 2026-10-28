@@ -1,7 +1,7 @@
 "use client";
 
 import { KeyRound, Lock, UserRound } from "lucide-react";
-import { signIn } from "next-auth/react";
+import { SessionProvider, signIn } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { precheckLogin } from "@/actions/auth-precheck";
@@ -14,6 +14,7 @@ import {
 } from "@/components/auth/captcha-widget";
 import { PasswordToggle } from "@/components/auth/password-toggle";
 import Link from "@/components/link";
+import { AUTH_BASE_PATH } from "@/lib/auth/base-path";
 import { signInWithTransientRetry } from "@/lib/auth/sign-in-retry";
 
 export type LoginFormVariant =
@@ -36,7 +37,16 @@ export interface LoginFormProps {
  * (bad password, unverified email, 2FA required, captcha) instead of NextAuth's
  * generic failure, then completes the credentials sign-in.
  */
-export function LoginForm({
+/** NextAuth's routes are under /cms_api/auth: SessionProvider points the browser's signIn there. */
+export function LoginForm(props: LoginFormProps) {
+	return (
+		<SessionProvider basePath={AUTH_BASE_PATH} refetchOnWindowFocus={false}>
+			<LoginFormFields {...props} />
+		</SessionProvider>
+	);
+}
+
+function LoginFormFields({
 	captcha = { provider: "none" },
 	nonce,
 	variant = "page",

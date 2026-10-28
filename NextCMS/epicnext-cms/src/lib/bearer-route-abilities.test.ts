@@ -56,19 +56,19 @@ vi.mock("@/lib/redis-cache", () => ({
 	}),
 }));
 
-import { POST as articleComment } from "@/app/api/articles/[slug]/comment/route";
-import { GET as badgeLeaderboard } from "@/app/api/badges/leaderboard/route";
-import { GET as radioPoints } from "@/app/api/radio/points/route";
-import { POST as radioShout } from "@/app/api/radio/shouts/route";
-import { POST as ticketReply } from "@/app/api/tickets/[id]/reply/route";
-import { GET as ticketGet } from "@/app/api/tickets/[id]/route";
+import { POST as articleComment } from "@/app/cms_api/articles/[slug]/comment/route";
+import { GET as badgeLeaderboard } from "@/app/cms_api/badges/leaderboard/route";
+import { GET as radioPoints } from "@/app/cms_api/radio/points/route";
+import { POST as radioShout } from "@/app/cms_api/radio/shouts/route";
+import { POST as ticketReply } from "@/app/cms_api/tickets/[id]/reply/route";
+import { GET as ticketGet } from "@/app/cms_api/tickets/[id]/route";
 import {
 	GET as ticketsGet,
 	POST as ticketsPost,
-} from "@/app/api/tickets/route";
+} from "@/app/cms_api/tickets/route";
 
 function request(method: string, bearer = true) {
-	return new Request("https://hotel.test/api/test", {
+	return new Request("https://hotel.test/cms_api/test", {
 		method,
 		headers: bearer
 			? {

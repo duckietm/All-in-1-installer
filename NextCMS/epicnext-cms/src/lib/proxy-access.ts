@@ -11,7 +11,7 @@ export function shouldRedirectAdminRequest(
 	return token === null;
 }
 
-const CACHEABLE_ASSET_PREFIXES = ["/api/imaging/", "/api/media/"];
+const CACHEABLE_ASSET_PREFIXES = ["/cms_api/imaging/", "/cms_api/media/"];
 
 export function isCacheableAssetPath(pathname: string): boolean {
 	return CACHEABLE_ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));

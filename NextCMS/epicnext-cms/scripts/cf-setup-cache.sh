@@ -2,11 +2,11 @@
 # Create/update the Cloudflare Cache Rule that stores the CMS public API
 # allowlist, the client-facing gamedata tree and the avatar/badge imaging
 # endpoints at the edge (the routes nginx tags with `Cache-Tag: cms-public`
-# respectievelijk `cms-gamedata`, en `/api/imaging/` dat zijn eigen s-maxage
+# respectievelijk `cms-gamedata`, en `/cms_api/imaging/` dat zijn eigen s-maxage
 # stuurt).
 #
 # Why a rule is required: Cloudflare only caches a handful of file extensions
-# by default; `/api/*` responses are served `cf-cache-status: DYNAMIC` even
+# by default; `/cms_api/*` responses are served `cf-cache-status: DYNAMIC` even
 # though their `Cache-Control: s-maxage` says they are cacheable. A Cache Rule
 # with "Cache Everything" turns those the other way.
 #
@@ -43,12 +43,12 @@ DESCRIPTION="EpicNabbo CMS public API + gamedata + imaging edge cache (cms-publi
 # Geen regex: `matches` vereist Business; vrije operators zijn `in` en
 # `starts_with()`.
 #
-# `/api/imaging/` (avatars, badges) staat erbij omdat de CMS-route zelf al
+# `/cms_api/imaging/` (avatars, badges) staat erbij omdat de CMS-route zelf al
 # `s-maxage=86400` + `stale-while-revalidate` stuurt: de edge kan een avatar een
 # dag vasthouden, zodat herhaalde requests de lokale renderer nooit raken. De
 # volledige URL (inclusief figure/code) is de cache-key, dus geen vervuiling
 # tussen gebruikers.
-EXPRESSION='(http.request.method eq "GET") and (http.request.uri.path in { "/api/staff" "/api/teams" "/api/guilds" "/api/photos" "/api/leaderboard" "/api/online" "/api/online/count" "/api/shop" "/api/shop/categories" "/api/values" "/api/values/categories" "/api/radio/current-dj" "/api/radio/points/leaderboard" } or starts_with(http.request.uri.path, "/api/values/") or starts_with(http.request.uri.path, "/api/imaging/") or starts_with(http.request.uri.path, "/gamedata/"))'
+EXPRESSION='(http.request.method eq "GET") and (http.request.uri.path in { "/cms_api/staff" "/cms_api/teams" "/cms_api/guilds" "/cms_api/photos" "/cms_api/leaderboard" "/cms_api/online" "/cms_api/online/count" "/cms_api/shop" "/cms_api/shop/categories" "/cms_api/values" "/cms_api/values/categories" "/cms_api/radio/current-dj" "/cms_api/radio/points/leaderboard" } or starts_with(http.request.uri.path, "/cms_api/values/") or starts_with(http.request.uri.path, "/cms_api/imaging/") or starts_with(http.request.uri.path, "/gamedata/"))'
 
 load_env() {
   local name="$1"
@@ -138,4 +138,4 @@ if ! python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("succes
   echo "error: could not save ruleset: $resp" >&2
   exit 1
 fi
-echo "cache rule live. Verify: curl -s https://epicnabbo.nl/api/shop -o /dev/null -D - | grep -i cf-cache-status"
+echo "cache rule live. Verify: curl -s https://epicnabbo.nl/cms_api/shop -o /dev/null -D - | grep -i cf-cache-status"

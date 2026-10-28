@@ -28,7 +28,7 @@ import { readPerformance, recordPerformance } from "./performance-store";
 
 const sample = {
 	operationId: "op",
-	route: "/api/admin/test",
+	route: "/cms_api/admin/test",
 	method: "GET",
 	status: 200,
 	at: Date.now(),

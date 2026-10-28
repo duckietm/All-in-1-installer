@@ -54,7 +54,7 @@ export function BcItemsEditor({ pageId, canEdit }: BcItemsEditorProps) {
 		setLoading(true);
 		try {
 			const res = await fetch(
-				`/api/admin/catalog/items?pageId=${pageId}&catalog=bc`,
+				`/cms_api/admin/catalog/items?pageId=${pageId}&catalog=bc`,
 				{ signal: request.signal },
 			);
 			if (!res.ok) throw new Error();

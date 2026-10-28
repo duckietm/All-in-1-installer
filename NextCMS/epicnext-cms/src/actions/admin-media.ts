@@ -41,7 +41,7 @@ export async function uploadMedia(
 	const stored = await storeUploadedMedia(file);
 	if (!stored.ok) return { ok: false, error: stored.error };
 
-	revalidatePath("/api/media");
+	revalidatePath("/cms_api/media");
 	revalidatePath("/admin/media");
 	return { ok: true };
 }
@@ -59,7 +59,7 @@ export async function deleteMedia(name: string): Promise<void> {
 	} catch {
 		// File may not exist
 	}
-	revalidatePath("/api/media");
+	revalidatePath("/cms_api/media");
 	revalidatePath("/admin/media");
 }
 
@@ -73,7 +73,7 @@ export async function uploadMediaAndReturn(
 	const stored = await storeUploadedMedia(file);
 	if (!stored.ok) return "";
 
-	revalidatePath("/api/media");
+	revalidatePath("/cms_api/media");
 	revalidatePath("/admin/media");
-	return `/api/media/${stored.name}`;
+	return `/cms_api/media/${stored.name}`;
 }

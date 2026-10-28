@@ -24,7 +24,7 @@ export async function loadSongPickerOptions(): Promise<SoundtrackOption[]> {
 	if (cachedOptions) return cachedOptions;
 	if (inflight) return inflight;
 	inflight = (async () => {
-		const res = await fetch("/api/admin/sounds", { cache: "no-store" });
+		const res = await fetch("/cms_api/admin/sounds", { cache: "no-store" });
 		if (!res.ok) throw new Error("Failed to load soundtracks");
 		const json = (await res.json()) as {
 			ok: boolean;

@@ -36,7 +36,7 @@ export function CatalogExportClient({
 		if (refreshing.current) return;
 		refreshing.current = true;
 		try {
-			const response = await adminFetch("/api/admin/catalog-export", {
+			const response = await adminFetch("/cms_api/admin/catalog-export", {
 				cache: "no-store",
 			});
 			if (!response.ok) throw new Error(t("loadError"));
@@ -54,7 +54,7 @@ export function CatalogExportClient({
 		submitting.current = true;
 		setBusy(true);
 		try {
-			const response = await adminFetch("/api/admin/catalog-export", {
+			const response = await adminFetch("/cms_api/admin/catalog-export", {
 				method: "POST",
 			});
 			if (!response.ok) throw new Error(t("queueError"));

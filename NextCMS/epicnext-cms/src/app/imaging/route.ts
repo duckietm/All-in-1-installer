@@ -26,14 +26,14 @@ import { resolveImagerBase } from "@/lib/runtime-asset-config";
 // install where no separate imager is proxied. Its behaviour is covered by
 // `src/lib/imaging-route.test.ts` and the CMS-only e2e (`e2e/imaging/cms-imaging.spec.ts`).
 //
-// It differs from the sibling `/api/imaging/avatar` route in that it also
+// It differs from the sibling `/cms_api/imaging/avatar` route in that it also
 // transcodes PNG renders to WebP/AVIF (`?format=`) and is cached on disk per
 // (figure, variant).
 
 type AvatarFormat = "png" | "webp" | "avif";
 type TranscodeFormat = Exclude<AvatarFormat, "png">;
 
-// Same neutral silhouette the sibling /api/imaging/avatar route serves, so a
+// Same neutral silhouette the sibling /cms_api/imaging/avatar route serves, so a
 // figure no upstream can render still shows a graceful image instead of the
 // browser's broken-image glyph. This is the site-wide default imager endpoint,
 // so a 502 here would blank avatars across every server-rendered page.

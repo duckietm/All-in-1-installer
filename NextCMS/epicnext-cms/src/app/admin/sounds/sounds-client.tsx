@@ -438,7 +438,7 @@ function UploadDialog({
 		fd.append("author", author.trim());
 
 		try {
-			const res = await adminFetch("/api/admin/sounds/upload", {
+			const res = await adminFetch("/cms_api/admin/sounds/upload", {
 				method: "POST",
 				body: fd,
 			});

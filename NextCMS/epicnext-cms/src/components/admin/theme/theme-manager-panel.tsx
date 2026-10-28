@@ -468,7 +468,7 @@ export function ThemeManagerPanel({
 							type="text"
 							name="background_image"
 							defaultValue={background.image}
-							placeholder="/api/media/… or https://…"
+							placeholder="/cms_api/media/… or https://…"
 							className="px-3 py-2 rounded-lg border bg-[var(--admin-canvas)] text-sm text-[var(--admin-text)]"
 							style={{ borderColor: "var(--admin-border)" }}
 						/>

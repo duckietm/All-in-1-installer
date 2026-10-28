@@ -104,7 +104,7 @@ export function useFurnitureJobs(
 		submitting.current = true;
 		setBusy(true);
 		try {
-			const response = await adminFetch("/api/admin/studio/import-jobs", {
+			const response = await adminFetch("/cms_api/admin/studio/import-jobs", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ id, action: "retry" }),
@@ -130,7 +130,7 @@ export function useFurnitureJobs(
 		cancelInFlight.current = true;
 		setCancelling(id);
 		try {
-			const response = await adminFetch("/api/admin/studio/import-jobs", {
+			const response = await adminFetch("/cms_api/admin/studio/import-jobs", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ id }),
@@ -172,7 +172,7 @@ export function useFurnitureJobs(
 
 		try {
 			const request = await requests.get(payload);
-			const response = await adminFetch("/api/admin/studio/import-jobs", {
+			const response = await adminFetch("/cms_api/admin/studio/import-jobs", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ ...body, id: request.id }),

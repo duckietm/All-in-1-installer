@@ -57,15 +57,15 @@ describe("performance diagnostics", () => {
 	});
 	it("removes query strings and dynamic path values including encoded catch-all segments", () => {
 		expect(
-			routeTemplate("/api/admin/users/Life?token=private", {
+			routeTemplate("/cms_api/admin/users/Life?token=private", {
 				username: "Life",
 			}),
-		).toBe("/api/admin/users/[username]");
+		).toBe("/cms_api/admin/users/[username]");
 		expect(
-			routeTemplate("/api/admin/assets/a%20b/file.png", {
+			routeTemplate("/cms_api/admin/assets/a%20b/file.png", {
 				path: ["a b", "file.png"],
 			}),
-		).toBe("/api/admin/assets/[path]/[path]");
+		).toBe("/cms_api/admin/assets/[path]/[path]");
 	});
 });
 

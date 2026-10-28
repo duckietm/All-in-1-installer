@@ -29,8 +29,8 @@ const ROUTES = [
 ];
 
 describe("admin import backend contract", () => {
-	it.each(ROUTES)("provides and guards /api/admin/import/%s", (route) => {
-		const path = `src/app/api/admin/import/${route}/route.ts`;
+	it.each(ROUTES)("provides and guards /cms_api/admin/import/%s", (route) => {
+		const path = `src/app/cms_api/admin/import/${route}/route.ts`;
 		expect(existsSync(path), path).toBe(true);
 		const source = readFileSync(path, "utf8");
 		expect(source, path).toContain("PERMS.ASSETS_IMPORT");
@@ -47,7 +47,7 @@ describe("admin import backend contract", () => {
 		expect(service).toContain("WebsiteBadges");
 		expect(service).toContain("importBadgeSynced");
 		expect(
-			readFileSync("src/app/api/admin/import/badges/route.ts", "utf8"),
+			readFileSync("src/app/cms_api/admin/import/badges/route.ts", "utf8"),
 		).toContain("importBadgeSynced");
 	});
 });

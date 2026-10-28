@@ -34,7 +34,7 @@ function PetIcon({ lib }: { lib: string }) {
 	if (failed) return <PawPrint className="w-8 h-8 text-muted-foreground/60" />;
 	return (
 		<img
-			src={`/api/admin/import/pets/icon?lib=${encodeURIComponent(lib)}&v=6`}
+			src={`/cms_api/admin/import/pets/icon?lib=${encodeURIComponent(lib)}&v=6`}
 			alt={lib}
 			className="image-pixelated"
 			style={{ maxHeight: 56, maxWidth: 56 }}
@@ -51,7 +51,7 @@ export function ImportPetsClient() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [busyLib, setBusyLib] = useState<string | null>(null);
 	const batch = useBatchImport({
-		url: "/api/admin/import/pets/batch",
+		url: "/cms_api/admin/import/pets/batch",
 		successAction: "pet(s) imported",
 		cancelledMessage: "Import cancelled",
 		onItemDone: (lib) => markDone(lib),
@@ -64,7 +64,7 @@ export function ImportPetsClient() {
 		try {
 			const params = new URLSearchParams();
 			if (search) params.set("search", search);
-			const res = await adminFetch(`/api/admin/import/pets?${params}`);
+			const res = await adminFetch(`/cms_api/admin/import/pets?${params}`);
 			const data = await res.json();
 			if (!res.ok) {
 				setError(data.error || "Failed to load");
@@ -130,7 +130,7 @@ export function ImportPetsClient() {
 		setBusyLib(p.lib);
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/pets?lib=${encodeURIComponent(p.lib)}`,
+				`/cms_api/admin/import/pets?lib=${encodeURIComponent(p.lib)}`,
 				{
 					method: "DELETE",
 				},

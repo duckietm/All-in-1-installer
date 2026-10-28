@@ -3,9 +3,9 @@
 import { useState } from "react";
 
 /**
- * Client form for /shop/topup. Posts the chosen amount to /api/paypal/create,
+ * Client form for /shop/topup. Posts the chosen amount to /cms_api/paypal/create,
  * then redirects the browser to PayPal's approval URL. After PayPal returns to
- * /shop/topup?token=<orderId>&status=success, it captures via /api/paypal/capture.
+ * /shop/topup?token=<orderId>&status=success, it captures via /cms_api/paypal/capture.
  */
 export default function TopUpForm({
 	currency,
@@ -30,7 +30,7 @@ export default function TopUpForm({
 		setError(null);
 		setPending(true);
 		try {
-			const res = await fetch("/api/paypal/create", {
+			const res = await fetch("/cms_api/paypal/create", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ amount: numeric }),
@@ -66,7 +66,7 @@ export default function TopUpForm({
 		setPending(true);
 		setError(null);
 		try {
-			const res = await fetch("/api/paypal/capture", {
+			const res = await fetch("/cms_api/paypal/capture", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ orderId }),

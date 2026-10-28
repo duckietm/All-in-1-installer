@@ -22,7 +22,7 @@ describe("getAvatarUrl", () => {
 
 	it("builds a query string with defaults (omits default params)", () => {
 		const url = getAvatarUrl("hd-180-1");
-		expect(url.startsWith("/api/imaging/avatar?")).toBe(true);
+		expect(url.startsWith("/cms_api/imaging/avatar?")).toBe(true);
 		expect(url).toContain("figure=hd-180-1");
 		expect(url).not.toContain("direction=2");
 		expect(url).not.toContain("head_direction=3");
@@ -71,7 +71,7 @@ describe("getAvatarUrl", () => {
 	it("uses the local runtime proxy when no env var is set", () => {
 		vi.stubEnv("NEXT_PUBLIC_IMAGER_URL", "");
 		const url = getAvatarUrl("hd-180-1");
-		expect(url.startsWith("/api/imaging/avatar?")).toBe(true);
+		expect(url.startsWith("/cms_api/imaging/avatar?")).toBe(true);
 		expect(url).toContain("img_format=apng");
 		expect(url).toContain("effect=14");
 	});

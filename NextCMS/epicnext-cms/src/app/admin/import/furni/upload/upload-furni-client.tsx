@@ -115,7 +115,7 @@ export function UploadFurniClient() {
 			fd.set("nitro", nitroFile);
 			if (iconFile) fd.set("icon", iconFile);
 
-			const res = await adminFetch("/api/admin/import/furni/upload", {
+			const res = await adminFetch("/cms_api/admin/import/furni/upload", {
 				method: "POST",
 				body: fd,
 			});

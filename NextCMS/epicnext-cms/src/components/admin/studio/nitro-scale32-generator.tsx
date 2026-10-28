@@ -29,7 +29,7 @@ export function NitroScale32Generator({
 		setBusy(true);
 		setError("");
 		try {
-			const response = await adminFetch("/api/admin/studio/nitro-scale32", {
+			const response = await adminFetch("/cms_api/admin/studio/nitro-scale32", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({

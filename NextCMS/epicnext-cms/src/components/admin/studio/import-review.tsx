@@ -55,7 +55,7 @@ export function ImportReview({
 			const form = new FormData();
 			form.set("classname", item.classname);
 			form.set("file", file);
-			const response = await adminFetch("/api/admin/studio/import-attachment", {
+			const response = await adminFetch("/cms_api/admin/studio/import-attachment", {
 				method: "POST",
 				body: form,
 			});

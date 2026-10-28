@@ -12,7 +12,7 @@ import { useEventSource } from "@/lib/use-event-source";
  *
  * It is a CLIENT component and must NOT import db / siteSettings.
  * Config is fetched once on mount; now-playing + listeners come via SSE
- * (/api/radio/stream) for real-time updates.
+ * (/cms_api/radio/stream) for real-time updates.
  *
  * If the radio is disabled or no stream URL is configured, it renders nothing.
  * The server-side <RadioPlayerGate> already guards on the same settings so the
@@ -41,7 +41,7 @@ function isTruthyFlag(v: unknown): boolean {
 	return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 
-/** Parse /api/radio/config (flat radio_* settings map) into the bits we need. */
+/** Parse /cms_api/radio/config (flat radio_* settings map) into the bits we need. */
 function parseConfig(data: unknown): RadioConfig {
 	const c = isRecord(data) ? data : {};
 	// radio_enabled defaults to off when the key is absent.
@@ -128,7 +128,7 @@ function parseDj(data: unknown): string {
 	return "";
 }
 
-/** Extract the listener count from /api/radio/listeners ({ listeners }). */
+/** Extract the listener count from /cms_api/radio/listeners ({ listeners }). */
 function parseListeners(data: unknown): number | null {
 	if (!isRecord(data)) return null;
 	const v = data.listeners;
@@ -151,7 +151,7 @@ export default function RadioPlayer() {
 	const { data: streamData } = useEventSource<{
 		nowPlaying: unknown;
 		listeners: number | null;
-	}>("/api/radio/stream", { enabled: true });
+	}>("/cms_api/radio/stream", { enabled: true });
 
 	useEffect(() => {
 		if (!streamData) return;
@@ -166,7 +166,7 @@ export default function RadioPlayer() {
 
 	// Fetch config once on mount (rarely changes).
 	useEffect(() => {
-		fetch("/api/radio/config", { cache: "no-store" })
+		fetch("/cms_api/radio/config", { cache: "no-store" })
 			.then((r) => (r.ok ? r.json() : null))
 			.then((data) => {
 				if (data !== null) setConfig(parseConfig(data));

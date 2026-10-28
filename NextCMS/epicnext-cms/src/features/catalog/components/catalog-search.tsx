@@ -116,7 +116,7 @@ export function CatalogSearch({
 					q: query.trim(),
 					catalog: catalogType,
 				});
-				const response = await fetch(`/api/admin/catalog/search?${params}`, {
+				const response = await fetch(`/cms_api/admin/catalog/search?${params}`, {
 					signal: request.signal,
 				});
 				if (!response.ok) throw Error("Search failed");

@@ -11,13 +11,13 @@ describe("classifyDdos", () => {
 		["/register", "auth"],
 		["/admin", "auth"],
 		["/admin/home", "auth"],
-		["/api/auth/callback/credentials", "auth"],
-		["/api/articles/hello", "api"],
-		["/api/radio/stream", "api"],
+		["/cms_api/auth/callback/credentials", "auth"],
+		["/cms_api/articles/hello", "api"],
+		["/cms_api/radio/stream", "api"],
 		// Imaging is deliberately in the `api` bucket: it is high-volume and
 		// cacheable, so it gets the generous api budget, not the page budget.
-		["/api/imaging/avatar", "api"],
-		["/api/imaging/badge", "api"],
+		["/cms_api/imaging/avatar", "api"],
+		["/cms_api/imaging/badge", "api"],
 	])(`classifies %s as %s`, (pathname, expected) => {
 		expect(classifyDdos(pathname)).toBe(expected);
 	});
@@ -40,7 +40,7 @@ describe("isSuspiciousPath", () => {
 	it("does not flag real app routes", () => {
 		expect(isSuspiciousPath("/")).toBe(false);
 		expect(isSuspiciousPath("/community")).toBe(false);
-		expect(isSuspiciousPath("/api/health")).toBe(false);
+		expect(isSuspiciousPath("/cms_api/health")).toBe(false);
 		expect(isSuspiciousPath("/login")).toBe(false);
 		expect(isSuspiciousPath("/news/article/hello-world")).toBe(false);
 	});

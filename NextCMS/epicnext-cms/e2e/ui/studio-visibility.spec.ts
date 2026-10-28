@@ -49,11 +49,11 @@ test("the furniture pane is painted, not merely present in the DOM", async ({
 	});
 	const page = await context.newPage();
 
-	await page.route("**/api/**", async (route) => {
+	await page.route("**/cms_api/**", async (route) => {
 		const request = route.request();
 		const url = new URL(request.url());
 
-		if (url.pathname === "/api/admin/import/furni") {
+		if (url.pathname === "/cms_api/admin/import/furni") {
 			return route.fulfill({
 				json:
 					url.searchParams.get("action") === "stats"
@@ -64,11 +64,11 @@ test("the furniture pane is painted, not merely present in the DOM", async ({
 							},
 			});
 		}
-		if (url.pathname === "/api/admin/import/clone")
+		if (url.pathname === "/cms_api/admin/import/clone")
 			return route.fulfill({ json: { sources: [] } });
-		if (url.pathname === "/api/admin/studio/import-jobs")
+		if (url.pathname === "/cms_api/admin/studio/import-jobs")
 			return route.fulfill({ json: { ok: true, jobs: [], nextCursor: null } });
-		if (url.pathname === "/api/admin/studio/nitro-quality")
+		if (url.pathname === "/cms_api/admin/studio/nitro-quality")
 			return route.fulfill({
 				json: {
 					report: {

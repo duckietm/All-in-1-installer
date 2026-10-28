@@ -64,13 +64,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function proxiedRequest(ip: string): NextRequest {
-	return new NextRequest("https://hotel.test/api/balance", {
+	return new NextRequest("https://hotel.test/cms_api/balance", {
 		headers: { "cf-ray": "abc-AMS", "cf-connecting-ip": ip },
 	});
 }
 
 function directRequest(ip: string): NextRequest {
-	return new NextRequest("https://hotel.test/api/balance", {
+	return new NextRequest("https://hotel.test/cms_api/balance", {
 		headers: { "x-real-ip": ip },
 	});
 }

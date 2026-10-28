@@ -11,7 +11,7 @@ echo "Checking .env..."
 if [ -f .env ]; then echo ".env exists."; else echo "Error: .env missing."; fi
 
 echo "Checking health..."
-if curl -s http://localhost:3002/api/health > /dev/null; then echo "Health endpoint OK."; else echo "Health endpoint failing."; fi
+if curl -s http://localhost:3002/cms_api/health > /dev/null; then echo "Health endpoint OK."; else echo "Health endpoint failing."; fi
 
 echo "Disk usage:"
 df -h / | tail -n 1

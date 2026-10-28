@@ -72,7 +72,7 @@ export async function generateMetadata({
 }
 
 // Badge codes (e.g. "ADM") map to a .gif served through the cached proxy.
-const BADGE_IMG_BASE = "/api/imaging/badge?code";
+const BADGE_IMG_BASE = "/cms_api/imaging/badge?code";
 
 // Emulator currency type ids (see UsersCurrency model): Duckets=0, Diamonds=5.
 const CURRENCY_DUCKETS = 0;

@@ -43,7 +43,7 @@ export function RepairIconsClient() {
 		abortRef.current = abort;
 
 		try {
-			const res = await adminFetch("/api/admin/import/furni/repair-icons", {
+			const res = await adminFetch("/cms_api/admin/import/furni/repair-icons", {
 				method: "POST",
 				signal: abort.signal,
 			});

@@ -47,7 +47,7 @@ describe("uploadMediaAndReturn", () => {
 describe("deleteMedia", () => {
 	it("deletes media file and revalidates", async () => {
 		await deleteMedia("photo.png");
-		expect(revalidatePath).toHaveBeenCalledWith("/api/media");
+		expect(revalidatePath).toHaveBeenCalledWith("/cms_api/media");
 	});
 
 	it("skips deletion when path is outside media root", async () => {

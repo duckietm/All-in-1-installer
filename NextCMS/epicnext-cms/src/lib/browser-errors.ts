@@ -16,7 +16,7 @@ export function reportBrowserError(
 	if (seen.size >= 100) seen.clear();
 	seen.set(key, { at: now, id: reference });
 	const digest = "digest" in candidate ? String(candidate.digest) : undefined;
-	void fetch("/api/diagnostics/errors", {
+	void fetch("/cms_api/diagnostics/errors", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		keepalive: true,

@@ -134,7 +134,7 @@ export function RoomsTable({ data, canEdit }: RoomsTableProps) {
 			data={data}
 			columns={getColumns(canEdit)}
 			searchPlaceholder="Search by room name or owner..."
-			exportUrl={canEdit ? "/api/admin/export?type=rooms" : undefined}
+			exportUrl={canEdit ? "/cms_api/admin/export?type=rooms" : undefined}
 		/>
 	);
 }

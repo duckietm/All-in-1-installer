@@ -35,7 +35,7 @@ export function FurnitureSyncQueue({ kind }: { kind: "official" | "clone" }) {
 			try {
 				sessionStorage.setItem(key, requestId.current);
 			} catch {}
-			const response = await adminFetch(`/api/admin/import/${kind}/sync-all`, {
+			const response = await adminFetch(`/cms_api/admin/import/${kind}/sync-all`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ id: requestId.current }),

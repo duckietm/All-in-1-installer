@@ -5,14 +5,14 @@
 		"version": "1.0.0",
 		"description": "Public and administrative REST API for the AtomCMS-Next Habbo retro hotel CMS."
 	},
-	"servers": [{ "url": "/api", "description": "Local API" }],
+	"servers": [{ "url": "/cms_api", "description": "Local API" }],
 	"security": [{ "bearerAuth": [], "sessionAuth": [] }],
 	"components": {
 		"securitySchemes": {
 			"bearerAuth": {
 				"type": "http",
 				"scheme": "bearer",
-				"description": "Laravel Sanctum-compatible Bearer token from /api/tokens"
+				"description": "Laravel Sanctum-compatible Bearer token from /cms_api/tokens"
 			},
 			"sessionAuth": {
 				"type": "apiKey",

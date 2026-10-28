@@ -139,8 +139,8 @@ type AssetKind = "nitro" | "swf" | "icon";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSION_POLL_MS = 1500;
 const DATA_IDLE_TIMEOUT_MS = 90_000;
-const SESSION_URL = "/api/admin/studio/nitro-cleanup/session";
-const DATA_URL = "/api/admin/studio/nitro-cleanup";
+const SESSION_URL = "/cms_api/admin/studio/nitro-cleanup/session";
+const DATA_URL = "/cms_api/admin/studio/nitro-cleanup";
 
 function ageLabel(t: (key: string) => string, lastModified: number): string {
 	if (!lastModified) return t("ageUnknown");
@@ -541,7 +541,7 @@ export function NitroCleanupPanel() {
 
 	useEffect(() => {
 		const loadHistory = async () => {
-			const res = await adminFetch("/api/admin/studio/nitro-cleanup/history", {
+			const res = await adminFetch("/cms_api/admin/studio/nitro-cleanup/history", {
 				headers: { Accept: "application/json" },
 			});
 			if (!res.ok) return;
@@ -557,7 +557,7 @@ export function NitroCleanupPanel() {
 			setScanning(true);
 			setAttachedToExisting(false);
 			try {
-				const res = await adminFetch("/api/admin/studio/nitro-cleanup/run", {
+				const res = await adminFetch("/cms_api/admin/studio/nitro-cleanup/run", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ force }),
@@ -593,7 +593,7 @@ export function NitroCleanupPanel() {
 	);
 
 	const cancelScan = useCallback(async () => {
-		await adminFetch("/api/admin/studio/nitro-cleanup/cancel", {
+		await adminFetch("/cms_api/admin/studio/nitro-cleanup/cancel", {
 			method: "POST",
 			headers: { Accept: "application/json" },
 		});
@@ -732,7 +732,7 @@ export function NitroCleanupPanel() {
 		const holder: { result: RepairResponse | null } = { result: null };
 		let lastError: string | null = null;
 		try {
-			const res = await adminFetch("/api/admin/studio/nitro-cleanup/rebuild", {
+			const res = await adminFetch("/cms_api/admin/studio/nitro-cleanup/rebuild", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -817,7 +817,7 @@ export function NitroCleanupPanel() {
 		setAutoCleaning(true);
 		try {
 			const res = await adminFetch(
-				"/api/admin/studio/nitro-cleanup/auto-clean",
+				"/cms_api/admin/studio/nitro-cleanup/auto-clean",
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -852,7 +852,7 @@ export function NitroCleanupPanel() {
 					}),
 				);
 			}
-			const hres = await adminFetch("/api/admin/studio/nitro-cleanup/history", {
+			const hres = await adminFetch("/cms_api/admin/studio/nitro-cleanup/history", {
 				headers: { Accept: "application/json" },
 			});
 			const hdata = (await hres.json()) as { history?: HistoryEntry[] };
@@ -869,7 +869,7 @@ export function NitroCleanupPanel() {
 			setGamedataLoading(true);
 			try {
 				const res = await adminFetch(
-					"/api/admin/studio/nitro-cleanup/gamedata",
+					"/cms_api/admin/studio/nitro-cleanup/gamedata",
 					{ headers: { Accept: "application/json" } },
 				);
 				const data = (await res.json()) as {
@@ -922,7 +922,7 @@ export function NitroCleanupPanel() {
 		setGamedataLimitError(null);
 		try {
 			const res = await adminFetch(
-				"/api/admin/studio/nitro-cleanup/gamedata/run",
+				"/cms_api/admin/studio/nitro-cleanup/gamedata/run",
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },

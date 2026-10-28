@@ -26,7 +26,7 @@ it("resolves a local proxy to its configured upstream and rejects loops", () => 
 	expect(resolveImagerBase("https://hotel.test")).toBe(
 		"http://127.0.0.1:3030/imaging",
 	);
-	vi.stubEnv("IMAGING_UPSTREAM_URL", "https://hotel.test/api/imaging/avatar");
+	vi.stubEnv("IMAGING_UPSTREAM_URL", "https://hotel.test/cms_api/imaging/avatar");
 	expect(() => resolveImagerBase("https://hotel.test")).toThrow("proxy loop");
 });
 it("rejects unsupported asset protocols", () => {

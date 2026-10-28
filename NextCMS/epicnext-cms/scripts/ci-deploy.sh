@@ -67,7 +67,7 @@ healthy() {
   local port="${1:-$slot_a_port}"
   local attempt
   for attempt in $(seq 1 30); do
-    if curl -sf --max-time 5 "http://127.0.0.1:$port/api/health" | grep -q '"database":true'; then return 0; fi
+    if curl -sf --max-time 5 "http://127.0.0.1:$port/cms_api/health" | grep -q '"database":true'; then return 0; fi
     sleep 3
   done
   return 1
@@ -77,7 +77,7 @@ healthy() {
 # actieve poort willen we geen 90 seconden per slot wachten: daar gaat het om
 # een al draaiend proces dat nu of nooit antwoordt.
 answers_health() {
-  curl -sf --max-time 5 "http://127.0.0.1:$1/api/health" | grep -q '"database":true'
+  curl -sf --max-time 5 "http://127.0.0.1:$1/cms_api/health" | grep -q '"database":true'
 }
 
 # Staat er een blue/green-upstream? Zonder die bestanden blijft dit script op de
@@ -512,7 +512,7 @@ fi
 # (each avatar becomes a fresh live render) and the catalog export reports
 # "delivery failed" while the emulator never receives the update. The old code
 # only repaired storage/imaging, so storage/catalog-git/hotel-status.json kept
-# coming back root:root and /api/admin/catalog/status kept throwing EACCES.
+# coming back root:root and /cms_api/admin/catalog/status kept throwing EACCES.
 for owned_dir in imaging catalog-git cms-errors furniture-imports logs media \
   nitro-cleanup config-backups nitro-scale32-backups; do
   target="$deploy_dir/storage/$owned_dir"
@@ -549,7 +549,7 @@ if [ "$blue_green" -eq 1 ]; then
   #    release het veld te ruimen — anders zou een mislukte e2e-test pas ná de
   #    cutover de productie breken in plaats van ervoor.
   healthy "$new_port"
-  node scripts/verify-deployed-release.mjs "http://127.0.0.1:$new_port/api/health" "$sha"
+  node scripts/verify-deployed-release.mjs "http://127.0.0.1:$new_port/cms_api/health" "$sha"
   PLAYWRIGHT_BASE_URL="http://127.0.0.1:$new_port" pnpm test:e2e
 
   # 4b. Cross-browser imaging gate. The chromium suite above proves the
@@ -595,7 +595,7 @@ else
   candidate_attempted=1
   start_candidate 3002 epicnext-cms-app
   healthy 3002
-  node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/api/health "$sha"
+  node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/cms_api/health "$sha"
   PLAYWRIGHT_BASE_URL=http://127.0.0.1:3002 pnpm test:e2e
   if [ "${DEPLOY_SKIP_CROSS_BROWSER:-0}" = "1" ]; then
     echo "WARNING: cross-browser imaging gate skipped (DEPLOY_SKIP_CROSS_BROWSER=1)" >&2

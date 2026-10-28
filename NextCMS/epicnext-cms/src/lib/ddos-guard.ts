@@ -44,7 +44,7 @@ function blockTtlForViolations(
  * bounded in-process counters and block escalation is skipped.
  *
  * Tunables come from the anti-DDoS config (env boot defaults, live-overridden
- * by the admin panel via Redis). `/api/health` is exempt so the Docker
+ * by the admin panel via Redis). `/cms_api/health` is exempt so the Docker
  * liveness probe never trips the gate.
  */
 export async function enforceDdosRateLimit(
@@ -55,7 +55,7 @@ export async function enforceDdosRateLimit(
 	if (!config.enabled) return { outcome: "pass" };
 
 	const pathname = req.nextUrl.pathname;
-	if (pathname === "/api/health") return { outcome: "pass" };
+	if (pathname === "/cms_api/health") return { outcome: "pass" };
 	if (isSuspiciousPath(pathname)) return { outcome: "suspect" };
 
 	const now = Date.now();

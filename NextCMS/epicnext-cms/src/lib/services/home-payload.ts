@@ -8,7 +8,7 @@ import { apiCacheKey, cacheSafe } from "@/lib/redis-cache";
 import { cacheNews } from "@/lib/services/news-cache";
 
 /**
- * The `/api/home` landing payload: latest 4 published articles plus the current
+ * The `/cms_api/home` landing payload: latest 4 published articles plus the current
  * online player count. Shared as a loader so the cache warm-up can prime the
  * exact same key the route reads — priming a placeholder instead made every
  * instance serve a bogus `{ primed: true }` payload after each restart.

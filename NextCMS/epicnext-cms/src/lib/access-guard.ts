@@ -17,7 +17,7 @@ const EXEMPT = [
 	"/register",
 	"/forgot",
 	"/reset",
-	"/api",
+	"/cms_api",
 ];
 
 function isExempt(path: string): boolean {

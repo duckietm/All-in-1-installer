@@ -48,7 +48,7 @@ export function CommandsTable({ data }: CommandsTableProps) {
 			data={data}
 			columns={columns}
 			searchPlaceholder={t("commands.searchPlaceholder")}
-			exportUrl="/api/admin/export?type=commands"
+			exportUrl="/cms_api/admin/export?type=commands"
 		/>
 	);
 }

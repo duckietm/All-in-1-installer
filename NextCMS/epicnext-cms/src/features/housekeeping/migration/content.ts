@@ -51,7 +51,7 @@ export const contentMigrationEntries: readonly MigrationEntry[] = [
 			mutate: [PERMS.NEWS_EDIT],
 		},
 		dependencies: {
-			queries: ["GET /api/media"],
+			queries: ["GET /cms_api/media"],
 			mutations: ["createArticle", "uploadMediaAndReturn"],
 		},
 		auditRequirement: "MUTATION",
@@ -69,7 +69,7 @@ export const contentMigrationEntries: readonly MigrationEntry[] = [
 			mutate: [PERMS.NEWS_EDIT],
 		},
 		dependencies: {
-			queries: ["GET /api/media", "WebsiteArticles"],
+			queries: ["GET /cms_api/media", "WebsiteArticles"],
 			mutations: ["deleteArticle", "updateArticle", "uploadMediaAndReturn"],
 		},
 		auditRequirement: "MUTATION",
@@ -105,7 +105,7 @@ export const contentMigrationEntries: readonly MigrationEntry[] = [
 			mutate: [PERMS.PAGES_EDIT],
 		},
 		dependencies: {
-			queries: ["GET /api/media"],
+			queries: ["GET /cms_api/media"],
 			mutations: ["deleteMedia", "uploadMedia"],
 		},
 		auditRequirement: "MUTATION",
@@ -394,9 +394,9 @@ export const contentMigrationEntries: readonly MigrationEntry[] = [
 		},
 		dependencies: {
 			queries: [
-				"GET /api/admin/prefixes",
-				"GET /api/admin/prefixes/blacklist",
-				"GET /api/admin/prefixes/settings",
+				"GET /cms_api/admin/prefixes",
+				"GET /cms_api/admin/prefixes/blacklist",
+				"GET /cms_api/admin/prefixes/settings",
 			],
 			mutations: [
 				"addBlacklistWord",

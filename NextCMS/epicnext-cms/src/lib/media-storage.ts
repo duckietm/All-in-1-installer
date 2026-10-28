@@ -3,7 +3,7 @@ import { getRuntimeResolve } from "@/lib/utils/runtime-path";
 
 /**
  * Persistent media root. Lives outside `public/` and outside Git so uploads
- * survive rebuilds, redeploys and `git clean`. Served through /api/media.
+ * survive rebuilds, redeploys and `git clean`. Served through /cms_api/media.
  */
 export const MEDIA_ROOT = getRuntimeResolve(process.cwd(), "storage", "media");
 

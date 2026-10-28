@@ -19,7 +19,7 @@ function seconds(
 	return (Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackSec) * 1000;
 }
 
-/** `/api/home` landing payload (articles + online count + hotel name). */
+/** `/cms_api/home` landing payload (articles + online count + hotel name). */
 export const HOME_PAYLOAD_TTL_MS = seconds(env.CMS_HOME_PAYLOAD_TTL_SEC, 15);
 
 /** Shared news preview list used by the homepage and widgets. */

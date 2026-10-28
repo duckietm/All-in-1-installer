@@ -56,7 +56,7 @@ export function IconPicker({
 					offset: String(nextOffset),
 				});
 				if (debounced) params.set("search", debounced);
-				const res = await fetch(`/api/admin/catalog/icons?${params}`);
+				const res = await fetch(`/cms_api/admin/catalog/icons?${params}`);
 				if (!res.ok) throw new Error("Failed to load icons");
 				const data = await res.json();
 				const fetched: number[] = data.icons ?? [];

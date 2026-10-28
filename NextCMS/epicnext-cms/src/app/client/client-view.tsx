@@ -111,7 +111,7 @@ export function ClientView({
 	const { data: onlineStream } = useEventSource<{
 		count: number;
 		emulator: boolean;
-	}>("/api/online/count/stream", { enabled: true });
+	}>("/cms_api/online/count/stream", { enabled: true });
 	useEffect(() => {
 		if (!onlineStream) return;
 		if (typeof onlineStream.count === "number")
@@ -128,7 +128,7 @@ export function ClientView({
 		const now = Date.now();
 		if (now - onlineUsersRef.current < 30_000) return;
 		onlineUsersRef.current = now;
-		fetch("/api/online", { cache: "no-store" })
+		fetch("/cms_api/online", { cache: "no-store" })
 			.then((r) => (r.ok ? r.json() : null))
 			.then((data) => {
 				const usernames = Array.isArray(data?.users)

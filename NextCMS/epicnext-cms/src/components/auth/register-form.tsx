@@ -11,7 +11,7 @@ import {
 	X,
 } from "lucide-react";
 import Script from "next/script";
-import { signIn } from "next-auth/react";
+import { SessionProvider, signIn } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import { useActionState, useEffect, useRef, useState } from "react";
 import {
@@ -23,6 +23,7 @@ import { AuthAlert } from "@/components/auth/auth-alert";
 import { AuthField } from "@/components/auth/auth-field";
 import { PasswordToggle } from "@/components/auth/password-toggle";
 import Link from "@/components/link";
+import { AUTH_BASE_PATH } from "@/lib/auth/base-path";
 import { signInWithTransientRetry } from "@/lib/auth/sign-in-retry";
 
 interface RegisterFormProps {
@@ -102,7 +103,16 @@ function AuthSectionHeader({
 	);
 }
 
-export function RegisterForm({
+/** NextAuth's routes are under /cms_api/auth: SessionProvider points the browser's signIn there. */
+export function RegisterForm(props: RegisterFormProps) {
+	return (
+		<SessionProvider basePath={AUTH_BASE_PATH} refetchOnWindowFocus={false}>
+			<RegisterFormFields {...props} />
+		</SessionProvider>
+	);
+}
+
+function RegisterFormFields({
 	hotelName,
 	captcha,
 	error,

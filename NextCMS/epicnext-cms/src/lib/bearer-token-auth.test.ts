@@ -36,7 +36,7 @@ vi.mock("@/lib/db", async () => {
 import { bearerUserId } from "./api-auth";
 
 const request = (token = "test-token") =>
-	new Request("https://hotel.test/api/tickets", {
+	new Request("https://hotel.test/cms_api/tickets", {
 		headers: { authorization: `Bearer ${token}` },
 	});
 beforeEach(() => {

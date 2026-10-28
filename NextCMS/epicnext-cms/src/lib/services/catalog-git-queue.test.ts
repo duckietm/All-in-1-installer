@@ -37,8 +37,8 @@ it("preserves the original mutation error if cleanup also fails", async () => {
 });
 
 it("keeps hotel retries independent from Git export scheduling", () => {
-	expect(isCatalogMutation("POST", "/api/admin/catalog/status")).toBe(false);
-	expect(isCatalogMutation("POST", "/api/admin/catalog/status/")).toBe(false);
-	expect(isCatalogMutation("PATCH", "/api/admin/catalog/tree")).toBe(true);
-	expect(isCatalogMutation("POST", "/api/admin/import/furni")).toBe(true);
+	expect(isCatalogMutation("POST", "/cms_api/admin/catalog/status")).toBe(false);
+	expect(isCatalogMutation("POST", "/cms_api/admin/catalog/status/")).toBe(false);
+	expect(isCatalogMutation("PATCH", "/cms_api/admin/catalog/tree")).toBe(true);
+	expect(isCatalogMutation("POST", "/cms_api/admin/import/furni")).toBe(true);
 });

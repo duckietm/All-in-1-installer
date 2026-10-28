@@ -136,5 +136,5 @@ else
 fi
 
 echo "--- health check ---"
-curl -sf "http://127.0.0.1:3002/api/health" > /dev/null && echo "OK: CMS reachable"
+curl -sf "http://127.0.0.1:3002/cms_api/health" > /dev/null && echo "OK: CMS reachable"
 curl -skf -o /dev/null -H "Host: epicnabbo.nl" "https://127.0.0.1:9443/health" && echo "OK: nginx :9443 /health"

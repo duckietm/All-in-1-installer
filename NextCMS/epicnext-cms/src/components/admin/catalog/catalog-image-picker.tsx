@@ -58,7 +58,7 @@ export function CatalogImagePicker({
 					type,
 				});
 				if (debounced) params.set("search", debounced);
-				const res = await fetch(`/api/admin/catalog/images?${params}`);
+				const res = await fetch(`/cms_api/admin/catalog/images?${params}`);
 				if (!res.ok) throw new Error();
 				const data = await res.json();
 				const fetched: string[] = data.images ?? [];

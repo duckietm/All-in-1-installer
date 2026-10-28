@@ -74,7 +74,7 @@ export interface NormalizedImportedTheme {
 
 /**
  * Accepts both the native theme-manager export (`{ format, name, settings }`)
- * and the `/api/themes/export` shape (`{ palette: { light, dark }, meta }`).
+ * and the `/cms_api/themes/export` shape (`{ palette: { light, dark }, meta }`).
  * Returns null when the payload is unrecognised.
  */
 export function normalizeImportedTheme(

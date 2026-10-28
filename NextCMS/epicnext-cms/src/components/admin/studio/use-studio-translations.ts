@@ -44,7 +44,7 @@ export function useStudioTranslations(defaultTranslate: boolean) {
 		setBuildingLanguages(true);
 		try {
 			const res = await adminFetch(
-				"/api/admin/import/furni?action=build-languages",
+				"/cms_api/admin/import/furni?action=build-languages",
 			);
 			const data = (await res.json()) as {
 				languages?: Array<{ lang: string; ok: boolean }>;

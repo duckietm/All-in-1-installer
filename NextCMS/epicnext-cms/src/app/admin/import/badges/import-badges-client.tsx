@@ -64,7 +64,7 @@ export function ImportBadgesClient() {
 				const params = new URLSearchParams({ offset: String(off) });
 				if (search) params.set("search", search);
 				if (all) params.set("allHotels", "1");
-				const res = await fetch(`/api/admin/import/badges?${params}`);
+				const res = await fetch(`/cms_api/admin/import/badges?${params}`);
 				const data = await res.json();
 				if (!res.ok) {
 					setError(data.error || "Failed to load");
@@ -119,7 +119,7 @@ export function ImportBadgesClient() {
 	}
 
 	async function postImportBadge(badge: BadgeItem) {
-		const res = await adminFetch("/api/admin/import/badges", {
+		const res = await adminFetch("/cms_api/admin/import/badges", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({

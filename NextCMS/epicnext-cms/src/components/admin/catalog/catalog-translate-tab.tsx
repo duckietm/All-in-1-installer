@@ -90,7 +90,7 @@ export function CatalogTranslateTab({
 		let cancelled = false;
 		async function refreshHotel() {
 			try {
-				const res = await fetch("/api/admin/catalog/suggest", {
+				const res = await fetch("/cms_api/admin/catalog/suggest", {
 					cache: "no-store",
 				});
 				if (!res.ok) return;
@@ -240,7 +240,7 @@ export function CatalogTranslateTab({
 			for (let i = 0; i < classnames.length; i += CHUNK_SIZE) {
 				const chunk = classnames.slice(i, i + CHUNK_SIZE);
 				const res = await fetch(
-					`/api/admin/catalog/suggest?classnames=${encodeURIComponent(chunk.join(","))}`,
+					`/cms_api/admin/catalog/suggest?classnames=${encodeURIComponent(chunk.join(","))}`,
 				);
 				if (res.ok) {
 					const data = await res.json();

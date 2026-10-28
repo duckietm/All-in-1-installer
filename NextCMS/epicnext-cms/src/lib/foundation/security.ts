@@ -76,7 +76,7 @@ const SAFE_REDIRECT_PATHS = new Set([
 function isSafePath(path: string): boolean {
 	if (!path.startsWith("/")) return false;
 	if (SAFE_REDIRECT_PATHS.has(path)) return true;
-	if (path.startsWith("/admin/") || path.startsWith("/api/")) return true;
+	if (path.startsWith("/admin/") || path.startsWith("/cms_api/")) return true;
 	return false;
 }
 

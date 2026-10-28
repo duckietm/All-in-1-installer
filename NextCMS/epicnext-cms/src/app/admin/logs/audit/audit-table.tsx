@@ -138,13 +138,13 @@ export function AuditTable({ data }: AuditTableProps) {
 				<p className="text-xs text-muted-foreground">{t("audit.exportHint")}</p>
 				<div className="flex items-center gap-2">
 					<a
-						href={`/api/admin/logs/audit/export?${params.toString()}&format=csv`}
+						href={`/cms_api/admin/logs/audit/export?${params.toString()}&format=csv`}
 						className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-accent hover:text-accent-foreground"
 					>
 						Export CSV
 					</a>
 					<a
-						href={`/api/admin/logs/audit/export?${params.toString()}&format=json`}
+						href={`/cms_api/admin/logs/audit/export?${params.toString()}&format=json`}
 						className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium shadow-sm hover:bg-accent hover:text-accent-foreground"
 					>
 						Export JSON

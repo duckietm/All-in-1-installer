@@ -307,7 +307,7 @@ describe("blue/green cutover", () => {
 			r.calls.indexOf("docker stop epicnext-cms-app"),
 		);
 		// De release-hash en de e2e-test draaien tegen de kandidaat, vóór de swap.
-		expect(r.calls).toContain("http://127.0.0.1:3003/api/health");
+		expect(r.calls).toContain("http://127.0.0.1:3003/cms_api/health");
 		expect(r.calls).toContain("PLAYWRIGHT_BASE_URL=http://127.0.0.1:3003");
 		expect(r.calls.indexOf("pnpm test:e2e")).toBeLessThan(
 			r.calls.indexOf("nginx -s reload"),

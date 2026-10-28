@@ -4,7 +4,7 @@ import { SearchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AdminSearchResult } from "@/app/api/admin/search/route";
+import type { AdminSearchResult } from "@/app/cms_api/admin/search/route";
 import {
 	Command,
 	CommandEmpty,
@@ -89,7 +89,7 @@ export function SearchDialog({
 		const controller = requestRef.current.start();
 		setLoading(true);
 		try {
-			const res = await fetch(`/api/admin/search?q=${encodeURIComponent(q)}`, {
+			const res = await fetch(`/cms_api/admin/search?q=${encodeURIComponent(q)}`, {
 				signal: controller.signal,
 			});
 			if (!res.ok) throw new Error("Search request failed");

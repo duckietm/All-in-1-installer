@@ -70,7 +70,7 @@ it.skipIf(!hasCompose)(
 				"CMD",
 				"node",
 				"-e",
-				"fetch('http://127.0.0.1:3002/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+				"fetch('http://127.0.0.1:3002/cms_api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
 			]);
 			expect(cms.volumes.map((volume) => volume.target).sort()).toEqual([
 				"/app/public/nitro-assets",

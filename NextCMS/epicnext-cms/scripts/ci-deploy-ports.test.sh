@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for the port-selection and port-conflict logic in scripts/ci-deploy.sh.
 #
-# Background: on a host where both blue/green slots answer /api/health, the
+# Background: on a host where both blue/green slots answer /cms_api/health, the
 # original read_active_port() counted healthy slots and only consulted the nginx
 # upstream when the count was not exactly 1. With two healthy slots it fell back
 # to the upstream file, but an operator `docker compose up` can leave an extra

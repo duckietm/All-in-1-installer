@@ -359,7 +359,7 @@ export function UsersTable({ data, canEdit, canBan }: UsersTableProps) {
 				]}
 				bulkActions={bulkActions.length > 0 ? bulkActions : undefined}
 				onBulkAction={bulkActions.length > 0 ? handleBulkAction : undefined}
-				exportUrl={canEdit ? "/api/admin/export?type=users" : undefined}
+				exportUrl={canEdit ? "/cms_api/admin/export?type=users" : undefined}
 			/>
 
 			<Dialog

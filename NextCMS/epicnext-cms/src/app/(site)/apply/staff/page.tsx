@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // Badge codes map to a .gif served through the cached proxy.
-const BADGE_IMG_BASE = "/api/imaging/badge?code";
+const BADGE_IMG_BASE = "/cms_api/imaging/badge?code";
 
 function feedbackStyle(tone: "success" | "error"): CSSProperties {
 	const accent =

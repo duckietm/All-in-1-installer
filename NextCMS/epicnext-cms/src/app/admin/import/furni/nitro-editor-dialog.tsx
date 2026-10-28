@@ -212,7 +212,7 @@ export function NitroEditorDialog({
 		void (async () => {
 			try {
 				const res = await adminFetch(
-					`/api/admin/import/furni/nitro-editor?classname=${encodeURIComponent(classname)}`,
+					`/cms_api/admin/import/furni/nitro-editor?classname=${encodeURIComponent(classname)}`,
 					{ signal: controller.signal },
 				);
 				const data = await res.json();
@@ -278,7 +278,7 @@ export function NitroEditorDialog({
 
 		setSaving(true);
 		try {
-			const res = await adminFetch("/api/admin/import/furni/nitro-editor", {
+			const res = await adminFetch("/cms_api/admin/import/furni/nitro-editor", {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({

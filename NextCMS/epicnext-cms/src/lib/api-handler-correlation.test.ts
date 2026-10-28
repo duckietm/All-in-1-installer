@@ -36,7 +36,7 @@ import { emptyRouteContext } from "@/test/route-context";
 import { withAdmin } from "./api-handler";
 
 const request = () =>
-	new NextRequest("https://hotel.test/api/admin/example", {
+	new NextRequest("https://hotel.test/cms_api/admin/example", {
 		headers: { "x-operation-id": "forged-client-id" },
 	});
 describe("admin API correlation", () => {

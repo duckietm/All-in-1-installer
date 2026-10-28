@@ -45,13 +45,13 @@ describe("adminFetch CSRF handling", () => {
 			.mockResolvedValueOnce(jsonResponse({ ok: true }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		const response = await adminFetch("/api/admin/import/furni", {
+		const response = await adminFetch("/cms_api/admin/import/furni", {
 			method: "POST",
 		});
 
 		expect(response.status).toBe(200);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/admin/csrf");
+		expect(fetchMock.mock.calls[0]?.[0]).toBe("/cms_api/admin/csrf");
 		const requestHeaders = new Headers(fetchMock.mock.calls[1]?.[1]?.headers);
 		expect(requestHeaders.get("x-csrf-token")).toBe(TOKEN);
 	});
@@ -70,7 +70,7 @@ describe("adminFetch CSRF handling", () => {
 			.mockResolvedValueOnce(jsonResponse({ ok: true, imported: 1 }));
 		vi.stubGlobal("fetch", fetchMock);
 
-		const response = await adminFetch("/api/admin/import/furni", {
+		const response = await adminFetch("/cms_api/admin/import/furni", {
 			method: "POST",
 		});
 
@@ -85,10 +85,10 @@ describe("adminFetch CSRF handling", () => {
 		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse([]));
 		vi.stubGlobal("fetch", fetchMock);
 
-		const response = await adminFetch("/api/admin/import/furni");
+		const response = await adminFetch("/cms_api/admin/import/furni");
 
 		expect(response.status).toBe(200);
 		expect(fetchMock).toHaveBeenCalledOnce();
-		expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/admin/import/furni");
+		expect(fetchMock.mock.calls[0]?.[0]).toBe("/cms_api/admin/import/furni");
 	});
 });

@@ -2,7 +2,7 @@
 import { rm } from "node:fs/promises";
 import { NextRequest } from "next/server";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { GET } from "../app/api/imaging/badge/route";
+import { GET } from "../app/cms_api/imaging/badge/route";
 
 const SCRATCH_ROOT = `${process.cwd()}/storage/imaging/test-badge-route-${process.pid}`;
 
@@ -41,7 +41,7 @@ it("shares a single upstream fetch across concurrent cold-cache requests", async
 		}),
 	);
 	const request = () =>
-		new NextRequest("https://hotel.test/api/imaging/badge?code=ADM");
+		new NextRequest("https://hotel.test/cms_api/imaging/badge?code=ADM");
 	const [a, b] = await Promise.all([GET(request()), GET(request())]);
 	expect(a.status).toBe(200);
 	expect(b.status).toBe(200);
@@ -53,7 +53,7 @@ it("serves a previously fetched badge from disk without re-fetching", async () =
 	const fetcher = vi.fn(async () => gifResponse());
 	vi.stubGlobal("fetch", fetcher);
 	const request = new NextRequest(
-		"https://hotel.test/api/imaging/badge?code=HABBO",
+		"https://hotel.test/cms_api/imaging/badge?code=HABBO",
 	);
 	const first = await GET(request);
 	expect(first.status).toBe(200);
@@ -71,7 +71,7 @@ it("revalidates a cached badge with a 304 when the client already has it", async
 		"fetch",
 		vi.fn(async () => gifResponse()),
 	);
-	const url = "https://hotel.test/api/imaging/badge?code=ETAG";
+	const url = "https://hotel.test/cms_api/imaging/badge?code=ETAG";
 	const first = await GET(new NextRequest(url));
 	const etag = first.headers.get("etag");
 	expect(etag).toBeTruthy();
@@ -89,7 +89,7 @@ it("serves a placeholder when every candidate is unavailable", async () => {
 		vi.fn(async () => new Response("nope", { status: 404 })),
 	);
 	const result = await GET(
-		new NextRequest("https://hotel.test/api/imaging/badge?code=GONE"),
+		new NextRequest("https://hotel.test/cms_api/imaging/badge?code=GONE"),
 	);
 	expect(result.status).toBe(200);
 	expect(result.headers.get("content-type")).toBe("image/svg+xml");
@@ -100,7 +100,7 @@ it("rejects malformed badge codes without contacting any candidate", async () =>
 	const fetcher = vi.fn();
 	vi.stubGlobal("fetch", fetcher);
 	const result = await GET(
-		new NextRequest("https://hotel.test/api/imaging/badge?code=../bad"),
+		new NextRequest("https://hotel.test/cms_api/imaging/badge?code=../bad"),
 	);
 	expect(result.status).toBe(400);
 	expect(fetcher).not.toHaveBeenCalled();

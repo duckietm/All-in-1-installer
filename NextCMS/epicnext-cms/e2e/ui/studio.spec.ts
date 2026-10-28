@@ -35,10 +35,10 @@ test("Studio opens and dismisses detail, Nitro editor and import review", async 
 	let metadataRequests = 0;
 	let qualityRequests = 0;
 	page.on("pageerror", (error) => errors.push(error.message));
-	await page.route("**/api/**", async (route) => {
+	await page.route("**/cms_api/**", async (route) => {
 		const request = route.request();
 		const url = new URL(request.url());
-		if (url.pathname === "/api/admin/studio/nitro-quality") {
+		if (url.pathname === "/cms_api/admin/studio/nitro-quality") {
 			qualityRequests++;
 			return route.fulfill({
 				json: {
@@ -55,7 +55,7 @@ test("Studio opens and dismisses detail, Nitro editor and import review", async 
 				},
 			});
 		}
-		if (url.pathname === "/api/admin/studio/inspect") {
+		if (url.pathname === "/cms_api/admin/studio/inspect") {
 			const { classnames } = request.postDataJSON() as { classnames: string[] };
 			return route.fulfill({
 				json: {
@@ -71,7 +71,7 @@ test("Studio opens and dismisses detail, Nitro editor and import review", async 
 				},
 			});
 		}
-		if (url.pathname === "/api/admin/studio/source-assets") {
+		if (url.pathname === "/cms_api/admin/studio/source-assets") {
 			const body = request.postDataJSON() as {
 				items: Array<{ classname: string }>;
 			};
@@ -107,7 +107,7 @@ test("Studio opens and dismisses detail, Nitro editor and import review", async 
 				},
 			});
 		}
-		if (url.pathname === "/api/admin/import/furni") {
+		if (url.pathname === "/cms_api/admin/import/furni") {
 			return route.fulfill({
 				json:
 					url.searchParams.get("action") === "stats"
@@ -118,9 +118,9 @@ test("Studio opens and dismisses detail, Nitro editor and import review", async 
 							},
 			});
 		}
-		if (url.pathname === "/api/admin/import/clone")
+		if (url.pathname === "/cms_api/admin/import/clone")
 			return route.fulfill({ json: { sources: [] } });
-		if (url.pathname === "/api/admin/studio/import-jobs")
+		if (url.pathname === "/cms_api/admin/studio/import-jobs")
 			return route.fulfill({ json: { ok: true, jobs: [], nextCursor: null } });
 		return route.fulfill({
 			status: 404,
@@ -220,7 +220,7 @@ test("Studio loads organize imports on demand and preserves the dialog on reopen
 			json: { error: "No mutations expected" },
 		});
 	});
-	await page.route("**/api/**", async (route) => {
+	await page.route("**/cms_api/**", async (route) => {
 		const request = route.request();
 		const url = new URL(request.url());
 		if (request.method() !== "GET") {
@@ -230,7 +230,7 @@ test("Studio loads organize imports on demand and preserves the dialog on reopen
 				json: { error: "No mutations expected" },
 			});
 		}
-		if (url.pathname === "/api/admin/import/organize") {
+		if (url.pathname === "/cms_api/admin/import/organize") {
 			organizeRequests++;
 			return route.fulfill({
 				json: {
@@ -263,9 +263,9 @@ test("Studio loads organize imports on demand and preserves the dialog on reopen
 				},
 			});
 		}
-		if (url.pathname === "/api/admin/catalog/tree")
+		if (url.pathname === "/cms_api/admin/catalog/tree")
 			return route.fulfill({ json: { pages: [] } });
-		if (url.pathname === "/api/admin/import/furni")
+		if (url.pathname === "/cms_api/admin/import/furni")
 			return route.fulfill({
 				json:
 					url.searchParams.get("action") === "stats"
@@ -275,9 +275,9 @@ test("Studio loads organize imports on demand and preserves the dialog on reopen
 								meta: { currentPage: 1, lastPage: 1, total: 0, perPage: 20 },
 							},
 			});
-		if (url.pathname === "/api/admin/import/clone")
+		if (url.pathname === "/cms_api/admin/import/clone")
 			return route.fulfill({ json: { sources: [] } });
-		if (url.pathname === "/api/admin/studio/import-jobs")
+		if (url.pathname === "/cms_api/admin/studio/import-jobs")
 			return route.fulfill({ json: { ok: true, jobs: [], nextCursor: null } });
 		return route.fulfill({
 			status: 404,

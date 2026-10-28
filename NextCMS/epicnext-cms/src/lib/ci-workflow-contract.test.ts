@@ -63,7 +63,7 @@ describe("CI workflow", () => {
 		expect(workflow).toContain("bash scripts/ci-deploy.sh");
 		const deploy = readFileSync("scripts/ci-deploy.sh", "utf8");
 		expect(deploy).toContain(
-			"node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/api/health",
+			"node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/cms_api/health",
 		);
 	});
 });

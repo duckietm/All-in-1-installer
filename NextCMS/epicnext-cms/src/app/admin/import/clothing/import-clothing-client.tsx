@@ -103,7 +103,7 @@ function LibsView() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [busyLib, setBusyLib] = useState<string | null>(null);
 	const batch = useBatchImport({
-		url: "/api/admin/import/clothing/batch",
+		url: "/cms_api/admin/import/clothing/batch",
 		successAction: "libraries imported",
 		cancelledMessage: "Import cancelled",
 		onItemDone: (label) => markDone(label),
@@ -116,7 +116,7 @@ function LibsView() {
 		try {
 			const params = new URLSearchParams({ page: String(pageNum) });
 			if (search) params.set("search", search);
-			const res = await adminFetch(`/api/admin/import/clothing?${params}`);
+			const res = await adminFetch(`/cms_api/admin/import/clothing?${params}`);
 			const data = await res.json();
 			if (!res.ok) {
 				setError(data.error || "Failed to load");
@@ -199,7 +199,7 @@ function LibsView() {
 		setBusyLib(p.lib);
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/clothing?lib=${encodeURIComponent(p.lib)}`,
+				`/cms_api/admin/import/clothing?lib=${encodeURIComponent(p.lib)}`,
 				{
 					method: "DELETE",
 				},
@@ -461,7 +461,7 @@ function SetsView() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [busyKey, setBusyKey] = useState<string | null>(null);
 	const batch = useBatchImport({
-		url: "/api/admin/import/clothing/sets/batch",
+		url: "/cms_api/admin/import/clothing/sets/batch",
 		successAction: "sets imported",
 		cancelledMessage: "Import cancelled",
 		onItemDone: (label) => markDone(label),
@@ -478,7 +478,7 @@ function SetsView() {
 		try {
 			const params = new URLSearchParams({ page: String(pageNum) });
 			if (search) params.set("search", search);
-			const res = await adminFetch(`/api/admin/import/clothing/sets?${params}`);
+			const res = await adminFetch(`/cms_api/admin/import/clothing/sets?${params}`);
 			const data = await res.json();
 			if (!res.ok) {
 				setError(data.error || "Failed to load");

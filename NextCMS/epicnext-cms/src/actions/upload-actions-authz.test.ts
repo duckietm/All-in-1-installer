@@ -145,7 +145,7 @@ for (const [name, save] of [
 				expect(result.success).toBe(true);
 				expect(result.url).toMatch(
 					new RegExp(
-						`^/api/media/${name}/[^/]+\\.${format === "jpeg" ? "jpg" : format}$`,
+						`^/cms_api/media/${name}/[^/]+\\.${format === "jpeg" ? "jpg" : format}$`,
 					),
 				);
 				expect(writeFile).toHaveBeenCalledWith(expect.any(String), image);

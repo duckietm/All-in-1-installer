@@ -93,7 +93,7 @@ test("staff signs in, saves a draft, previews it and publishes to anonymous read
 			// navigates there explicitly anyway; this asserts the redirect target.
 			await expect(page).toHaveURL(/\/admin\/articles\/new(?:\?|$)/);
 			const session = await context.request
-				.get("/api/auth/session")
+				.get("/cms_api/auth/session")
 				.then((response) => response.json());
 			expect(session.user).toMatchObject({
 				id: String(fixture.userId),
@@ -168,7 +168,7 @@ test("staff signs in, saves a draft, previews it and publishes to anonymous read
 			await expect(reader.locator(".error-screen-code")).toHaveText("404");
 			await expect(publicTitle).toHaveCount(0);
 			const listing = await anonymous.request
-				.get("/api/articles")
+				.get("/cms_api/articles")
 				.then((response) => response.json());
 			expect(listing.data).toEqual([]);
 			expect(listing.meta.total).toBe(0);
@@ -266,7 +266,7 @@ test("staff signs in, saves a draft, previews it and publishes to anonymous read
 			await expect(reader.locator(".article-body")).toContainText(body);
 			await expect(reader.locator(".error-screen-code")).toHaveCount(0);
 			const listing = await anonymous.request
-				.get("/api/articles")
+				.get("/cms_api/articles")
 				.then((response) => response.json());
 			expect(listing.data).toHaveLength(1);
 			expect(listing.data[0]).toMatchObject({

@@ -29,7 +29,7 @@ export function ImportAttachmentRecovery({
 			const form = new FormData();
 			form.set("classname", classname);
 			form.set("file", file);
-			const response = await adminFetch("/api/admin/studio/import-attachment", {
+			const response = await adminFetch("/cms_api/admin/studio/import-attachment", {
 				method: "POST",
 				body: form,
 			});
@@ -54,7 +54,7 @@ export function ImportAttachmentRecovery({
 		setBusy(true);
 		setError("");
 		try {
-			const response = await adminFetch("/api/admin/studio/import-jobs", {
+			const response = await adminFetch("/cms_api/admin/studio/import-jobs", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({

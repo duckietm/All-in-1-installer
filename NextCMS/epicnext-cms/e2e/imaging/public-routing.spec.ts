@@ -8,7 +8,7 @@ import {
 } from "./imaging-target";
 
 // Regression guard for the public topology: the edge proxy must front the
-// imager container at `/imaging/*` while `/api/imaging/*` reaches the CMS.
+// imager container at `/imaging/*` while `/cms_api/imaging/*` reaches the CMS.
 // Mis-routing here blanks avatars for every visitor, and no unit test sees it.
 // Only meaningful against the public origin, so it is skipped when the CMS is
 // reached directly (set `IMAGING_EDGE=1` for the public origin).
@@ -40,7 +40,7 @@ test("the CMS avatar endpoint is reachable through the edge", async ({
 });
 
 test("the edge does not shadow the CMS badge endpoint", async ({ request }) => {
-	const response = await getThroughEdge(request, "/api/imaging/badge?code=ADM");
+	const response = await getThroughEdge(request, "/cms_api/imaging/badge?code=ADM");
 	expect(response.status()).toBe(200);
 	expect(response.headers()["content-type"]).toContain("image/");
 });

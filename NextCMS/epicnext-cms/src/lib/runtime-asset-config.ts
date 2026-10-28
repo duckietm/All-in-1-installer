@@ -19,7 +19,7 @@ export function resolveImagerBase(origin?: string): string {
 		throw new Error("Invalid imager URL protocol");
 	if (
 		ownOrigins.has(target.origin) &&
-		["/imaging", "/api/imaging/avatar"].includes(
+		["/imaging", "/cms_api/imaging/avatar"].includes(
 			target.pathname.replace(/\/+$/, ""),
 		)
 	) {
@@ -32,7 +32,7 @@ export function resolveImagerBase(origin?: string): string {
 		if (
 			!["http:", "https:"].includes(resolved.protocol) ||
 			(ownOrigins.has(resolved.origin) &&
-				["/imaging", "/api/imaging/avatar"].includes(
+				["/imaging", "/cms_api/imaging/avatar"].includes(
 					resolved.pathname.replace(/\/+$/, ""),
 				))
 		)

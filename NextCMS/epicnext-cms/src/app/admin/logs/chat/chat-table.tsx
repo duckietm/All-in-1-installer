@@ -46,7 +46,7 @@ export function ChatTable({ data }: ChatTableProps) {
 			data={data}
 			columns={columns}
 			searchPlaceholder={t("chat.searchPlaceholder")}
-			exportUrl="/api/admin/export?type=chatlogs"
+			exportUrl="/cms_api/admin/export?type=chatlogs"
 		/>
 	);
 }

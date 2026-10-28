@@ -217,7 +217,7 @@ export function AuditClient() {
 		abortRef.current = abort;
 
 		try {
-			const res = await adminFetch("/api/admin/import/audit", {
+			const res = await adminFetch("/cms_api/admin/import/audit", {
 				method: "POST",
 				signal: abort.signal,
 				headers: { "Content-Type": "application/json" },

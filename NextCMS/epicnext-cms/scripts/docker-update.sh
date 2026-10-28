@@ -24,7 +24,7 @@ probe='const r=await fetch(process.argv[1],{cache:"no-store",signal:AbortSignal.
 verify_container() {
   local target="$1" release="$2" attempt
   for attempt in $(seq 1 30); do
-    if docker exec "$target" node --input-type=module -e "$probe" "http://127.0.0.1:3002/api/health" "$release" >>"$LOG_FILE" 2>&1; then return 0; fi
+    if docker exec "$target" node --input-type=module -e "$probe" "http://127.0.0.1:3002/cms_api/health" "$release" >>"$LOG_FILE" 2>&1; then return 0; fi
     sleep 3
   done
   return 1
@@ -152,7 +152,7 @@ actual_image="$(docker inspect --format '{{.Image}}' "$container")"
 verify_container "$container" "$CMS_RELEASE" || die "HTTP health/release verification failed."
 if [[ -n "${CMS_PUBLIC_URL:-}" ]]; then
   [[ "$CMS_PUBLIC_URL" = https://* || "$CMS_PUBLIC_URL" = http://* ]] || die "CMS_PUBLIC_URL must be an HTTP(S) URL."
-  docker exec "$container" node --input-type=module -e "$probe" "${CMS_PUBLIC_URL%/}/api/health?release=$CMS_RELEASE" "$CMS_RELEASE" >>"$LOG_FILE" 2>&1 || die "Public domain serves another release or is unhealthy. Check reverse proxy/CDN destination."
+  docker exec "$container" node --input-type=module -e "$probe" "${CMS_PUBLIC_URL%/}/cms_api/health?release=$CMS_RELEASE" "$CMS_RELEASE" >>"$LOG_FILE" 2>&1 || die "Public domain serves another release or is unhealthy. Check reverse proxy/CDN destination."
   log "Public URL verified: $CMS_PUBLIC_URL"
 else
   log "Public domain was not checked. Set CMS_PUBLIC_URL to verify reverse proxy/CDN routing as well."

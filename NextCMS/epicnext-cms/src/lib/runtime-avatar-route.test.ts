@@ -2,7 +2,7 @@
 import { rm } from "node:fs/promises";
 import { NextRequest } from "next/server";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { GET } from "../app/api/imaging/avatar/route";
+import { GET } from "../app/cms_api/imaging/avatar/route";
 
 // One scratch root for the whole file, removed afterwards: a per-test root left a
 // new directory behind for every test, polluting the runtime cache tree.
@@ -35,7 +35,7 @@ it("forwards multicolor figures and preserves configured query options at runtim
 		vi.stubEnv("IMAGER_URL", `https://${hotel}.test/avatar?renderer=custom`);
 		const result = await GET(
 			new NextRequest(
-				`https://hotel.test/api/imaging/avatar?figure=${figure}&headonly=1&effect=0`,
+				`https://hotel.test/cms_api/imaging/avatar?figure=${figure}&headonly=1&effect=0`,
 			),
 		);
 		expect(result.status).toBe(200);
@@ -52,7 +52,7 @@ it("rejects malformed figure input without contacting a renderer", async () => {
 	expect(
 		(
 			await GET(
-				new NextRequest("https://hotel.test/api/imaging/avatar?figure=../bad"),
+				new NextRequest("https://hotel.test/cms_api/imaging/avatar?figure=../bad"),
 			)
 		).status,
 	).toBe(400);
@@ -71,7 +71,7 @@ it("falls back to the public Habbo renderer when the configured imager is down",
 	vi.stubEnv("IMAGER_URL", "https://hotel.test/avatarimage");
 	const result = await GET(
 		new NextRequest(
-			"https://hotel.test/api/imaging/avatar?figure=hd-180-1&img_format=apng&effect=0",
+			"https://hotel.test/cms_api/imaging/avatar?figure=hd-180-1&img_format=apng&effect=0",
 		),
 	);
 	expect(result.status).toBe(200);
@@ -93,7 +93,7 @@ it("serves a previously rendered avatar from the disk cache without re-fetching"
 	vi.stubGlobal("fetch", fetcher);
 	vi.stubEnv("IMAGER_URL", "https://cache.test/avatarimage");
 	const request = new NextRequest(
-		"https://hotel.test/api/imaging/avatar?figure=hd-123-1",
+		"https://hotel.test/cms_api/imaging/avatar?figure=hd-123-1",
 	);
 	const first = await GET(request);
 	expect(first.status).toBe(200);
@@ -117,7 +117,7 @@ it("revalidates a cached avatar with a 304 when the client already has it", asyn
 	);
 	vi.stubGlobal("fetch", fetcher);
 	vi.stubEnv("IMAGER_URL", "https://etag.test/avatarimage");
-	const url = "https://hotel.test/api/imaging/avatar?figure=hd-77-1";
+	const url = "https://hotel.test/cms_api/imaging/avatar?figure=hd-77-1";
 	const first = await GET(new NextRequest(url));
 	const etag = first.headers.get("etag");
 	expect(etag).toBeTruthy();
@@ -138,7 +138,7 @@ it("serves a graceful silhouette instead of a broken image when every upstream i
 	vi.stubGlobal("fetch", fetcher);
 	vi.stubEnv("IMAGER_URL", "https://down.test/avatarimage");
 	const result = await GET(
-		new NextRequest("https://hotel.test/api/imaging/avatar?figure=xd-900-1"),
+		new NextRequest("https://hotel.test/cms_api/imaging/avatar?figure=xd-900-1"),
 	);
 	expect(result.status).toBe(200);
 	expect(result.headers.get("content-type")).toBe("image/svg+xml");

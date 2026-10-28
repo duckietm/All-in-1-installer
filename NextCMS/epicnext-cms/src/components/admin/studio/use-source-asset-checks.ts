@@ -39,7 +39,7 @@ export function useSourceAssetChecks(
 			const results: SourceAssetCheck[] = [];
 			try {
 				for (let offset = 0; offset < items.length; offset += 20) {
-					const res = await adminFetch("/api/admin/studio/source-assets", {
+					const res = await adminFetch("/cms_api/admin/studio/source-assets", {
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({

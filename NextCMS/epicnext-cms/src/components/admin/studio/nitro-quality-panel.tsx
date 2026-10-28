@@ -197,7 +197,7 @@ function ScalePanel({
 						) : (
 							<img
 								key={`${asset}-${revision}`}
-								src={`/api/admin/studio/nitro-quality?classname=${encodeURIComponent(classname)}&asset=${encodeURIComponent(asset)}&v=${revision}`}
+								src={`/cms_api/admin/studio/nitro-quality?classname=${encodeURIComponent(classname)}&asset=${encodeURIComponent(asset)}&v=${revision}`}
 								alt={asset}
 								style={{
 									imageRendering: "pixelated",
@@ -235,7 +235,7 @@ export function NitroQualityPanel({ classname }: { classname: string }) {
 		void (async () => {
 			try {
 				const response = await adminFetch(
-					`/api/admin/studio/nitro-quality?classname=${encodeURIComponent(classname)}&v=${revision}`,
+					`/cms_api/admin/studio/nitro-quality?classname=${encodeURIComponent(classname)}&v=${revision}`,
 					{ signal: controller.signal },
 				);
 				const data = await response.json();

@@ -17,7 +17,7 @@ let release: (() => void) | null = null;
 
 // Cast to any to bypass strict MSW v3 config types in the test environment
 const server = setupServer(
-	http.get("https://localhost/api/admin/studio/furniture/jobs", async () => {
+	http.get("https://localhost/cms_api/admin/studio/furniture/jobs", async () => {
 		calls++;
 		if (release)
 			await new Promise<void>((resolve) => {
@@ -49,7 +49,7 @@ describe("furniture history HTTP query", () => {
 		const options = furnitureJobsQueryOptions(false, null) as any;
 		options.queryKey = ["furniture-import-history", false, null];
 		options.queryFn = () =>
-			fetch("https://localhost/api/admin/studio/furniture/jobs").then((r) =>
+			fetch("https://localhost/cms_api/admin/studio/furniture/jobs").then((r) =>
 				r.json(),
 			);
 

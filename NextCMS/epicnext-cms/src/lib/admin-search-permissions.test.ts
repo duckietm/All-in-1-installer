@@ -69,7 +69,7 @@ vi.mock("@/lib/db", async () => {
 	};
 });
 
-import { GET } from "@/app/api/admin/search/route";
+import { GET } from "@/app/cms_api/admin/search/route";
 import { PERMS } from "@/lib/permission-slugs";
 
 beforeEach(() => {
@@ -78,7 +78,7 @@ beforeEach(() => {
 });
 const request = () =>
 	({
-		nextUrl: new URL("https://test.invalid/api/admin/search?q=match"),
+		nextUrl: new URL("https://test.invalid/cms_api/admin/search?q=match"),
 	}) as Parameters<typeof GET>[0];
 it("does not query or expose categories without their view permission", async () => {
 	const response = await GET(request(), {});

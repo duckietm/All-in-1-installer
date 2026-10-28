@@ -13,7 +13,7 @@ describe("deployed HTTP release readiness", () => {
 			.mockResolvedValueOnce(Response.json({ database: true, release: sha }));
 		vi.stubGlobal("fetch", fetch);
 		const report = vi.fn();
-		await verifyDeployedRelease("http://localhost:3002/api/health", sha, {
+		await verifyDeployedRelease("http://localhost:3002/cms_api/health", sha, {
 			attempts: 3,
 			interval: 0,
 			report,
@@ -39,7 +39,7 @@ describe("deployed HTTP release readiness", () => {
 			);
 			const report = vi.fn();
 			await expect(
-				verifyDeployedRelease("http://localhost:3002/api/health", sha, {
+				verifyDeployedRelease("http://localhost:3002/cms_api/health", sha, {
 					attempts: 2,
 					interval: 0,
 					report,

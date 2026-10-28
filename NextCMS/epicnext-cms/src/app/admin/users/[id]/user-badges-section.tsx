@@ -61,7 +61,7 @@ export function UserBadgesSection({ userId, badges }: UserBadgesSectionProps) {
 							className="group flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-sm hover:border-destructive/50 transition-colors"
 						>
 							<img
-								src={`/api/imaging/badge?source=local&code=${encodeURIComponent(badge.badgeCode)}`}
+								src={`/cms_api/imaging/badge?source=local&code=${encodeURIComponent(badge.badgeCode)}`}
 								alt={badge.badgeCode}
 								className="h-5 w-5"
 								onError={(e) => {

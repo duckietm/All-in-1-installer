@@ -9,7 +9,7 @@ import RadioPlayer from "./radio-player";
  *
  * Mount this once in the public layout. It is intentionally tiny: the live
  * config the player actually plays is refreshed client-side from
- * /api/radio/config, which lets staff toggle the radio without a redeploy.
+ * /cms_api/radio/config, which lets staff toggle the radio without a redeploy.
  */
 export default async function RadioPlayerGate() {
 	let enabled: boolean;

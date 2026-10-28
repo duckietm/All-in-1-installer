@@ -253,7 +253,7 @@ function CatalogManagerInner({
 		const request = rootRequests.start();
 		dispatch({ type: "SET_LOADING_ROOT", loading: true });
 		try {
-			const res = await fetch(`/api/admin/catalog/tree?parentId=-1${catQs}`, {
+			const res = await fetch(`/cms_api/admin/catalog/tree?parentId=-1${catQs}`, {
 				signal: request.signal,
 			});
 			const data = await res.json().catch(() => ({}));
@@ -373,7 +373,7 @@ function CatalogManagerInner({
 		const request = searchNavigation.start();
 		try {
 			const response = await fetch(
-				`/api/admin/catalog/tree?ancestors=${result.pageId}${catQs}`,
+				`/cms_api/admin/catalog/tree?ancestors=${result.pageId}${catQs}`,
 				{ signal: request.signal },
 			);
 			if (!response.ok) throw Error("Navigation failed");

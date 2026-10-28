@@ -104,12 +104,12 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { postComment } from "@/actions/article-comments";
-import { POST } from "@/app/api/articles/[slug]/comment/route";
+import { POST } from "@/app/cms_api/articles/[slug]/comment/route";
 import { reloadWordFilter } from "@/lib/services/moderation";
 
 function api(comment: unknown = "Hello", slug = "public-news") {
 	return POST(
-		new Request("https://hotel.test/api/articles/public-news/comment", {
+		new Request("https://hotel.test/cms_api/articles/public-news/comment", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ comment, userId: 999 }),

@@ -9,7 +9,7 @@ it("uses two test workers and runs smoke checks in the deployment transaction", 
 	expect(workflow).not.toContain("\n  e2e:");
 	expect(workflow).toContain("bash scripts/ci-deploy.sh");
 	expect(deploy).toContain(
-		"node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/api/health",
+		"node scripts/verify-deployed-release.mjs http://127.0.0.1:3002/cms_api/health",
 	);
 });
 it("locks CI and scheduled deployments using the same production lock", () => {

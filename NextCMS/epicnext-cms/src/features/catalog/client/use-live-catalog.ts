@@ -102,8 +102,8 @@ export function applyCatalogDelta(delta: CatalogTreeDelta): void {
 	});
 }
 
-const TREE_URL = "/api/admin/catalog/tree?mode=full";
-const REVISION_URL = "/api/admin/catalog/revision";
+const TREE_URL = "/cms_api/admin/catalog/tree?mode=full";
+const REVISION_URL = "/cms_api/admin/catalog/revision";
 const CHANNEL = "atom-cms-catalog";
 
 /** Last ETag the server handed out, replayed as `If-None-Match` on the next read. */

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ContentCard } from "@/components/public/ui";
 
 // Public API documentation. Static, hand-maintained from the routes that
-// actually exist under src/app/api — keep this in sync when endpoints change.
+// actually exist under src/app/cms_api — keep this in sync when endpoints change.
 
 export const metadata: Metadata = {
 	title: "Developers",
@@ -33,7 +33,7 @@ type Group = {
 	endpoints: Endpoint[];
 };
 
-// Mirrors the route.ts files under src/app/api. Only documents endpoints that
+// Mirrors the route.ts files under src/app/cms_api. Only documents endpoints that
 // really exist; auth flags reflect bearerUserId() / auth() usage in each route.
 const GROUPS: Group[] = [
 	{
@@ -43,13 +43,13 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/users/{username}",
+				path: "/cms_api/users/{username}",
 				description:
 					"Public profile for a user by username (look, motto, rank, badges).",
 			},
 			{
 				method: "GET",
-				path: "/api/me",
+				path: "/cms_api/me",
 				description:
 					"The currently signed-in user, or { user: null } when not authenticated.",
 			},
@@ -62,24 +62,24 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/articles",
+				path: "/cms_api/articles",
 				description:
 					"List published news articles (paginated via query params).",
 			},
 			{
 				method: "GET",
-				path: "/api/articles/{slug}",
+				path: "/cms_api/articles/{slug}",
 				description: "A single article by slug, with its comments.",
 			},
 			{
 				method: "POST",
-				path: "/api/articles/{slug}/comment",
+				path: "/cms_api/articles/{slug}/comment",
 				description: "Post a comment on an article.",
 				bearer: true,
 			},
 			{
 				method: "GET",
-				path: "/api/photos",
+				path: "/cms_api/photos",
 				description: "Recent in-game camera photos.",
 			},
 		],
@@ -91,43 +91,43 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/home",
+				path: "/cms_api/home",
 				description:
 					"Aggregated home-page payload (settings, news, online stats).",
 			},
 			{
 				method: "GET",
-				path: "/api/online",
+				path: "/cms_api/online",
 				description: "Users currently online.",
 			},
 			{
 				method: "GET",
-				path: "/api/online/count",
+				path: "/cms_api/online/count",
 				description: "Just the online-user count.",
 			},
 			{
 				method: "GET",
-				path: "/api/leaderboard",
+				path: "/cms_api/leaderboard",
 				description: "Player leaderboard (ranked by the requested metric).",
 			},
 			{
 				method: "GET",
-				path: "/api/guilds",
+				path: "/cms_api/guilds",
 				description: "List guilds.",
 			},
 			{
 				method: "GET",
-				path: "/api/guilds/{id}",
+				path: "/cms_api/guilds/{id}",
 				description: "A single guild with its members.",
 			},
 			{
 				method: "GET",
-				path: "/api/staff",
+				path: "/cms_api/staff",
 				description: "Staff members above the configured minimum rank.",
 			},
 			{
 				method: "GET",
-				path: "/api/teams",
+				path: "/cms_api/teams",
 				description: "Public staff teams / rank groups.",
 			},
 		],
@@ -139,27 +139,27 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/shop",
+				path: "/cms_api/shop",
 				description: "Shop products (filter by category via query params).",
 			},
 			{
 				method: "GET",
-				path: "/api/shop/categories",
+				path: "/cms_api/shop/categories",
 				description: "Shop categories.",
 			},
 			{
 				method: "GET",
-				path: "/api/values",
+				path: "/cms_api/values",
 				description: "Rare-value catalogue.",
 			},
 			{
 				method: "GET",
-				path: "/api/values/{id}",
+				path: "/cms_api/values/{id}",
 				description: "A single rare value entry.",
 			},
 			{
 				method: "GET",
-				path: "/api/values/categories",
+				path: "/cms_api/values/categories",
 				description: "Rare-value categories.",
 			},
 		],
@@ -171,58 +171,58 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/radio/now-playing",
+				path: "/cms_api/radio/now-playing",
 				description: "The track currently on air.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/current-dj",
+				path: "/cms_api/radio/current-dj",
 				description: "The DJ currently live.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/listeners",
+				path: "/cms_api/radio/listeners",
 				description: "Current listener count.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/config",
+				path: "/cms_api/radio/config",
 				description: "Public radio configuration.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/embed-config",
+				path: "/cms_api/radio/embed-config",
 				description: "Configuration for the embeddable radio player.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/auto-play",
+				path: "/cms_api/radio/auto-play",
 				description: "AutoDJ playback state.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/stream",
+				path: "/cms_api/radio/stream",
 				description: "Stream metadata / proxy details.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/points/leaderboard",
+				path: "/cms_api/radio/points/leaderboard",
 				description: "DJ points leaderboard.",
 			},
 			{
 				method: "GET",
-				path: "/api/radio/points",
+				path: "/cms_api/radio/points",
 				description: "The signed-in user's own DJ points.",
 				bearer: true,
 			},
 			{
 				method: "GET",
-				path: "/api/radio/shouts",
+				path: "/cms_api/radio/shouts",
 				description: "Recent radio shout-outs.",
 			},
 			{
 				method: "POST",
-				path: "/api/radio/shouts",
+				path: "/cms_api/radio/shouts",
 				description: "Submit a shout-out to the current DJ.",
 				bearer: true,
 			},
@@ -235,7 +235,7 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/settings",
+				path: "/cms_api/settings",
 				description:
 					"Public, non-sensitive site settings (name, theme, links).",
 			},
@@ -248,20 +248,20 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "POST",
-				path: "/api/tokens",
+				path: "/cms_api/tokens",
 				description:
 					"Mint a new personal access token (the plaintext is shown once).",
 				session: true,
 			},
 			{
 				method: "GET",
-				path: "/api/me/tokens",
+				path: "/cms_api/me/tokens",
 				description: "List your personal access tokens (id, name, last used).",
 				session: true,
 			},
 			{
 				method: "DELETE",
-				path: "/api/me/tokens?id={id}",
+				path: "/cms_api/me/tokens?id={id}",
 				description: "Revoke one of your tokens by id.",
 				session: true,
 			},
@@ -274,25 +274,25 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/tickets",
+				path: "/cms_api/tickets",
 				description: "List your own help-center tickets.",
 				bearer: true,
 			},
 			{
 				method: "POST",
-				path: "/api/tickets",
+				path: "/cms_api/tickets",
 				description: "Open a new help-center ticket.",
 				bearer: true,
 			},
 			{
 				method: "GET",
-				path: "/api/tickets/{id}",
+				path: "/cms_api/tickets/{id}",
 				description: "A single ticket you own, with its replies.",
 				bearer: true,
 			},
 			{
 				method: "POST",
-				path: "/api/tickets/{id}/reply",
+				path: "/cms_api/tickets/{id}/reply",
 				description: "Reply to one of your tickets.",
 				bearer: true,
 			},
@@ -305,7 +305,7 @@ const GROUPS: Group[] = [
 		endpoints: [
 			{
 				method: "GET",
-				path: "/api/health",
+				path: "/cms_api/health",
 				description: "Liveness probe — reports app and database status.",
 			},
 		],
@@ -405,7 +405,7 @@ export default function DevelopersPage() {
 				subtitle={`A public REST API over the hotel — ${totalEndpoints} endpoints across ${GROUPS.length} groups.`}
 			>
 				<p className="muted" style={{ margin: 0 }}>
-					All endpoints live under <code>/api</code> and return JSON. Most read
+					All endpoints live under <code>/cms_api</code> and return JSON. Most read
 					endpoints are open; a handful that touch your account need a token.
 					Browse the groups below — each row shows the method, path, what it
 					does and whether it needs authentication.
@@ -445,9 +445,9 @@ export default function DevelopersPage() {
 					</code>
 					<p className="muted" style={{ margin: 0 }}>
 						To get a token, sign in to the website and <code>POST</code> to{" "}
-						<code>/api/tokens</code> — the plaintext token is returned{" "}
+						<code>/cms_api/tokens</code> — the plaintext token is returned{" "}
 						<strong>once</strong> and never shown again, so store it safely. You
-						can list and revoke your tokens at <code>/api/me/tokens</code>.
+						can list and revoke your tokens at <code>/cms_api/me/tokens</code>.
 						These token-management endpoints are marked{" "}
 						<span className="inline-block text-[0.72rem] font-bold px-2 py-0.5 rounded-full bg-[var(--color-primary)]/18 text-[var(--color-text)]">
 							🔒 Session

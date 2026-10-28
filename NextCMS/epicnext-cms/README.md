@@ -208,7 +208,7 @@ upstream to your fork/branch if that is where you receive updates.
 It builds a commit-tagged image and runs migrations in the matching builder
 container, using the clone's `.env`; no host dependency installation is needed.
 Only after build and migrations succeed does it recreate the CMS service. It
-compares the running image ID, image revision and `/api/health` release with the
+compares the running image ID, image revision and `/cms_api/health` release with the
 expected Git commit. With `CMS_PUBLIC_URL`, it also checks the domain through
 your proxy/CDN. A healthy response from another release is an error.
 
@@ -252,7 +252,7 @@ the badge directory URL (or a local path). The legacy `NEXT_PUBLIC_IMAGER_URL` a
 `NEXT_PUBLIC_BADGE_URL` names remain supported at runtime. If the imager points back
 to the CMS `/imaging` proxy, set `IMAGING_UPSTREAM_URL` to the actual renderer to avoid
 a loop. With no imager configured, the CMS uses Habbo's public renderer. Client
-requests use the existing `/api/imaging/avatar` proxy. Admin badges preserve their
+requests use the existing `/cms_api/imaging/avatar` proxy. Admin badges preserve their
 local `/swf/c_images/album1584` fallback. Public URL resolution uses runtime `APP_URL`.
 After changing `.env`, recreate the container; an image rebuild is not required.
 `NEXT_PUBLIC_CMS_RELEASE` deliberately remains compiled into the image.
@@ -307,8 +307,8 @@ Container publication is disabled. CI builds, checks and deploys the CMS, but it
 git rev-parse HEAD
 docker inspect --format '{{.Image}}' epicnext-cms
 docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' epicnext-cms
-curl -fsS http://127.0.0.1:3002/api/health
-curl -fsS https://your-hotel.example/api/health
+curl -fsS http://127.0.0.1:3002/cms_api/health
+curl -fsS https://your-hotel.example/cms_api/health
 ```
 
 Both HTTP responses must report the expected `release`. `unknown` means the image
@@ -422,7 +422,7 @@ provides.
 
 ### Health Check
 
-The container includes a health check that hits `/api/health` on port 3002 every 30 seconds (and reports DB/Redis/emulator status). Check status with:
+The container includes a health check that hits `/cms_api/health` on port 3002 every 30 seconds (and reports DB/Redis/emulator status). Check status with:
 
 ```bash
 docker inspect --format='{{.State.Health.Status}}' epicnext-cms
@@ -562,7 +562,7 @@ maxmemory-policy allkeys-lru
 REDIS_URL=redis://127.0.0.1:6379?connect_timeout=2
 ```
 
-Verify via `/api/health` — it should report `"redis": true`.
+Verify via `/cms_api/health` — it should report `"redis": true`.
 
 ---
 
@@ -618,7 +618,7 @@ server {
         add_header X-Cache-Status $upstream_cache_status always;
     }
 
-    location /api/ {
+    location /cms_api/ {
         proxy_pass http://127.0.0.1:3002;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
     }
@@ -704,7 +704,7 @@ A production issue that this section documents: **the `avatar-imaging-pixinode` 
 
 ### Automatic upstream fallback
 
-Since then the CMS-side avatar proxies (`/api/imaging/avatar` and `/imaging`) are resilient: when the configured upstream (the Polaris container on `8082`) fails or times out, the request is retried against Habbo's public renderer (`https://www.habbo.com/habbo-imaging/avatarimage`), with the `effect` parameter stripped and `img_format` forced to `png`, since the public renderer supports neither. The response is then marked with `X-Imager-Source: primary|fallback` and a shorter `Cache-Control` TTL when served from fallback, so the configured imager is retried soon instead of being masked for hours. No fallback is attempted when the configured upstream already is the Habbo public renderer. As a last line of defence every avatar `<img>` on the site falls back to a grayscale silhouette placeholder instead of a broken-image glyph.
+Since then the CMS-side avatar proxies (`/cms_api/imaging/avatar` and `/imaging`) are resilient: when the configured upstream (the Polaris container on `8082`) fails or times out, the request is retried against Habbo's public renderer (`https://www.habbo.com/habbo-imaging/avatarimage`), with the `effect` parameter stripped and `img_format` forced to `png`, since the public renderer supports neither. The response is then marked with `X-Imager-Source: primary|fallback` and a shorter `Cache-Control` TTL when served from fallback, so the configured imager is retried soon instead of being masked for hours. No fallback is attempted when the configured upstream already is the Habbo public renderer. As a last line of defence every avatar `<img>` on the site falls back to a grayscale silhouette placeholder instead of a broken-image glyph.
 
 ### Figure string validation
 
@@ -719,7 +719,7 @@ reject — an empty part slot such as the legacy `hr-100-.hd-180-1` default, a
 path-traversal attempt, an over-long value — is replaced with
 `DEFAULT_AVATAR_FIGURE`. That stops legacy accounts from rendering broken
 avatars without weakening the route, which still answers `400` to a malformed
-figure (`src/app/api/imaging/avatar/route.ts`).
+figure (`src/app/cms_api/imaging/avatar/route.ts`).
 
 ---
 
@@ -791,11 +791,11 @@ cache them on their behalf.
 
 | Class | Endpoints                                                                                                                                     | TTL  |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 1     | `/api/online`, `/api/online/count`                                                                                                            | 10s  |
-| 2     | `/api/photos`, `/api/leaderboard`, `/api/radio/current-dj`, `/api/radio/points/leaderboard`                                                   | 60s  |
-| 3     | `/api/staff`, `/api/teams`, `/api/guilds`, `/api/shop`, `/api/shop/categories`, `/api/values`, `/api/values/categories`, `/api/values/[0-9]+` | 300s |
+| 1     | `/cms_api/online`, `/cms_api/online/count`                                                                                                            | 10s  |
+| 2     | `/cms_api/photos`, `/cms_api/leaderboard`, `/cms_api/radio/current-dj`, `/cms_api/radio/points/leaderboard`                                                   | 60s  |
+| 3     | `/cms_api/staff`, `/cms_api/teams`, `/cms_api/guilds`, `/cms_api/shop`, `/cms_api/shop/categories`, `/cms_api/values`, `/cms_api/values/categories`, `/cms_api/values/[0-9]+` | 300s |
 
-`/api/radio/shouts` is intentionally excluded: it is live chat.
+`/cms_api/radio/shouts` is intentionally excluded: it is live chat.
 
 Three details are easy to get wrong and are worth keeping intact:
 - **`proxy_ignore_headers "Cache-Control" "Vary";` is what makes the cache work.**
@@ -823,10 +823,10 @@ with a redirect to `/me` and reads `headers()` for a per-request CSP nonce.
 | `/etc/nginx/nginx.conf`                                                                                  | `worker_connections 4096`, `multi_accept on`, TLS 1.2/1.3 only, `proxy_cache_path` for the micro-cache                                                                        |
 | `/etc/nginx/sites-enabled/cms.conf`                                                                      | single correct `Cache-Control` per path, micro-cache on the whitelist, session/Authorization bypass, SSE block with buffering off, `upstream cms_app` + `proxy_next_upstream` |
 | `/etc/nginx/snippets/cms_upstream_servers.conf`                                                          | backend list, rewritten by `ci-deploy.sh` during a cutover                                                                                                                    |
-| `src/app/api/online/count/stream/route.ts`                                                               | `X-Accel-Buffering: no`                                                                                                                                                       |
-| `src/app/api/radio/stream/route.ts`                                                                      | `X-Accel-Buffering: no`                                                                                                                                                       |
-| `src/app/api/admin/import/{audit,furni/route,furni/batch,furni/batch-regen,furni/repair-icons}/route.ts` | `X-Accel-Buffering: no`                                                                                                                                                       |
-| `src/app/api/admin/studio/nitro-cleanup{,/rebuild}/route.ts`                                             | `X-Accel-Buffering: no`                                                                                                                                                       |
+| `src/app/cms_api/online/count/stream/route.ts`                                                               | `X-Accel-Buffering: no`                                                                                                                                                       |
+| `src/app/cms_api/radio/stream/route.ts`                                                                      | `X-Accel-Buffering: no`                                                                                                                                                       |
+| `src/app/cms_api/admin/import/{audit,furni/route,furni/batch,furni/batch-regen,furni/repair-icons}/route.ts` | `X-Accel-Buffering: no`                                                                                                                                                       |
+| `src/app/cms_api/admin/studio/nitro-cleanup{,/rebuild}/route.ts`                                             | `X-Accel-Buffering: no`                                                                                                                                                       |
 | `scripts/ci-deploy.sh`                                                                                   | resource limits, blue/green cutover, `switch_upstream`, rollback split by cutover state                                                                                       |
 | `deploy.sh`                                                                                              | reduced to a wrapper around `ci-deploy.sh`                                                                                                                                    |
 | `docker-compose.yml`                                                                                     | two replica services from a shared anchor, resource limits, port-aware healthcheck, dead `mariadb-turbo` removed                                                              |
@@ -847,7 +847,7 @@ repeat-offender attacks:
 1. **App-layer gate** (production only) — per-IP request buckets per category
    (pages / API / auth), a whole-site safety valve, and escalation tiers that
    temporarily hard-block offending IPs (`src/lib/ddos-guard.ts`).
-   `/api/health` is always exempt so the Docker liveness probe never trips it.
+   `/cms_api/health` is always exempt so the Docker liveness probe never trips it.
 2. **Automatic Cloudflare edge blocks** (optional, works on every Cloudflare
    plan including Free) — when the gate hard-blocks an IP, the CMS mirrors the
    block to the zone's **IP Access Rules** (`src/lib/cloudflare-api.ts`), so a
@@ -1426,7 +1426,7 @@ EpicNext-CMS maintains strict engineering standards enforced through automated t
 EpicNext-CMS is engineered for enterprise-grade production environments with zero-downtime deployment capabilities:
 1. **Blue/Green Slot Deployments**:
    - Updates run through containerized slot orchestration (`scripts/docker-update.sh`), ensuring seamless transitions between release versions without dropping requests.
-   - Automatic health check verification (`/api/health`) validates database connectivity, Redis/Valkey status, and RCON liveness before routing production traffic.
+   - Automatic health check verification (`/cms_api/health`) validates database connectivity, Redis/Valkey status, and RCON liveness before routing production traffic.
 
 2. **Automated Rollback Protection**:
    - If a post-cutover health check or startup sequence fails, the system automatically triggers a rollback to the previous stable container image and logs the incident.

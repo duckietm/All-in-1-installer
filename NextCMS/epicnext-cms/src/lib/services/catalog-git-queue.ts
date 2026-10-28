@@ -19,11 +19,11 @@ export function catalogExportQueue() {
 export function isCatalogMutation(method: string, pathname: string) {
 	return (
 		["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
-		pathname.replace(/\/$/, "") !== "/api/admin/catalog/status" &&
-		(pathname.startsWith("/api/admin/import/") ||
-			pathname.startsWith("/api/admin/catalog/") ||
-			pathname.startsWith("/api/admin/furni/") ||
-			pathname.startsWith("/api/admin/furniture/"))
+		pathname.replace(/\/$/, "") !== "/cms_api/admin/catalog/status" &&
+		(pathname.startsWith("/cms_api/admin/import/") ||
+			pathname.startsWith("/cms_api/admin/catalog/") ||
+			pathname.startsWith("/cms_api/admin/furni/") ||
+			pathname.startsWith("/cms_api/admin/furniture/"))
 	);
 }
 export async function catalogExportStatus() {

@@ -61,7 +61,7 @@ export function PrefixesClient({ canEdit }: { canEdit: boolean }) {
 	const fetchPrefixes = useCallback(async () => {
 		const params = new URLSearchParams({ page: String(page) });
 		if (searchQuery) params.set("q", searchQuery);
-		const res = await fetch(`/api/admin/prefixes?${params}`);
+		const res = await fetch(`/cms_api/admin/prefixes?${params}`);
 		if (!res.ok) return;
 		const data = await res.json();
 		if (data.ok) {
@@ -71,14 +71,14 @@ export function PrefixesClient({ canEdit }: { canEdit: boolean }) {
 	}, [page, searchQuery]);
 
 	const fetchBlacklist = useCallback(async () => {
-		const res = await fetch("/api/admin/prefixes/blacklist");
+		const res = await fetch("/cms_api/admin/prefixes/blacklist");
 		if (!res.ok) return;
 		const data = await res.json();
 		if (data.ok) setBlacklist(data.words);
 	}, []);
 
 	const fetchSettings = useCallback(async () => {
-		const res = await fetch("/api/admin/prefixes/settings");
+		const res = await fetch("/cms_api/admin/prefixes/settings");
 		if (!res.ok) return;
 		const data = await res.json();
 		if (data.ok) setSettings(data.settings);

@@ -12,7 +12,7 @@ test("notification reads persist, new replies are unread and failed preferences 
 	let key = "support:42";
 	const readKeys = new Set<string>();
 	let fail = false;
-	await page.route("**/api/notifications**", async (route) => {
+	await page.route("**/cms_api/notifications**", async (route) => {
 		if (route.request().method() === "POST") {
 			if (fail)
 				return route.fulfill({ status: 503, json: { error: "Unavailable" } });
@@ -83,7 +83,7 @@ test("notification service failure offers a retry and recovers to empty state", 
 	page,
 }) => {
 	let failing = true;
-	await page.route("**/api/notifications**", (route) =>
+	await page.route("**/cms_api/notifications**", (route) =>
 		route.fulfill(
 			failing
 				? { status: 503, json: { error: "Unavailable" } }
@@ -113,7 +113,7 @@ test("category changes persist and pagination recovers when filtering shrinks th
 	page,
 }) => {
 	let enabled = true;
-	await page.route("**/api/notifications**", async (route) => {
+	await page.route("**/cms_api/notifications**", async (route) => {
 		if (route.request().method() === "POST") {
 			enabled = route.request().postDataJSON().preferences.support;
 			return route.fulfill({ json: { ok: true } });

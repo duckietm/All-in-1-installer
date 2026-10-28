@@ -33,12 +33,12 @@ const catalog = {
 };
 
 async function mockStudio(page: Page) {
-	await page.route("**/api/**", async (route) => {
+	await page.route("**/cms_api/**", async (route) => {
 		const url = new URL(route.request().url());
-		if (url.pathname === "/api/admin/catalog/revision")
+		if (url.pathname === "/cms_api/admin/catalog/revision")
 			return route.fulfill({ json: { ok: true, revision: catalog.revision } });
 		if (
-			url.pathname === "/api/admin/catalog/tree" &&
+			url.pathname === "/cms_api/admin/catalog/tree" &&
 			url.searchParams.get("mode") === "full"
 		)
 			return route.fulfill({

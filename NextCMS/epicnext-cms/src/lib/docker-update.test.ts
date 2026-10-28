@@ -178,7 +178,7 @@ describe("Docker clone updates", () => {
 		expect(r.calls).toContain(
 			"up -d --no-deps --no-build --force-recreate cms",
 		);
-		expect(r.calls).toContain("https://example.test/api/health");
+		expect(r.calls).toContain("https://example.test/cms_api/health");
 		expect(r.output).toContain(`Verified release ${sha}`);
 		// A successful update runs the scoped prune (build cache + unreferenced
 		// images + stopped containers), never a global or volume prune.
@@ -253,7 +253,7 @@ it("updates using the saved profile and repository-provided image without argume
 	expect(r.calls).toContain(
 		`docker pull gitlab.epicnabbo.nl/simo/epicnext-cms:${sha}`,
 	);
-	expect(r.calls).toContain("https://saved.test/api/health");
+	expect(r.calls).toContain("https://saved.test/cms_api/health");
 	expect(r.calls).not.toContain("docker compose build");
 });
 it("keeps source builds available for a saved source installation", () => {

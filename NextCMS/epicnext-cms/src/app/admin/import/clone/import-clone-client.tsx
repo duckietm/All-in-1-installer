@@ -196,7 +196,7 @@ function SourcesManager({
 	async function handleSave(src: Partial<CloneSource>) {
 		setSaving(true);
 		try {
-			const res = await adminFetch("/api/admin/import/clone", {
+			const res = await adminFetch("/cms_api/admin/import/clone", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(src),
@@ -219,7 +219,7 @@ function SourcesManager({
 		setDeletingId(src.id);
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/clone?id=${encodeURIComponent(src.id)}`,
+				`/cms_api/admin/import/clone?id=${encodeURIComponent(src.id)}`,
 				{
 					method: "DELETE",
 				},
@@ -363,7 +363,7 @@ function FurniIcon({
 	const src =
 		stage === 0
 			? `${iconBaseUrl}/${classname}_icon.png`
-			: `/api/admin/import/clone/icon?source=${encodeURIComponent(sourceId)}&classname=${encodeURIComponent(classname)}`;
+			: `/cms_api/admin/import/clone/icon?source=${encodeURIComponent(sourceId)}&classname=${encodeURIComponent(classname)}`;
 	return (
 		<img
 			key={stage}
@@ -422,7 +422,7 @@ function FurniGrid({ source }: FurniGridProps) {
 				});
 				if (search) params.set("search", search);
 				if (filterVal !== "all") params.set("filter", filterVal);
-				const res = await adminFetch(`/api/admin/import/clone?${params}`);
+				const res = await adminFetch(`/cms_api/admin/import/clone?${params}`);
 				const data = await res.json();
 				if (!res.ok) {
 					setError(data.error || "Failed to load");
@@ -517,7 +517,7 @@ function FurniGrid({ source }: FurniGridProps) {
 		let done = 0;
 		try {
 			await runSseImport(
-				"/api/admin/import/clone/batch",
+				"/cms_api/admin/import/clone/batch",
 				{
 					sourceId: source.id,
 					classnames: toClone.map((it) => it.classname),
@@ -577,7 +577,7 @@ function FurniGrid({ source }: FurniGridProps) {
 		let names: string[] = [];
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/clone?source=${encodeURIComponent(source.id)}&action=clonable`,
+				`/cms_api/admin/import/clone?source=${encodeURIComponent(source.id)}&action=clonable`,
 			);
 			const data = await res.json();
 			if (!res.ok) {
@@ -612,7 +612,7 @@ function FurniGrid({ source }: FurniGridProps) {
 				if (abort.signal.aborted) break;
 				const chunk = names.slice(i, i + CHUNK);
 				await runSseImport(
-					"/api/admin/import/clone/batch",
+					"/cms_api/admin/import/clone/batch",
 					{ sourceId: source.id, classnames: chunk, concurrency: 10 },
 					(classname) => {
 						done++;
@@ -983,7 +983,7 @@ export function ImportCloneClient() {
 
 	const fetchSources = useCallback(async () => {
 		try {
-			const res = await adminFetch("/api/admin/import/clone?action=sources");
+			const res = await adminFetch("/cms_api/admin/import/clone?action=sources");
 			const data = await res.json();
 			if (res.ok) {
 				setSources(data.sources || []);

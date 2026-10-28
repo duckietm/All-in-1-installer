@@ -187,7 +187,7 @@ function InlineEditorSession({
 			setLoading(true);
 			try {
 				const res = await fetch(
-					`/api/admin/catalog/tree?pageId=${id}${catQs}`,
+					`/cms_api/admin/catalog/tree?pageId=${id}${catQs}`,
 					{ signal: request.signal },
 				);
 				if (!res.ok) throw new Error();
@@ -234,7 +234,7 @@ function InlineEditorSession({
 			setItemsLoading(true);
 			try {
 				const res = await fetch(
-					`/api/admin/catalog/items?pageId=${id}${catQs}`,
+					`/cms_api/admin/catalog/items?pageId=${id}${catQs}`,
 					{ signal: request.signal },
 				);
 				if (!res.ok) throw new Error();

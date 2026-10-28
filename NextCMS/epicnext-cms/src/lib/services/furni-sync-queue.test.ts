@@ -36,7 +36,7 @@ import { enqueueFurnitureSync } from "./furni-sync-queue";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const request = (body: unknown = { id }) =>
-	new Request("https://example.test/api/sync", {
+	new Request("https://example.test/cms_api/sync", {
 		method: "POST",
 		body: JSON.stringify(body),
 	});

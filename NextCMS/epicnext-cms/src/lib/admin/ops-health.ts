@@ -18,7 +18,7 @@ export type OpsHealth = {
 
 /**
  * Shared DB + Redis + emulator health probe for CommandoCentrum, DevOps, and APIs.
- * Semantics match `/api/health` for Redis (null when not configured).
+ * Semantics match `/cms_api/health` for Redis (null when not configured).
  */
 export const fetchOpsHealth = cache(
 	async function fetchOpsHealth(): Promise<OpsHealth> {

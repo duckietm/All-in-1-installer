@@ -217,7 +217,7 @@ describe("staff smoke contract", () => {
 		expect(readFileSync("src/lib/services/alert.ts", "utf8")).toContain(
 			"healthDegraded",
 		);
-		expect(readFileSync("src/app/api/health/route.ts", "utf8")).toContain(
+		expect(readFileSync("src/app/cms_api/health/route.ts", "utf8")).toContain(
 			"rateLimit",
 		);
 		expect(readFileSync("src/actions/admin-alerts.ts", "utf8")).toContain(

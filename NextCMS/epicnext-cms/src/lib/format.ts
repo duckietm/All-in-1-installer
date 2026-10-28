@@ -8,7 +8,7 @@ export function avatarImageUrl(look: string, opts: AvatarOptions = {}): string {
 
 /** Build a proxied, cached badge image URL for a badge code. */
 export function badgeImageUrl(code: string): string {
-	return `/api/imaging/badge?code=${encodeURIComponent(code)}`;
+	return `/cms_api/imaging/badge?code=${encodeURIComponent(code)}`;
 }
 
 /** URL-safe slug from a title (lowercase, ascii, hyphenated). */

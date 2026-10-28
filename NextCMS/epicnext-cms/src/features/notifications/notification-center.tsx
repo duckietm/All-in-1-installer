@@ -34,7 +34,7 @@ function NotificationContent({ userId }: { userId: number }) {
 	const feed = useQuery<NotificationFeed>({
 		queryKey: [...queryKey, page],
 		queryFn: async ({ signal }) => {
-			const response = await fetch(`/api/notifications?page=${page}`, {
+			const response = await fetch(`/cms_api/notifications?page=${page}`, {
 				cache: "no-store",
 				signal,
 			});
@@ -50,7 +50,7 @@ function NotificationContent({ userId }: { userId: number }) {
 				| { action: "read"; key: string }
 				| { action: "preferences"; preferences: Preferences },
 		) => {
-			const response = await fetch("/api/notifications", {
+			const response = await fetch("/cms_api/notifications", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify(body),

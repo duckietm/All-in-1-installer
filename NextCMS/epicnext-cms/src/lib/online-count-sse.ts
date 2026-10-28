@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Listener = (count: number) => void;
 
-/* Single shared EventSource for /api/online/count/stream. Every subscribing
+/* Single shared EventSource for /cms_api/online/count/stream. Every subscribing
  * component re-uses one connection (multicast to all listeners) instead of
  * opening its own SSE socket per component. */
 const MAX_RETRIES = 8;
@@ -19,7 +19,7 @@ let attempts = 0;
 
 function start() {
 	if (eventSource || refCount === 0) return;
-	eventSource = new EventSource("/api/online/count/stream");
+	eventSource = new EventSource("/cms_api/online/count/stream");
 	eventSource.onopen = () => {
 		attempts = 0;
 	};

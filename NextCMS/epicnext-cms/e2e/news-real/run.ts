@@ -253,7 +253,7 @@ try {
 			LOG_LEVEL: "warn",
 		})
 		.withExposedPorts(3002)
-		.withWaitStrategy(Wait.forHttp("/api/health", 3002).forStatusCode(200))
+		.withWaitStrategy(Wait.forHttp("/cms_api/health", 3002).forStatusCode(200))
 		.withStartupTimeout(120_000)
 		.withLogConsumer((stream) =>
 			stream.on("data", (chunk: Buffer) => {
@@ -263,7 +263,7 @@ try {
 		.start();
 	upstream = new URL(`http://${app.getHost()}:${app.getMappedPort(3002)}`);
 	abort.signal.throwIfAborted();
-	const health = (await fetch(new URL("/api/health", upstream), {
+	const health = (await fetch(new URL("/cms_api/health", upstream), {
 		signal: AbortSignal.timeout(10_000),
 	}).then((response) => response.json())) as {
 		status?: string;

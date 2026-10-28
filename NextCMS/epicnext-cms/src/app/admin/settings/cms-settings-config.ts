@@ -49,7 +49,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
 				label: "Logo URL",
 				description: "Header logo path or absolute URL.",
 				type: "url",
-				placeholder: "/api/media/logo/…",
+				placeholder: "/cms_api/media/logo/…",
 			},
 			{
 				key: "cms_favicon",

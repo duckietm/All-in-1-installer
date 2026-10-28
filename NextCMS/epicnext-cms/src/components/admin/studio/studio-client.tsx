@@ -464,7 +464,7 @@ export function StudioClient({
 
 	const fetchStats = useCallback(async () => {
 		try {
-			const res = await adminFetch("/api/admin/import/furni?action=stats");
+			const res = await adminFetch("/cms_api/admin/import/furni?action=stats");
 			if (res.ok) {
 				const data = await res.json();
 				setStats(data);
@@ -490,7 +490,7 @@ export function StudioClient({
 				if (search) qs.set("search", search);
 				if (source) qs.set("source", source);
 				const res = await adminFetch(
-					`/api/admin/import/furni?${qs.toString()}`,
+					`/cms_api/admin/import/furni?${qs.toString()}`,
 					{ signal: controller.signal },
 				);
 				if (controller.signal.aborted) return null;
@@ -623,7 +623,7 @@ export function StudioClient({
 
 	const fetchSources = useCallback(async () => {
 		try {
-			const res = await adminFetch("/api/admin/import/clone?action=sources");
+			const res = await adminFetch("/cms_api/admin/import/clone?action=sources");
 			if (res.ok) {
 				const data = await res.json();
 				setSources(data.sources ?? []);
@@ -640,7 +640,7 @@ export function StudioClient({
 		}
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/clone?source=${encodeURIComponent(sourceId)}`,
+				`/cms_api/admin/import/clone?source=${encodeURIComponent(sourceId)}`,
 			);
 			if (res.ok) {
 				const data = await res.json();
@@ -657,7 +657,7 @@ export function StudioClient({
 		setPreparingReview(true);
 		try {
 			const response = await adminFetch(
-				"/api/admin/import/clone?source=" +
+				"/cms_api/admin/import/clone?source=" +
 					encodeURIComponent(activeSource) +
 					"&action=clonable",
 			);
@@ -675,7 +675,7 @@ export function StudioClient({
 				lastPage = 1;
 			do {
 				const res = await adminFetch(
-					"/api/admin/import/furni?source=" +
+					"/cms_api/admin/import/furni?source=" +
 						encodeURIComponent(activeSource) +
 						"&page=" +
 						page,
@@ -903,7 +903,7 @@ export function StudioClient({
 		batchAbortRef.current = abort;
 
 		try {
-			const res = await adminFetch("/api/admin/import/furni/batch", {
+			const res = await adminFetch("/cms_api/admin/import/furni/batch", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1060,7 +1060,7 @@ export function StudioClient({
 		let failCount = 0;
 
 		try {
-			const res = await adminFetch("/api/admin/import/clone/batch", {
+			const res = await adminFetch("/cms_api/admin/import/clone/batch", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1166,7 +1166,7 @@ export function StudioClient({
 	async function regenNitro(item: FurniItem) {
 		setRegeneratingNitro((prev) => new Set(prev).add(item.classname));
 		try {
-			const res = await adminFetch("/api/admin/import/furni", {
+			const res = await adminFetch("/cms_api/admin/import/furni", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1261,7 +1261,7 @@ export function StudioClient({
 			return next;
 		});
 		try {
-			const res = await adminFetch("/api/admin/import/furni", {
+			const res = await adminFetch("/cms_api/admin/import/furni", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1315,7 +1315,7 @@ export function StudioClient({
 		setBulkFurnidata(true);
 		const wanted = selectedMissingFurnidata.map((i) => i.classname);
 		try {
-			const res = await adminFetch("/api/admin/import/furni/resync", {
+			const res = await adminFetch("/cms_api/admin/import/furni/resync", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ classnames: wanted }),

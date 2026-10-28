@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 // A badge_key (e.g. "ADM") maps to a .gif served through the cached proxy.
-const BADGE_IMG_BASE = "/api/imaging/badge?code";
+const BADGE_IMG_BASE = "/cms_api/imaging/badge?code";
 
 export default async function BadgesPage() {
 	const t = await getTranslations("pages.badges");

@@ -226,7 +226,7 @@ export const systemMigrationEntries: readonly MigrationEntry[] = [
 			queries: [
 				"EmulatorErrors",
 				"EmulatorSettings",
-				"GET /api/admin/devops/health",
+				"GET /cms_api/admin/devops/health",
 				"fetchOpsHealth",
 			],
 			mutations: [],
@@ -287,7 +287,7 @@ export const systemMigrationEntries: readonly MigrationEntry[] = [
 				"antiddos:config override",
 				"WebsiteSetting antiddos_*",
 				"blocked anti-DDoS IPs",
-				"GET /api/health",
+				"GET /cms_api/health",
 			],
 			mutations: [
 				"saveAntiddosSettings",

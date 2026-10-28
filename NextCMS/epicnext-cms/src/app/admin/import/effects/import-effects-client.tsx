@@ -45,7 +45,7 @@ export function ImportEffectsClient() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [busyLib, setBusyLib] = useState<string | null>(null);
 	const batch = useBatchImport({
-		url: "/api/admin/import/effects/batch",
+		url: "/cms_api/admin/import/effects/batch",
 		successAction: "effect(s) imported",
 		cancelledMessage: "Import cancelled",
 		onItemDone: (lib) => markDone(lib),
@@ -58,7 +58,7 @@ export function ImportEffectsClient() {
 		try {
 			const params = new URLSearchParams();
 			if (search) params.set("search", search);
-			const res = await adminFetch(`/api/admin/import/effects?${params}`);
+			const res = await adminFetch(`/cms_api/admin/import/effects?${params}`);
 			const data = await res.json();
 			if (!res.ok) {
 				setError(data.error || "Failed to load");
@@ -135,7 +135,7 @@ export function ImportEffectsClient() {
 		setBusyLib(e.lib);
 		try {
 			const res = await adminFetch(
-				`/api/admin/import/effects?lib=${encodeURIComponent(e.lib)}`,
+				`/cms_api/admin/import/effects?lib=${encodeURIComponent(e.lib)}`,
 				{
 					method: "DELETE",
 				},

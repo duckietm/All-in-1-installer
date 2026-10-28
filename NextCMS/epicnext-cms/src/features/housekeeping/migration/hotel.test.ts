@@ -101,7 +101,7 @@ describe("hotelMigrationEntries", () => {
 				},
 				dependencies: expect.objectContaining({
 					mutations: expect.arrayContaining([
-						"POST /api/admin/import/audit",
+						"POST /cms_api/admin/import/audit",
 						"applyCatalogSql",
 						"ensureDirectories",
 						"repairDuplicateClassnames",

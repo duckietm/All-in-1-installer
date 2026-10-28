@@ -74,7 +74,7 @@ let publicNews: typeof import("@/lib/services/news-detail");
 let commentSubmission: typeof import("@/lib/services/article-comment-submission");
 let commentModeration: typeof import("@/lib/services/moderation");
 let commentAction: typeof import("@/actions/article-comments");
-let commentApi: typeof import("@/app/api/articles/[slug]/comment/route");
+let commentApi: typeof import("@/app/cms_api/articles/[slug]/comment/route");
 let scheduler: typeof import("@/lib/services/news-scheduler");
 let worker: typeof import("@/features/operations/worker");
 let migrationRoot: string | undefined;
@@ -217,7 +217,7 @@ beforeAll(async () => {
 	commentSubmission = await import("@/lib/services/article-comment-submission");
 	commentModeration = await import("@/lib/services/moderation");
 	commentAction = await import("@/actions/article-comments");
-	commentApi = await import("@/app/api/articles/[slug]/comment/route");
+	commentApi = await import("@/app/cms_api/articles/[slug]/comment/route");
 	scheduler = await import("@/lib/services/news-scheduler");
 	worker = await import("@/features/operations/worker");
 });
@@ -972,7 +972,7 @@ describe("real comment publication, moderation and shared quota", () => {
 		form.set("userId", "999");
 		const api = () =>
 			commentApi.POST(
-				new Request("https://hotel.test/api/articles/comment-public/comment", {
+				new Request("https://hotel.test/cms_api/articles/comment-public/comment", {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify({ comment: "Shared quota", userId: 999 }),

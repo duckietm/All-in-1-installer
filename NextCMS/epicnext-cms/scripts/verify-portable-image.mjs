@@ -85,7 +85,7 @@ try {
 			let ready = false;
 			for (let attempt = 0; attempt < 30; attempt++) {
 				try {
-					const r = await fetch(`${base}/api/health`, {
+					const r = await fetch(`${base}/cms_api/health`, {
 						signal: AbortSignal.timeout(2000),
 					});
 					if ((await r.json()).release === release) {
@@ -98,7 +98,7 @@ try {
 			if (!ready) throw new Error(`${hotel}: expected HTTP release not served`);
 			await verifyRuntimeMetadata(base, hotel);
 			const avatar = await fetch(
-				`${base}/api/imaging/avatar?figure=hd-180-1&img_format=png`,
+				`${base}/cms_api/imaging/avatar?figure=hd-180-1&img_format=png`,
 				{ signal: AbortSignal.timeout(15000) },
 			);
 			if (
@@ -106,7 +106,7 @@ try {
 				!requests.some((url) => url.startsWith(`/${hotel}/avatar?`))
 			)
 				throw new Error(`${hotel}: wrong avatar upstream`);
-			const badge = await fetch(`${base}/api/imaging/badge?code=ADM`, {
+			const badge = await fetch(`${base}/cms_api/imaging/badge?code=ADM`, {
 				redirect: "manual",
 				signal: AbortSignal.timeout(15000),
 			});

@@ -61,6 +61,6 @@ export function getAvatarUrl(
 	if (gesture) params.set("gesture", gesture);
 	if (action) params.set("action", action);
 
-	const base = "/api/imaging/avatar";
+	const base = "/cms_api/imaging/avatar";
 	return `${base}?${params.toString()}`;
 }

@@ -22,7 +22,7 @@ export function CatalogSyncStatus({ canEdit }: { canEdit: boolean }) {
 	const [busy, setBusy] = useState(false);
 	const refresh = useCallback(async () => {
 		try {
-			const res = await adminFetch("/api/admin/catalog/status", {
+			const res = await adminFetch("/cms_api/admin/catalog/status", {
 				cache: "no-store",
 			});
 			if (!res.ok) throw Error();
@@ -36,7 +36,7 @@ export function CatalogSyncStatus({ canEdit }: { canEdit: boolean }) {
 	async function retry() {
 		setBusy(true);
 		try {
-			const res = await adminFetch("/api/admin/catalog/status", {
+			const res = await adminFetch("/cms_api/admin/catalog/status", {
 				method: "POST",
 			});
 			if (!res.ok) throw Error();

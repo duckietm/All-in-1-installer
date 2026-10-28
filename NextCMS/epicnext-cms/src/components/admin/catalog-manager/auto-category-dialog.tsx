@@ -129,7 +129,7 @@ export function AutoCategoryDialog({
 		setSearchLoading(true);
 		const ac = new AbortController();
 		fetch(
-			`/api/admin/furni/search?q=${encodeURIComponent(debounced)}&limit=40`,
+			`/cms_api/admin/furni/search?q=${encodeURIComponent(debounced)}&limit=40`,
 			{
 				signal: ac.signal,
 			},

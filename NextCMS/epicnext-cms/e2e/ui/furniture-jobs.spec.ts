@@ -9,7 +9,7 @@ test("history hook deduplicates refreshes, pages and reports completion once", a
 }) => {
 	let requests = 0;
 	let completed = false;
-	await page.route("**/api/admin/studio/import-jobs?*", async (route) => {
+	await page.route("**/cms_api/admin/studio/import-jobs?*", async (route) => {
 		requests++;
 		const secondPage = new URL(route.request().url()).searchParams.has(
 			"before",
@@ -68,7 +68,7 @@ test("history polling pauses while hidden and refreshes on visibility return", a
 }) => {
 	let requests = 0;
 	await page.clock.install();
-	await page.route("**/api/admin/studio/import-jobs?*", (route) => {
+	await page.route("**/cms_api/admin/studio/import-jobs?*", (route) => {
 		requests++;
 		return route.fulfill({
 			json: { ok: true, jobs: [furnitureJobFixture], nextCursor: null },
@@ -102,7 +102,7 @@ test("history polling pauses while hidden and refreshes on visibility return", a
 test("history shows the current phase and validated recovery source", async ({
 	page,
 }) => {
-	await page.route("**/api/admin/studio/import-jobs?*", (route) =>
+	await page.route("**/cms_api/admin/studio/import-jobs?*", (route) =>
 		route.fulfill({
 			json: {
 				ok: true,
@@ -148,10 +148,10 @@ test("uncertain import submissions keep their identity after a page reload", asy
 	page,
 }) => {
 	const ids: string[] = [];
-	await page.route("**/api/admin/csrf", (route) =>
+	await page.route("**/cms_api/admin/csrf", (route) =>
 		route.fulfill({ json: { token: "a".repeat(64) } }),
 	);
-	await page.route("**/api/admin/studio/import-jobs**", async (route) => {
+	await page.route("**/cms_api/admin/studio/import-jobs**", async (route) => {
 		if (route.request().method() !== "POST") {
 			await route.fulfill({ json: { ok: true, jobs: [], nextCursor: null } });
 			return;
