@@ -4,7 +4,7 @@ namespace AllInOneInstaller.Remote;
 
 /// <summary>What the server has for EpicNext CMS before the step runs.</summary>
 public sealed record EpicNextState(AtomCmsState Server, string? HotelName, string? Origin, bool Built, bool ServiceInstalled, bool ServiceRunning,
-    bool AtomTables)
+    bool AtomTables, string? SourceBranch = null, string? SourceFolder = null)
 {
     public WebAccessSettings? Site => Server.Site;
     public bool Installed => Site is { EpicNext: true } && Built && ServiceRunning;
@@ -17,7 +17,12 @@ public sealed record EpicNextState(AtomCmsState Server, string? HotelName, strin
 /// </summary>
 public static class EpicNextInstaller
 {
+    /// <summary>EpicNext's own repository; the CMS is its top folder (<see cref="RepositoryFolder"/> empty).</summary>
     public const string Repository = "https://gitea.epicnabbo.nl/Remco/EpicNext-Cms.git";
+    public const string RepositoryFolder = "";
+    /// <summary>A checkout of the repository when the CMS is in a folder of it; the folder is copied to <see cref="Directory"/>.</summary>
+    public const string SourceDirectory = CustomCmsInstaller.Parent + "/epicnext-src";
+    private const string SourceInfo = SourceDirectory + "/.all-in-1-source";
     public const string Name = "EpicNext CMS";
     /// <summary>Its NGINX site: /etc/nginx/sites-available/cms-epicnext.</summary>
     public const string SiteName = "epicnext";
@@ -28,8 +33,8 @@ public static class EpicNextInstaller
     public const string Upstream = "http://127.0.0.1:3002";
     /// <summary>Its .nvmrc: &gt;=26.12.1 &lt;27.</summary>
     public const string NodeMinimum = "26.12.1";
-    /// <summary>The CMS reads and writes the gamedata here (DEFAULT_GAMEDATA_ROOT in its source).</summary>
-    public const string GamedataPath = "/var/www/Gamedata";
+    /// <summary>The link earlier versions made, from before EpicNext read /var/www/gamedata.</summary>
+    private const string OldGamedataLink = "/var/www/Gamedata";
     private const string LogFile = "/var/log/epicnext-cms.log";
 
     // Node.js 26 and corepack come from the Dev tools step; corepack gets the pnpm version package.json pins, without asking.
@@ -80,7 +85,12 @@ public static class EpicNextInstaller
         string script = $$"""
             d={{Directory}}
             echo "name=$(grep -sE '^HOTEL_NAME=' "$d/.env" | head -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')"
-            echo "origin=$(git -c safe.directory="$d" -C "$d" remote get-url origin 2>/dev/null)"
+            if [ -f {{SourceInfo}} ]; then
+              # url, branch and folder of the last run with a folder of a repository.
+              sed -n '1s/^/origin=/p; 2s/^/branch=/p; 3s/^/folder=/p' {{SourceInfo}}
+            else
+              echo "origin=$(git -c safe.directory="$d" -C "$d" remote get-url origin 2>/dev/null)"
+            fi
             echo "built=$([ -f "$d/.next/BUILD_ID" ] && echo yes)"
             echo "service=$([ -f {{ServiceFile}} ] && echo yes)"
             echo "running=$(curl -s --noproxy '*' -o /dev/null --max-time 5 -w '%{http_code}' {{Upstream}}/ 2>/dev/null | grep -qvE '^(000)?$' && echo yes)"
@@ -88,7 +98,77 @@ public static class EpicNextInstaller
             [ -n "$db" ] && echo "atom=$(mariadb -N "$db" -e "SELECT 1 FROM website_installation LIMIT 1" >/dev/null 2>&1 && echo yes)"
             """;
         var values = new ScriptValues((await connection.RunAsRootAsync(script, token)).Output);
-        return new EpicNextState(server, values["name"], values["origin"], values.Yes("built"), values.Yes("service"), values.Yes("running"), values.Yes("atom"));
+        return new EpicNextState(server, values["name"], values["origin"], values.Yes("built"), values.Yes("service"), values.Yes("running"), values.Yes("atom"),
+            values["branch"], values["folder"]);
+    }
+
+    /// <summary>A folder inside the repository: "NextCMS/epicnext-cms", or "" for the top folder.</summary>
+    public static string? FolderProblem(string folder) =>
+        folder.Length == 0 || (System.Text.RegularExpressions.Regex.IsMatch(folder, "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$") &&
+                               !folder.Split('/').Any(part => part is "." or ".."))
+            ? null
+            : "The folder is a path inside the repository such as NextCMS/epicnext-cms (letters, digits, '.', '_', '-' and '/'), or empty for the top folder.";
+
+    /// <summary>A branch name, or "" for the repository's default branch.</summary>
+    public static string? BranchProblem(string branch) =>
+        branch.Length == 0 || (System.Text.RegularExpressions.Regex.IsMatch(branch, "^[A-Za-z0-9._/-]{1,100}$") && !branch.Contains("..") &&
+                               !branch.StartsWith('-') && !branch.StartsWith('/') && !branch.EndsWith('/'))
+            ? null
+            : "Enter a branch name such as main, or leave it empty for the repository's default branch.";
+
+    /// <summary>
+    /// The CMS from a folder of a repository (such as the installer's own, with EpicNext in NextCMS/epicnext-cms): a
+    /// sparse checkout of that folder in /var/www/epicnext-src, copied to /var/www/epicnext. The copy keeps what the CMS
+    /// writes at runtime (.env, node_modules, .next, storage, imported assets). Returns the branch and commit.
+    /// </summary>
+    public static async Task<string> GetFromFolderAsync(ServerConnection connection, string url, string branch, string folder, Action<string> log,
+        CancellationToken token = default)
+    {
+        string script = RemoteScript.Prelude + $$"""
+            {{Environment}}
+            set -o pipefail
+            for tool in git rsync; do
+              if ! command -v $tool >/dev/null 2>&1; then
+                echo "> Installing $tool"
+                apt_update >/dev/null
+                apt-get install -y $tool >/dev/null
+              fi
+            done
+            src={{SourceDirectory}}
+            d={{Directory}}
+            u={{ServerConnection.ShellQuote(url)}}
+            b={{ServerConnection.ShellQuote(branch)}}
+            f={{ServerConnection.ShellQuote(folder)}}
+            g() { git -c safe.directory="$src" -C "$src" "$@"; }
+            # The checkout fits when it is of the same repository, branch and folder; otherwise it is made again.
+            if [ -d "$src/.git" ] && [ "$(sed -n 1p {{SourceInfo}} 2>/dev/null)" = "$u" ] &&
+               [ "$(sed -n 2p {{SourceInfo}} 2>/dev/null)" = "$b" ] && [ "$(sed -n 3p {{SourceInfo}} 2>/dev/null)" = "$f" ]; then
+              current=$(g rev-parse --abbrev-ref HEAD)
+              echo "> git fetch origin $current  ($src)"
+              GIT_TERMINAL_PROMPT=0 g fetch --quiet --depth 1 origin "$current" || fail "git fetch failed (see above)."
+              g reset --quiet --hard FETCH_HEAD
+            else
+              rm -rf "$src"
+              echo "> git clone --sparse${b:+ --branch $b} $u  (only $f, into $src)"
+              GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 --filter=blob:none --sparse ${b:+--branch "$b"} "$u" "$src" 2>&1 ||
+                fail "Cloning $u${b:+ (branch $b)} failed (see above)."
+              g sparse-checkout set "$f" || fail "git sparse-checkout failed (see above)."
+              printf '%s\n%s\n%s\n' "$u" "$b" "$f" > {{SourceInfo}}
+            fi
+            if [ ! -f "$src/$f/package.json" ]; then
+              fail "$f is not in the $(g rev-parse --abbrev-ref HEAD) branch of $u (no package.json there). Enter the branch that has it, or check the folder."
+            fi
+            [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ] && [ ! -f "$d/package.json" ] &&
+              echo "  WARNING: $d had other content; files the CMS does not use stay there"
+            install -d -m 755 "$d"
+            echo "> $f -> $d"
+            # What the CMS writes while it runs stays: settings, packages, build, uploads, imported assets.
+            rsync -a --delete               --exclude=/.env --exclude='/.env.bak-*' --exclude=/.env.local               --exclude=/node_modules/ --exclude=/.next/ --exclude=/storage/ --exclude=/logs/ --exclude=/backups/               --exclude=/public/nitro-assets/ --exclude=/public/swf/ --exclude=/public/cache/ --exclude=/public/assets/images/badges/               --exclude=/.git/               "$src/$f/" "$d/"
+            echo "  $(find "$d" -path "$d/node_modules" -prune -o -type f -print | wc -l) files"
+            echo "COMMIT=$(g rev-parse --abbrev-ref HEAD) $(g log -1 --format='%h %cd %s' --date=short)"
+            """;
+        ScriptValues values = await RemoteScript.RunCapturingAsync(connection, script, log, "Getting EpicNext failed", ["COMMIT"], token);
+        return values["COMMIT"] ?? "";
     }
 
     /// <summary>Node.js 26.12.1 or newer (apt upgrades an older Node.js 26 from NodeSource) and pnpm through corepack.</summary>
@@ -243,15 +323,12 @@ public static class EpicNextInstaller
               code=$(cat "$rc"); rm -f "$rc"
               return "$code"
             }
-            # Gamedata where the CMS looks for it, and the folders it writes to.
+            # The hotel's gamedata: EpicNext gets its folder as the gamedata_root setting (below). The
+            # /var/www/Gamedata link of earlier versions is no longer needed.
             g={{OctaneInstaller.Gamedata}}
-            if [ "$g" != {{GamedataPath}} ]; then
-              if [ -L {{GamedataPath}} ] || [ ! -e {{GamedataPath}} ]; then
-                ln -sfn "$g" {{GamedataPath}}
-                echo "> {{GamedataPath}} -> $g (the CMS reads the gamedata there)"
-              else
-                echo "  WARNING: {{GamedataPath}} is a folder of its own, not $g: the CMS uses that one."
-              fi
+            if [ -L {{OldGamedataLink}} ]; then
+              rm -f {{OldGamedataLink}}
+              echo "> {{OldGamedataLink}} link removed: EpicNext reads $g"
             fi
             # Free disk space in MB where the CMS is, and what uses the disk when there is too little.
             free_mb() { df -Pm {{Directory}} | awk 'NR == 2 {print $4}'; }
@@ -308,24 +385,61 @@ public static class EpicNextInstaller
             TS
             run corepack pnpm exec tsx "$check" || { rm -f "$check"; fail "{{Directory}}/.env does not pass EpicNext's checks (see above): fix those settings and run this step again."; }
             rm -f "$check"
+            # New passwords are Argon2id hashes of about 97 characters; Polaris (like Arcturus) makes
+            # users.password VARCHAR(64), so registration failed. The emulator never reads the password.
+            len=$(mariadb -N "$db" -e "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'password'")
+            if [ -n "$len" ] && [ "$len" -lt 255 ]; then
+              mariadb "$db" -e 'ALTER TABLE `users` MODIFY `password` VARCHAR(255) NOT NULL' || fail "Widening users.password failed (see above)."
+              echo "> users.password: VARCHAR($len) -> VARCHAR(255), room for Argon2id hashes"
+            fi
             echo "> pnpm db:migrate (only the CMS' own tables; the emulator's stay as they are)"
             run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
+            # Settings this server decides, unless staff already set them in Admin -> CMS Settings (OLD: values
+            # that are replaced too, such as EpicNext's own defaults).
+            setting_default() {
+              v=$(printf '%s' "$2" | sed "s/'/''/g")
+              old=$(printf '%s' "$3" | sed "s/'/''/g")
+              mariadb "$db" -e "UPDATE website_settings SET value = '$v' WHERE \`key\` = '$1' AND (value = '' OR value = '$old');
+                INSERT INTO website_settings (\`key\`, value) SELECT '$1', '$v' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM website_settings WHERE \`key\` = '$1');" ||
+                { echo "  WARNING: could not set $1 (set it in Admin -> CMS Settings: $2)"; return 0; }
+              echo "  $1: $(mariadb -N "$db" -e "SELECT value FROM website_settings WHERE \`key\` = '$1' LIMIT 1" 2>/dev/null)"
+            }
+            # The /client page frames Octane on /client/ of this site (the hotel site), with ?sso=<ticket>.
+            setting_default nitro_client_url /client/index.html /nitro-client/
+            # The folder served on /gamedata, which the CMS reads and imports assets into.
+            setting_default gamedata_root "$g" /var/www/Gamedata
+            # A build is skipped when the code, .env and Node.js are what the current build was made from
+            # (a re-run that only changed settings, or an update without new commits).
+            if [ -f {{SourceInfo}} ]; then
+              tree=$(git -c safe.directory={{SourceDirectory}} -C {{SourceDirectory}} rev-parse "HEAD:$(sed -n 3p {{SourceInfo}})" 2>/dev/null || true)
+            else
+              tree=$(git -c safe.directory="$PWD" rev-parse 'HEAD^{tree}' 2>/dev/null || true)
+            fi
+            stamp="$tree $(sha256sum .env | cut -c1-16) $(node -v)"
+            if [ -n "$tree" ] && [ -f .next/BUILD_ID ] && [ "$(cat .next/.all-in-1-build 2>/dev/null)" = "$stamp" ]; then
+              echo "> pnpm build skipped: code, .env and Node.js are unchanged since build $(cat .next/BUILD_ID)"
+            else
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
-            # The CMS is stopped: the old build and its cache go, the build makes them again.
-            rm -rf .next
+            # The CMS is stopped: the old build goes. Its cache (.next/cache) stays, so webpack only
+            # rebuilds what changed instead of starting from nothing ("No build cache found").
+            [ -d .next ] && find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} +
             need_disk 5120 "pnpm build"
-            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory, $(free_mb) MB disk free)"
+            echo "> pnpm build (the CMS is stopped meanwhile; ${avail} MB memory, $(free_mb) MB disk free$([ -d .next/cache ] && echo ", with the cache of the last build"))"
             [ "$avail" -lt 3000 ] && echo "  WARNING: under 3 GB free: the build may run out of memory (add swap, or stop other services for the build)."
             # The build runs in a cgroup of its own (scripts/with-memory-cap.sh): leave 1 GB for MariaDB, the emulator and NGINX.
             if [ -d /run/systemd/system ]; then export CMS_MEMORY_CAP_RESERVE=1g; else export CMS_MEMORY_CAP_BACKEND=none; echo "  (no systemd: the build runs without a memory cap)"; fi
+            # The code was type-checked before it was published; the build skips its own check (about 20 s).
+            export CMS_SKIP_BUILD_TYPECHECK=1
             run corepack pnpm build || fail "pnpm build stopped (see above). The CMS stays stopped until a build succeeds."
             [ -f .next/BUILD_ID ] || fail "pnpm build did not make .next/BUILD_ID."
             echo "  build $(cat .next/BUILD_ID)"
+            [ -n "$tree" ] && echo "$stamp" > .next/.all-in-1-build
             # The build cache only makes the next build faster: on a nearly full disk the space matters more.
             if [ "$(free_mb)" -lt 3072 ]; then
               echo "  $(du -sh .next/cache 2>/dev/null | cut -f1) build cache removed: under 3 GB disk free ($(free_mb) MB)"
               rm -rf .next/cache
+            fi
             fi
             install -d public/nitro-assets public/swf storage
             chown -R www-data:www-data {{Directory}}
@@ -406,7 +520,8 @@ public static class EpicNextInstaller
               rm -f {{ServiceFile}}
               [ -d /run/systemd/system ] && systemctl daemon-reload
               echo "  {{ServiceFile}} deleted"
-              [ -L {{GamedataPath}} ] && rm -f {{GamedataPath}} && echo "  {{GamedataPath}} link deleted (the gamedata stays)"
+              [ -L {{OldGamedataLink}} ] && rm -f {{OldGamedataLink}} && echo "  {{OldGamedataLink}} link deleted (the gamedata stays)"
+              [ -d {{SourceDirectory}} ] && rm -rf {{SourceDirectory}} && echo "  {{SourceDirectory}} (the git checkout) deleted"
             fi
             true
             """;

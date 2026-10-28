@@ -176,8 +176,18 @@ public static class HotelSite
                 client_header_buffer_size   1k;
                 large_client_header_buffers 4 8k;
 
-                gzip       on;
-                gzip_types application/json application/javascript text/css image/svg+xml;
+                # Text compressed (gamedata JSON such as FurnitureData.json is several MB); .nitro/.hab bundles
+                # and images are compressed already and go as they are.
+                gzip            on;
+                gzip_vary       on;
+                gzip_comp_level 5;
+                gzip_min_length 1024;
+                gzip_types      application/json application/javascript text/css text/plain text/xml application/xml image/svg+xml font/ttf font/otf application/wasm;
+
+                # The client opens hundreds of gamedata files: keep their file handles and metadata at hand.
+                open_file_cache          max=10000 inactive=60s;
+                open_file_cache_valid    30s;
+                open_file_cache_errors   on;
 
                 access_log {{LogDirectory}}/access.log;
                 error_log  {{LogDirectory}}/error.log;

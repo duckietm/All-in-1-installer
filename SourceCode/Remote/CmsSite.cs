@@ -27,24 +27,89 @@ public static class CmsSite
                     deny all;
                 }
             """;
-        // A CMS with a server of its own (EpicNext's Next.js) gets every request, websockets and Server-Sent Events included.
-        string proxyLocations = $$"""
-                client_max_body_size 20m;
-
-                location / {
-                    proxy_pass {{proxy}};
+        // A CMS with a server of its own (EpicNext's Next.js): its build's static files and its public assets come
+        // straight from disk (no trip through Node, cached by browsers), everything else goes to it over kept-alive
+        // connections, websockets and Server-Sent Events included.
+        string upstream = $"cms_{name}_app";
+        string proxyDirectives = $$"""
+                    proxy_pass http://{{upstream}};
                     proxy_http_version 1.1;
                     proxy_set_header Host              $host;
                     proxy_set_header X-Real-IP         $remote_addr;
-                    # The visitor, as real_ip found it behind Traefik (and Cloudflare).
+                    # The visitor, as real_ip found it behind Traefik (and Cloudflare). The CMS also reads
+                    # Cloudflare's headers when present, and anyone can send those: they are
+                    # cleared, so the address cannot be faked (to dodge limits, or to get another IP banned).
                     proxy_set_header X-Forwarded-For   $remote_addr;
+                    proxy_set_header CF-Connecting-IP  "";
+                    proxy_set_header CF-Ray            "";
+                    proxy_set_header CDN-Loop          "";
+                    proxy_set_header True-Client-IP    "";
+                    proxy_set_header X-Real-Client-IP  "";
                     proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
                     proxy_set_header X-Forwarded-Host  $host;
                     proxy_set_header Upgrade           $http_upgrade;
-                    proxy_set_header Connection        "upgrade";
-                    proxy_buffering    off;
+                    proxy_set_header Connection        $cms_{{name}}_connection;
+                    # Buffered, so a slow visitor does not hold a Node connection; live streams send
+                    # "X-Accel-Buffering: no" and are passed on as they come.
                     proxy_read_timeout 3600s;
+            """;
+        // Next.js' build output: file names carry a content hash, so browsers keep them for a year.
+        string proxyLocations = $$"""
+                client_max_body_size 20m;
+
+                gzip            on;
+                gzip_vary       on;
+                gzip_comp_level 5;
+                gzip_min_length 1024;
+                gzip_types      text/plain text/css application/javascript application/json image/svg+xml font/ttf font/otf;
+
+                open_file_cache          max=10000 inactive=60s;
+                open_file_cache_valid    30s;
+                open_file_cache_errors   on;
+
+                location ^~ /_next/static/ {
+                    alias {{root}}/.next/static/;
+                    access_log off;
+                    add_header Cache-Control "public, max-age=31536000, immutable" always;
+                    add_header X-Content-Type-Options "nosniff" always;
                 }
+
+                # Its public assets, with the cache times of its next.config.ts; anything not on disk goes to the CMS.
+                location ^~ /assets/ {
+                    root {{root}}/public;
+                    access_log off;
+                    add_header Cache-Control "public, max-age=31536000, immutable" always;
+                    add_header X-Content-Type-Options "nosniff" always;
+                    try_files $uri @cms;
+                }
+                location ~ ^/(swf|nitro-assets)/ {
+                    root {{root}}/public;
+                    access_log off;
+                    add_header Cache-Control "public, max-age=604800, stale-while-revalidate=2592000" always;
+                    add_header X-Content-Type-Options "nosniff" always;
+                    try_files $uri @cms;
+                }
+
+                location / {
+            {{proxyDirectives}}
+                }
+
+                location @cms {
+            {{proxyDirectives}}
+                }
+            """;
+        string proxyHttp = proxy is null ? "" : $$"""
+            upstream {{upstream}} {
+                server {{proxy.Replace("http://", "")}};
+                keepalive 16;
+            }
+
+            # Keep-alive to the CMS, except for a websocket upgrade.
+            map $http_upgrade $cms_{{name}}_connection {
+                default upgrade;
+                ""      "";
+            }
+
             """;
         string what = proxy is not null ? $"Passed to {proxy}" : php ? $"PHP 8.5 from {root}" : $"A static website from {root}";
         // A blank line after server_name, then root and index.
@@ -58,7 +123,7 @@ public static class CmsSite
             # Traefik (/opt/traefik) passes {{site.Url}} here, except /client, /gamedata and /custom (the hotel site on
             # 127.0.0.1:{{HotelSite.Port}}) and Polaris' /ws and /api paths.
 
-            server {
+            {{proxyHttp}}server {
                 listen 127.0.0.1:@PORT@;
                 server_name {{serverName}};{{files}}
 

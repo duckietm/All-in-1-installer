@@ -171,9 +171,9 @@ public static class FinishedView
         page.Children.Add(Section("1. First admin", admin));
 
         var client = new StackPanel { Spacing = 6 };
-        client.Children.Add(Text($"Open {url}/admin → CMS Settings and set nitro_client_url to the hotel's client:", 13));
-        client.Children.Add(Code(site?.ClientUrl ?? "/client/"));
-        client.Children.Add(Text("EpicNext's own /client page then opens Octane with the player's SSO ticket.", 12, "Pro.Subtle"));
+        client.Children.Add(Text($"EpicNext's /client page opens Octane with the player's SSO ticket. The step set nitro_client_url (Admin → CMS Settings) to Octane on this site:", 13));
+        client.Children.Add(Code("/client/index.html"));
+        client.Children.Add(Text("Change it only for a client somewhere else.", 12, "Pro.Subtle"));
         page.Children.Add(Section("2. Client URL", client));
 
         var later = new StackPanel { Spacing = 6 };

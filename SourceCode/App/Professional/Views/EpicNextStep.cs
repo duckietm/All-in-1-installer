@@ -13,6 +13,8 @@ public sealed class EpicNextStep : InstallStep
     private enum ExistingFolderChoice { MoveAside, Abort }
 
     private readonly TextBox _gitUrl = new() { MinWidth = 460, Text = EpicNextInstaller.Repository, PlaceholderText = EpicNextInstaller.Repository };
+    private readonly TextBox _branch = new() { MinWidth = 220, MaxLength = 100, PlaceholderText = "default branch" };
+    private readonly TextBox _folder = new() { MinWidth = 220, MaxLength = 200, Text = EpicNextInstaller.RepositoryFolder, PlaceholderText = "top folder" };
     private readonly TextBox _hotelName = new() { MinWidth = 380, MaxLength = 100, PlaceholderText = "My Hotel" };
 
     /// <summary>Set after a run, for the finished page.</summary>
@@ -27,9 +29,9 @@ public sealed class EpicNextStep : InstallStep
         "Install EpicNext CMS",
         "EpicNext CMS (Next.js) becomes the hotel's website, the same way as AtomCMS: visitors register and log in there, and it opens Octane on /client. It runs on the server itself, not in Docker.",
         [
-            $"Clones EpicNext into {EpicNextInstaller.Directory} (later runs update it with git pull).",
+            $"Clones EpicNext into {EpicNextInstaller.Directory}, by default from its own repository ({EpicNextInstaller.Repository}); a folder of another repository works too. Later runs update it.",
             $"Node.js {EpicNextInstaller.NodeMinimum} or newer and pnpm (through corepack), then pnpm install, pnpm db:migrate (only EpicNext's own tables) and pnpm build, under its memory cap.",
-            $".env: the hotel database with the cms login of the server installation, the site's address, a random AUTH_SECRET and RCON. The hotel's gamedata is linked as {EpicNextInstaller.GamedataPath}, where EpicNext looks for it.",
+            $".env: the hotel database with the cms login of the server installation, the site's address, a random AUTH_SECRET and RCON. Settings: the client URL (/client/index.html, Octane on this site) and the gamedata folder ({OctaneInstaller.Gamedata}). users.password is widened for EpicNext's password hashes.",
             $"Runs as the systemd service {EpicNextInstaller.Service} (user www-data, {EpicNextInstaller.Upstream}, started at boot). No PHP.",
             $"NGINX passes the site to it on its own port (the first free one from {CmsSite.FirstPort} to {CmsSite.LastPort}); Octane moves to /client/ with its login screen off; Traefik sends only Polaris' own /api paths to the emulator."
         ],
@@ -53,7 +55,18 @@ public sealed class EpicNextStep : InstallStep
         panel.Children.Add(_hotelName);
         panel.Children.Add(Text("Repository", 12, "Pro.Muted", FontWeight.SemiBold));
         panel.Children.Add(_gitUrl);
-        panel.Children.Add(Text("The https link of EpicNext. Change it only when the repository has moved; it must be public.", 12, "Pro.Subtle"));
+        var where = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8 };
+        var branch = new StackPanel { Spacing = 4 };
+        branch.Children.Add(Text("Branch", 12, "Pro.Muted", FontWeight.SemiBold));
+        branch.Children.Add(_branch);
+        var folder = new StackPanel { Spacing = 4 };
+        folder.Children.Add(Text("Folder in the repository", 12, "Pro.Muted", FontWeight.SemiBold));
+        folder.Children.Add(_folder);
+        where.Children.Add(branch);
+        where.Children.Add(folder);
+        panel.Children.Add(where);
+        panel.Children.Add(Text($"The https link of the repository (it must be public), the branch (empty: its default branch) and the folder with EpicNext's package.json (empty: the top folder). " +
+                                $"By default: EpicNext's own repository, its top folder.", 12, "Pro.Subtle"));
         return panel;
     }
 
@@ -65,7 +78,13 @@ public sealed class EpicNextStep : InstallStep
         _hotelName.Text = name;
         string url = (_gitUrl.Text ?? "").Trim();
         _gitUrl.Text = url;
-        return CustomCmsInstaller.GitUrlProblem(url);
+        if (CustomCmsInstaller.GitUrlProblem(url) is { } urlProblem) return urlProblem;
+        string branch = (_branch.Text ?? "").Trim();
+        _branch.Text = branch;
+        if (EpicNextInstaller.BranchProblem(branch) is { } branchProblem) return "Branch: " + branchProblem;
+        string folder = (_folder.Text ?? "").Trim().Trim('/');
+        _folder.Text = folder;
+        return EpicNextInstaller.FolderProblem(folder) is { } folderProblem ? "Folder: " + folderProblem : null;
     }
 
     protected override async Task<bool> DetectCoreAsync(ServerConnection connection)
@@ -76,7 +95,13 @@ public sealed class EpicNextStep : InstallStep
                 : state.Server.HotelName is { Length: > 0 } atomName && atomName != "Atom CMS" ? atomName
                 : state.Site is { IsIpAddress: false } site && HardenInstaller.WhitelistHost(site).Split('.')[0] is { Length: > 0 } host
                     ? char.ToUpperInvariant(host[0]) + host[1..] + " Hotel" : "";
-        if (state.Origin is { Length: > 0 } origin) _gitUrl.Text = origin;
+        if (state.Origin is { Length: > 0 } origin)
+        {
+            // What the last run used: a folder of a repository, or a clone of a repository of its own.
+            _gitUrl.Text = origin;
+            _branch.Text = state.SourceBranch ?? "";
+            _folder.Text = state.SourceFolder ?? "";
+        }
         if (Missing(state.Server) is { } missing)
         {
             Detected.Show(ResultKind.Warning, "The server is not ready for EpicNext yet", missing);
@@ -106,6 +131,8 @@ public sealed class EpicNextStep : InstallStep
     {
         string hotelName = (_hotelName.Text ?? "").Trim();
         string url = (_gitUrl.Text ?? "").Trim();
+        string branch = (_branch.Text ?? "").Trim();
+        string folder = (_folder.Text ?? "").Trim().Trim('/');
         string directory = EpicNextInstaller.Directory;
 
         Run.Log("> Checking the server ...");
@@ -119,12 +146,22 @@ public sealed class EpicNextStep : InstallStep
         Run.Done(site.Url);
 
         await Task.Run(() => CustomCmsInstaller.CheckGitAccessAsync(connection, url, Run.Log));
-        CloneState clone = await Task.Run(() => GitCloneInstaller.InspectAsync(connection, url, directory));
-        if (clone.Kind == CloneTargetKind.OtherContent && !await MoveAsideAsync(connection, owner, directory,
-                clone.Origin is null ? "It is not a clone of EpicNext." : $"It is a clone of {clone.Origin}.")) return Aborted(connection);
-        string commit = clone.Kind == CloneTargetKind.SameRepository
-            ? await Task.Run(() => GitCloneInstaller.UpdateAsync(connection, directory, null, Run.Log))
-            : await Task.Run(() => GitCloneInstaller.CloneAsync(connection, url, directory, null, Run.Log));
+        string commit;
+        if (folder.Length > 0)
+        {
+            // EpicNext is a folder of a larger repository (by default the installer's own).
+            commit = await Task.Run(() => EpicNextInstaller.GetFromFolderAsync(connection, url, branch, folder, Run.Log));
+        }
+        else
+        {
+            CloneState clone = await Task.Run(() => GitCloneInstaller.InspectAsync(connection, url, directory));
+            if (clone.Kind == CloneTargetKind.OtherContent && !await MoveAsideAsync(connection, owner, directory,
+                    clone.Origin is null ? "It is not a clone of EpicNext." : $"It is a clone of {clone.Origin}.")) return Aborted(connection);
+            string? wanted = branch.Length > 0 ? branch : null;
+            commit = clone.Kind == CloneTargetKind.SameRepository
+                ? await Task.Run(() => GitCloneInstaller.UpdateAsync(connection, directory, wanted, Run.Log))
+                : await Task.Run(() => GitCloneInstaller.CloneAsync(connection, url, directory, wanted, Run.Log));
+        }
         Run.Done(commit);
 
         await Task.Run(() => EpicNextInstaller.PrepareToolsAsync(connection, Run.Log));
