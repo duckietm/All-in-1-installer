@@ -52,3 +52,17 @@ Thumbs.db
 /configuration/
 **/configuration/keys/
 **/configuration/database/
+
+# NextCMS/ holds Node projects with their own .gitignore: the .NET and Visual Studio rules
+# above must not drop their folders (a catalog "packages" folder was left out this way).
+!NextCMS/**/packages/
+!NextCMS/**/[Bb]in/
+!NextCMS/**/[Oo]bj/
+!NextCMS/**/[Dd]ebug/
+!NextCMS/**/[Rr]elease/
+!NextCMS/**/x64/
+!NextCMS/**/x86/
+!NextCMS/**/[Aa]rm/
+!NextCMS/**/[Aa]rm64/
+!NextCMS/**/configuration/
+!NextCMS/**/*.cache

@@ -4,7 +4,7 @@ namespace AllInOneInstaller.Remote;
 
 /// <summary>What the server has for EpicNext CMS before the step runs.</summary>
 public sealed record EpicNextState(AtomCmsState Server, string? HotelName, string? Origin, bool Built, bool ServiceInstalled, bool ServiceRunning,
-    bool AtomTables)
+    bool AtomTables, string? SourceBranch = null, string? SourceFolder = null)
 {
     public WebAccessSettings? Site => Server.Site;
     public bool Installed => Site is { EpicNext: true } && Built && ServiceRunning;
@@ -17,7 +17,12 @@ public sealed record EpicNextState(AtomCmsState Server, string? HotelName, strin
 /// </summary>
 public static class EpicNextInstaller
 {
-    public const string Repository = "https://gitea.epicnabbo.nl/Remco/EpicNext-Cms.git";
+    /// <summary>The installer's own repository, which carries EpicNext (with its routes on /cms_api) in <see cref="RepositoryFolder"/>.</summary>
+    public const string Repository = "https://github.com/duckietm/All-in-1-installer.git";
+    public const string RepositoryFolder = "NextCMS/epicnext-cms";
+    /// <summary>A checkout of the repository when the CMS is in a folder of it; the folder is copied to <see cref="Directory"/>.</summary>
+    public const string SourceDirectory = CustomCmsInstaller.Parent + "/epicnext-src";
+    private const string SourceInfo = SourceDirectory + "/.all-in-1-source";
     public const string Name = "EpicNext CMS";
     /// <summary>Its NGINX site: /etc/nginx/sites-available/cms-epicnext.</summary>
     public const string SiteName = "epicnext";
@@ -80,7 +85,12 @@ public static class EpicNextInstaller
         string script = $$"""
             d={{Directory}}
             echo "name=$(grep -sE '^HOTEL_NAME=' "$d/.env" | head -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')"
-            echo "origin=$(git -c safe.directory="$d" -C "$d" remote get-url origin 2>/dev/null)"
+            if [ -f {{SourceInfo}} ]; then
+              # url, branch and folder of the last run with a folder of a repository.
+              sed -n '1s/^/origin=/p; 2s/^/branch=/p; 3s/^/folder=/p' {{SourceInfo}}
+            else
+              echo "origin=$(git -c safe.directory="$d" -C "$d" remote get-url origin 2>/dev/null)"
+            fi
             echo "built=$([ -f "$d/.next/BUILD_ID" ] && echo yes)"
             echo "service=$([ -f {{ServiceFile}} ] && echo yes)"
             echo "running=$(curl -s --noproxy '*' -o /dev/null --max-time 5 -w '%{http_code}' {{Upstream}}/ 2>/dev/null | grep -qvE '^(000)?$' && echo yes)"
@@ -88,7 +98,77 @@ public static class EpicNextInstaller
             [ -n "$db" ] && echo "atom=$(mariadb -N "$db" -e "SELECT 1 FROM website_installation LIMIT 1" >/dev/null 2>&1 && echo yes)"
             """;
         var values = new ScriptValues((await connection.RunAsRootAsync(script, token)).Output);
-        return new EpicNextState(server, values["name"], values["origin"], values.Yes("built"), values.Yes("service"), values.Yes("running"), values.Yes("atom"));
+        return new EpicNextState(server, values["name"], values["origin"], values.Yes("built"), values.Yes("service"), values.Yes("running"), values.Yes("atom"),
+            values["branch"], values["folder"]);
+    }
+
+    /// <summary>A folder inside the repository: "NextCMS/epicnext-cms", or "" for the top folder.</summary>
+    public static string? FolderProblem(string folder) =>
+        folder.Length == 0 || (System.Text.RegularExpressions.Regex.IsMatch(folder, "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$") &&
+                               !folder.Split('/').Any(part => part is "." or ".."))
+            ? null
+            : "The folder is a path inside the repository such as NextCMS/epicnext-cms (letters, digits, '.', '_', '-' and '/'), or empty for the top folder.";
+
+    /// <summary>A branch name, or "" for the repository's default branch.</summary>
+    public static string? BranchProblem(string branch) =>
+        branch.Length == 0 || (System.Text.RegularExpressions.Regex.IsMatch(branch, "^[A-Za-z0-9._/-]{1,100}$") && !branch.Contains("..") &&
+                               !branch.StartsWith('-') && !branch.StartsWith('/') && !branch.EndsWith('/'))
+            ? null
+            : "Enter a branch name such as main, or leave it empty for the repository's default branch.";
+
+    /// <summary>
+    /// The CMS from a folder of a repository (such as the installer's own, with EpicNext in NextCMS/epicnext-cms): a
+    /// sparse checkout of that folder in /var/www/epicnext-src, copied to /var/www/epicnext. The copy keeps what the CMS
+    /// writes at runtime (.env, node_modules, .next, storage, imported assets). Returns the branch and commit.
+    /// </summary>
+    public static async Task<string> GetFromFolderAsync(ServerConnection connection, string url, string branch, string folder, Action<string> log,
+        CancellationToken token = default)
+    {
+        string script = RemoteScript.Prelude + $$"""
+            {{Environment}}
+            set -o pipefail
+            for tool in git rsync; do
+              if ! command -v $tool >/dev/null 2>&1; then
+                echo "> Installing $tool"
+                apt_update >/dev/null
+                apt-get install -y $tool >/dev/null
+              fi
+            done
+            src={{SourceDirectory}}
+            d={{Directory}}
+            u={{ServerConnection.ShellQuote(url)}}
+            b={{ServerConnection.ShellQuote(branch)}}
+            f={{ServerConnection.ShellQuote(folder)}}
+            g() { git -c safe.directory="$src" -C "$src" "$@"; }
+            # The checkout fits when it is of the same repository, branch and folder; otherwise it is made again.
+            if [ -d "$src/.git" ] && [ "$(sed -n 1p {{SourceInfo}} 2>/dev/null)" = "$u" ] &&
+               [ "$(sed -n 2p {{SourceInfo}} 2>/dev/null)" = "$b" ] && [ "$(sed -n 3p {{SourceInfo}} 2>/dev/null)" = "$f" ]; then
+              current=$(g rev-parse --abbrev-ref HEAD)
+              echo "> git fetch origin $current  ($src)"
+              GIT_TERMINAL_PROMPT=0 g fetch --quiet --depth 1 origin "$current" || fail "git fetch failed (see above)."
+              g reset --quiet --hard FETCH_HEAD
+            else
+              rm -rf "$src"
+              echo "> git clone --sparse${b:+ --branch $b} $u  (only $f, into $src)"
+              GIT_TERMINAL_PROMPT=0 git clone --quiet --depth 1 --filter=blob:none --sparse ${b:+--branch "$b"} "$u" "$src" 2>&1 ||
+                fail "Cloning $u${b:+ (branch $b)} failed (see above)."
+              g sparse-checkout set "$f" || fail "git sparse-checkout failed (see above)."
+              printf '%s\n%s\n%s\n' "$u" "$b" "$f" > {{SourceInfo}}
+            fi
+            if [ ! -f "$src/$f/package.json" ]; then
+              fail "$f is not in the $(g rev-parse --abbrev-ref HEAD) branch of $u (no package.json there). Enter the branch that has it, or check the folder."
+            fi
+            [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ] && [ ! -f "$d/package.json" ] &&
+              echo "  WARNING: $d had other content; files the CMS does not use stay there"
+            install -d -m 755 "$d"
+            echo "> $f -> $d"
+            # What the CMS writes while it runs stays: settings, packages, build, uploads, imported assets.
+            rsync -a --delete               --exclude=/.env --exclude='/.env.bak-*' --exclude=/.env.local               --exclude=/node_modules/ --exclude=/.next/ --exclude=/storage/ --exclude=/logs/ --exclude=/backups/               --exclude=/public/nitro-assets/ --exclude=/public/swf/ --exclude=/public/cache/ --exclude=/public/assets/images/badges/               --exclude=/.git/               "$src/$f/" "$d/"
+            echo "  $(find "$d" -path "$d/node_modules" -prune -o -type f -print | wc -l) files"
+            echo "COMMIT=$(g rev-parse --abbrev-ref HEAD) $(g log -1 --format='%h %cd %s' --date=short)"
+            """;
+        ScriptValues values = await RemoteScript.RunCapturingAsync(connection, script, log, "Getting EpicNext failed", ["COMMIT"], token);
+        return values["COMMIT"] ?? "";
     }
 
     /// <summary>Node.js 26.12.1 or newer (apt upgrades an older Node.js 26 from NodeSource) and pnpm through corepack.</summary>
@@ -407,6 +487,7 @@ public static class EpicNextInstaller
               [ -d /run/systemd/system ] && systemctl daemon-reload
               echo "  {{ServiceFile}} deleted"
               [ -L {{GamedataPath}} ] && rm -f {{GamedataPath}} && echo "  {{GamedataPath}} link deleted (the gamedata stays)"
+              [ -d {{SourceDirectory}} ] && rm -rf {{SourceDirectory}} && echo "  {{SourceDirectory}} (the git checkout) deleted"
             fi
             true
             """;

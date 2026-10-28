@@ -775,12 +775,16 @@ Captcha keys (Turnstile / reCAPTCHA) go in `/var/www/atomcms/.env`. To update At
 ### EpicNext CMS
 
 **Addons → CMS → EpicNext CMS** makes [EpicNext CMS](https://gitea.epicnabbo.nl/Remco/EpicNext-Cms) (Next.js, no PHP)
-the hotel's website, like AtomCMS. It runs on the server itself, **not in Docker**. It asks for the hotel's name (the
-repository link is filled in; change it only when the repository has moved), then:
+the hotel's website, like AtomCMS. It runs on the server itself, **not in Docker**. It asks for the hotel's name and where to get EpicNext:
+a repository link, a branch (empty: the default branch) and the folder in the repository with EpicNext's
+`package.json`. By default that is `NextCMS/epicnext-cms` in this installer's own repository, the version with its
+routes on `/cms_api` (so `/api` stays Polaris'). For a folder, the step keeps a sparse checkout of just that folder in
+`/var/www/epicnext-src` and copies it to `/var/www/epicnext`, keeping `.env`, `node_modules`, the build, `storage` and
+imported assets; with an empty folder it clones the repository into `/var/www/epicnext` itself. Then:
 
 ![EpicNext CMS](docs/screenshots/epicnext-step.png)
 
-1. **Clone or update** the repository in `/var/www/epicnext` (git pull on a re-run).
+1. **Get or update** EpicNext in `/var/www/epicnext` (see above; a re-run fetches the newest commit).
 2. **Node.js and pnpm**: EpicNext needs Node.js 26.12.1 or newer (an older Node.js 26 from the Dev tools step is
    upgraded with apt) and the pnpm version its `package.json` pins, through corepack.
 3. **.env** from `.env.example` (the old one is kept as `.env.bak-<time>`): `DATABASE_URL` to the hotel database
