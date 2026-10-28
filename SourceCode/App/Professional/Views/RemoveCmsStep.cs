@@ -6,7 +6,7 @@ using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 
 namespace AllInOneInstaller.App.Professional.Views;
 
-/// <summary>Removes the CMS (AtomCMS or your own): Octane is the site again, as after the server installation.</summary>
+/// <summary>Removes the CMS (AtomCMS, EpicNext or your own): Octane is the site again, as after the server installation.</summary>
 public sealed class RemoveCmsStep : InstallStep
 {
     private readonly CheckBox _deleteFiles = new() { Content = "Also delete the CMS' folder and its NGINX site file (cannot be undone)" };
@@ -26,7 +26,7 @@ public sealed class RemoveCmsStep : InstallStep
         "The hotel goes back to how the server installation set it up: Octane is the website on /, with its own login screen, and the CMS is no longer served.",
         [
             "Octane moves back to /: vite without --base, client-mode.json with /configuration/, its own login screen on again, and a rebuild.",
-            $"NGINX: the hotel site serves Octane on / again (127.0.0.1:{HotelSite.Port}); the CMS' own NGINX site is disabled.",
+            $"NGINX: the hotel site serves Octane on / again (127.0.0.1:{HotelSite.Port}); the CMS' own NGINX site is disabled (and EpicNext's {EpicNextInstaller.Service} service stopped).",
             "Traefik: /ws and all of /api go to Polaris again, everything else to the hotel site.",
             "The CMS' files stay unless you tick the box below. Its database tables (such as AtomCMS' website_* tables) and users stay in the hotel database.",
             "Tests the site, Polaris' /api/health and the websocket through Traefik."
@@ -53,6 +53,7 @@ public sealed class RemoveCmsStep : InstallStep
     // The CMS on the server: its NGINX site name and folder.
     private static (string SiteName, string Folder)? Cms(WebAccessSettings site) =>
         site.AtomCms ? (AtomCmsInstaller.SiteName, AtomCmsInstaller.Directory)
+        : site.EpicNext ? (EpicNextInstaller.SiteName, EpicNextInstaller.Directory)
         : site.CustomCms is { } name && CustomCmsInstaller.NameProblem(name) is null ? (name, CustomCmsInstaller.Directory(name))
         : null;
 
@@ -73,7 +74,8 @@ public sealed class RemoveCmsStep : InstallStep
             return false;
         }
         _deleteFiles.IsEnabled = Cms(site) is not null;
-        _deleteWhat.Text = Cms(site) is { } cms ? $"Deletes {cms.Folder} and {CmsSite.File(cms.SiteName)}." : "";
+        _deleteWhat.Text = Cms(site) is { } cms
+            ? $"Deletes {cms.Folder} and {CmsSite.File(cms.SiteName)}{(site.EpicNext ? $", and the {EpicNextInstaller.Service} service" : "")}." : "";
         Detected.Show(ResultKind.Info, $"{site.CmsName} is the website of {site.Url}",
             $"After this step Octane is the website on {site.Url}/ again, with its own login screen.");
         return false;
@@ -88,7 +90,7 @@ public sealed class RemoveCmsStep : InstallStep
         if (!state.OctaneBuilt) throw new ServerConnectionException("Octane is not built yet: run the Octane step first.");
         (string SiteName, string Folder)? cms = Cms(current);
         bool delete = _deleteFiles.IsChecked == true && cms is not null;
-        WebAccessSettings site = current with { AtomCms = false, CustomCms = null, CmsPort = 0 };
+        WebAccessSettings site = current with { AtomCms = false, CustomCms = null, EpicNext = false, CmsPort = 0 };
         Run.Log(current.HasCms ? $"  {current.CmsName} is the website of {current.Url}: setting Octane back on /" : $"  No CMS on {current.Url}: setting Octane, NGINX and Traefik back anyway");
         Run.Done(current.CmsName ?? "no CMS");
 
@@ -102,6 +104,8 @@ public sealed class RemoveCmsStep : InstallStep
         await Task.Run(() => OctaneInstaller.PublishAsync(connection, site, Run.Log));
         Run.Done("Octane on /");
 
+        // EpicNext's own server stops first: nothing serves it any more.
+        if (current.EpicNext) await Task.Run(() => EpicNextInstaller.RemoveServiceAsync(connection, delete, Run.Log));
         await Task.Run(() => CmsSite.RemoveAsync(connection, cms?.SiteName, delete ? cms?.Folder : null, Run.Log));
         Run.Done(delete ? "disabled and deleted" : "disabled, files kept");
 

@@ -169,7 +169,7 @@ public sealed class CustomCmsStep : InstallStep
                 $"Octane is on {site.ClientUrl}. Run this step again to update it (git pull, or a new ZIP) and set it up again.");
         else
             Detected.Show(ResultKind.Info, $"Your CMS will be the website of {site.Url}",
-                $"Octane moves to {site.Url}/client/." + (site.AtomCms ? " AtomCMS is the website now: your CMS takes its place (AtomCMS' files stay)." : ""));
+                $"Octane moves to {site.Url}/client/." + (site.HasCms ? $" {site.CmsName} is the website now: your CMS takes its place (its files stay)." : ""));
         return false;
     }
 
@@ -193,7 +193,7 @@ public sealed class CustomCmsStep : InstallStep
         Run.Log("> Checking the server ...");
         CustomCmsState state = await Task.Run(() => CustomCmsInstaller.InspectAsync(connection, name));
         if (Missing(state.Server, php) is { } missing) throw new ServerConnectionException(missing);
-        WebAccessSettings site = state.Site! with { AtomCms = false, CustomCms = name };
+        WebAccessSettings site = state.Site! with { AtomCms = false, CustomCms = name, EpicNext = false };
         Run.Log($"  {site.Url}: {(php ? $"PHP {state.Server.PhpVersion}" : "static website")}, Octane built");
         Run.Done(site.Url);
 

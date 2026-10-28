@@ -694,10 +694,10 @@ returns to the dashboard and keeps the login (and the SQL Editor's database conn
 
 ### CMS
 
-**Addons → CMS** first asks **Would you like another CMS?**: **AtomCMS** (set up completely, below), **My own
-CMS** (from a GitHub link or a ZIP file, see [Your own CMS](#your-own-cms)) or **Remove the CMS** (see
-[Removing the CMS](#removing-the-cms)). Both work the same way for the hotel: the
-CMS is the website and Octane moves to **/client**, and both need a finished server installation. One CMS is the
+**Addons → CMS** first asks **Would you like another CMS?**: **AtomCMS** (set up completely, below), **EpicNext
+CMS** (set up completely, see [EpicNext CMS](#epicnext-cms)), **My own CMS** (from a GitHub link or a ZIP file, see
+[Your own CMS](#your-own-cms)) or **Remove the CMS** (see [Removing the CMS](#removing-the-cms)). They work the same
+way for the hotel: the CMS is the website and Octane moves to **/client**, and all need a finished server installation. One CMS is the
 website at a time; switching keeps the other one's files.
 
 ![The CMS question](docs/screenshots/cms-question.png)
@@ -772,6 +772,42 @@ Captcha keys (Turnstile / reCAPTCHA) go in `/var/www/atomcms/.env`. To update At
 
 ![AtomCMS completed](docs/screenshots/atomcms-completed.png)
 
+### EpicNext CMS
+
+**Addons → CMS → EpicNext CMS** makes [EpicNext CMS](https://gitea.epicnabbo.nl/Remco/EpicNext-Cms) (Next.js, no PHP)
+the hotel's website, like AtomCMS. It runs on the server itself, **not in Docker**. It asks for the hotel's name (the
+repository link is filled in; change it only when the repository has moved), then:
+
+![EpicNext CMS](docs/screenshots/epicnext-step.png)
+
+1. **Clone or update** the repository in `/var/www/epicnext` (git pull on a re-run).
+2. **Node.js and pnpm**: EpicNext needs Node.js 26.12.1 or newer (an older Node.js 26 from the Dev tools step is
+   upgraded with apt) and the pnpm version its `package.json` pins, through corepack.
+3. **.env** from `.env.example` (the old one is kept as `.env.bak-<time>`): `DATABASE_URL` to the hotel database with
+   the `cms` account (EpicNext reads the emulator's tables), `HOTEL_NAME`, `APP_URL` and `AUTH_URL` (the site's
+   address), `AUTH_TRUST_HOST=true` (behind Traefik), a random `AUTH_SECRET` (made once, so logins stay valid), and
+   `RCON_HOST`/`RCON_PORT` from the emulator's `config.ini`.
+4. **Build**: `/var/www/Gamedata` (where EpicNext looks for the gamedata) links to the hotel's gamedata, then
+   `pnpm install --frozen-lockfile`, `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
+   ...; the emulator's stay as they are) and `pnpm build`. The build runs under EpicNext's own memory cap
+   (`scripts/with-memory-cap.sh`, with 1 GB left for MariaDB, the emulator and NGINX) and needs about 3 GB of free
+   memory. The CMS is stopped during the build.
+5. **Octane on /client**, as for AtomCMS.
+6. **Service, NGINX and Traefik**: the systemd service `epicnext-cms` runs `next start` as `www-data` on
+   `127.0.0.1:3002` and starts at boot. EpicNext's NGINX site (see Ports above) passes every request to it,
+   websockets and Server-Sent Events (the radio) included. EpicNext has a page of its own on `/client` that opens
+   Octane, so Traefik sends only `/client/` (with the slash) to the hotel site. `hotel.env` gets `CMS=epicnext`.
+7. **Test** through Traefik: EpicNext on `/` and `/client`, Octane on `/client/` and Polaris' `/api/health`.
+
+Then register on `/register` (or log in with an account the hotel already has), make it admin in the SQL Editor
+(`UPDATE users SET rank = 7 WHERE username = 'yourname';`), and in `/admin` → **CMS Settings** set `nitro_client_url`
+to `<url>/client/`. More settings (mail, Valkey, Turnstile, OAuth) go in `/var/www/epicnext/.env`, followed by
+`systemctl restart epicnext-cms`; its log is `journalctl -u epicnext-cms`. To update EpicNext, run the addon again.
+
+EpicNext and AtomCMS both use `website_*` tables. On a hotel database where AtomCMS was installed, tables with the
+same name keep AtomCMS' layout; the step warns about that. Choosing another CMS later stops and disables
+`epicnext-cms`; its files stay.
+
 ### Your own CMS
 
 **Addons → CMS → My own CMS** makes your own CMS (or any website) the hotel's website, the same way as AtomCMS: the
@@ -811,10 +847,12 @@ CMS needs (`composer install`, `npm run build`) run in **Tools → SSH terminal*
    `habbicons.asset.root` back to `/habbicons`, Octane's own **login screen on** again (with a CMS the CMS logs
    players in, so it was off), and a rebuild. The hotel is unavailable for about a minute while it builds.
 2. **NGINX**: the hotel site on 127.0.0.1:85 serves Octane on `/` again, and every CMS site (`cms-*`) is disabled.
+   For EpicNext the `epicnext-cms` service is stopped and disabled too.
 3. **Traefik**: `/ws` and all of `/api` go to Polaris again, the rest to the hotel site; `hotel.env` gets `CMS=none`.
 4. **Test** through Traefik: the site, Polaris' `/api/health` and the websocket.
 
-The CMS' files stay, unless you tick **Also delete the CMS' folder and its NGINX site file**. Its database tables
+The CMS' files stay, unless you tick **Also delete the CMS' folder and its NGINX site file** (for EpicNext also its
+service file and the `/var/www/Gamedata` link). Its database tables
 (such as AtomCMS' `website_*` tables) and the users stay in the hotel database. A CMS again: **Addons → CMS**.
 
 ### Gitea
@@ -1254,6 +1292,7 @@ SourceCode/
   App/Professional/Views/HardenStep.cs    Harden page
   App/Professional/Views/AtomCmsStep.cs   CMS addon: AtomCMS
   App/Professional/Views/CustomCmsStep.cs CMS addon: your own CMS (GitHub link or ZIP, PHP or static, root folder)
+  App/Professional/Views/EpicNextStep.cs  CMS addon: EpicNext CMS (Next.js, built and run on the server)
   App/Professional/Views/RemoveCmsStep.cs CMS addon: remove the CMS, Octane on / again
   App/Professional/Views/GiteaStep.cs     Gitea addon: domain, Cloudflare, admin, DNS warning
   App/Professional/Views/RemoveGiteaStep.cs Gitea addon: remove Gitea, its data only when asked
@@ -1302,6 +1341,7 @@ SourceCode/
   Remote/HotelSite.cs                     The hotel's NGINX site (Octane on /, or AtomCMS with Octane on /client/)
   Remote/AtomCmsInstaller.cs              AtomCMS: .env, composer, migrations and settings, theme build, tests
   Remote/CustomCmsInstaller.cs            Your own CMS: Git access, ZIP, root folder, tests
+  Remote/EpicNextInstaller.cs             EpicNext CMS: Node.js/pnpm, .env, capped build, systemd service, tests
   Remote/CmsSite.cs                       A CMS' own NGINX site on the first free port from 85 to 95
   Remote/LocalPorts.cs                    The first free local port from 85 to 95 (CMS sites, Gitea)
   Remote/GiteaInstaller.cs                Gitea in Docker behind Traefik: DNS check, compose, route, admin, test

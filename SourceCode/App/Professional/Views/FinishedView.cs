@@ -150,6 +150,40 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of the CMS addon with EpicNext: the first admin, the client URL and where its settings are.</summary>
+    public static Control BuildEpicNext(WebAccessSettings? site, bool atomTables, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        string url = site?.Url ?? "your hotel";
+        var banner = new ResultBanner();
+        banner.Show(!clean ? ResultKind.Error : atomTables ? ResultKind.Warning : ResultKind.Success,
+            clean ? $"EpicNext is the website of {url}" : "EpicNext was not installed",
+            !clean ? "Run the step again when the server is ready (see the step for what went wrong)."
+            : $"Octane is on {site?.ClientUrl ?? "/client/"}. Make yourself admin and set the client URL below." +
+              (atomTables ? " The hotel database has AtomCMS' website_* tables: tables with the same name keep AtomCMS' layout, so some EpicNext pages may fail." : ""));
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+
+        var admin = new StackPanel { Spacing = 6 };
+        admin.Children.Add(Text($"Register on {url}/register (or log in with an account you already have in the hotel), then give it rank 7 (SQL Editor in the menu on the left):", 13));
+        admin.Children.Add(Code("UPDATE users SET rank = 7 WHERE username = 'yourname';"));
+        page.Children.Add(Section("1. First admin", admin));
+
+        var client = new StackPanel { Spacing = 6 };
+        client.Children.Add(Text($"Open {url}/admin → CMS Settings and set nitro_client_url to the hotel's client:", 13));
+        client.Children.Add(Code(site?.ClientUrl ?? "/client/"));
+        client.Children.Add(Text("EpicNext's own /client page then opens Octane with the player's SSO ticket.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("2. Client URL", client));
+
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text($"Updating: run this addon again (git pull, pnpm install, migrate and build; the site is down during the build).", 13));
+        later.Children.Add(Text($"More settings (mail, Valkey, Turnstile, OAuth ...) are in {EpicNextInstaller.Directory}/.env; afterwards: systemctl restart {EpicNextInstaller.Service}.", 13));
+        later.Children.Add(Text($"Its log: journalctl -u {EpicNextInstaller.Service}. Back to AtomCMS: choose AtomCMS in Addons → CMS.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("3. Later", later));
+        return page;
+    }
+
     /// <summary>Last page of the Gitea addon: the address, the admin login and how to use it.</summary>
     public static Control BuildGitea(GiteaSettings? settings, GiteaResult? result, string loginFile, IReadOnlyList<(string Title, StepSummary Result)> steps)
     {
