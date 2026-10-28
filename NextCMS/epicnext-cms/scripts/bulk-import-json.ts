@@ -7,7 +7,7 @@
 //
 // Usage (via pnpm, as required):
 //   pnpm exec tsx scripts/bulk-import-json.ts \
-//     --file=/var/www/Gamedata/.../FurnitureData.json [--chunk-size=2000]
+//     --file=/var/www/gamedata/.../FurnitureData.json [--chunk-size=2000]
 //
 // Input shapes supported automatically:
 //   A) habbo furnidata_json   → { roomitemtypes:{furnitype:[…]}, wallitemtypes:{…} }

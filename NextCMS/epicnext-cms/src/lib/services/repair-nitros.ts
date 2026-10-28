@@ -135,7 +135,7 @@ export async function repairMissingNitros(
 	}
 
 	// Every location the app mirrors furni assets into — the webroot (public/)
-	// plus the live gamedata (e.g. /var/www/Gamedata). Repair writes to all of
+	// plus the live gamedata (e.g. /var/www/gamedata). Repair writes to all of
 	// them so both the CMS and the client see the .nitro.
 	const nitroDirs = uniqueDirs([
 		targets.nitroDir,
@@ -396,7 +396,7 @@ function templateUrl(base: string, libname: string, param: string): string {
  * largest existing sprite (usually size 64) — no SWF is required, so this works
  * for source-provided bundles too. Each rewritten bundle is validated and
  * written back to every nitro directory (including the live
- * `/var/www/Gamedata/bundled/furniture`). Bundles that already carry a 32 frame
+ * `/var/www/gamedata/bundled/furniture`). Bundles that already carry a 32 frame
  * (or cannot derive one) are left untouched.
  */
 export async function addSize32AllNitros(

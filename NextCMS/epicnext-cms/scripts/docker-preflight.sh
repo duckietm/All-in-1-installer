@@ -41,7 +41,7 @@ RW_DIRS=(
   "$DIR/public/nitro-assets"
   "$DIR/public/swf"
   "$DIR/storage"
-  "/var/www/Gamedata"
+  "/var/www/gamedata"
 )
 
 say()  { printf '  %s\n' "$*"; }

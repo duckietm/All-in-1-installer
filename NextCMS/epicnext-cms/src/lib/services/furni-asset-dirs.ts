@@ -9,7 +9,7 @@ export const DEFAULT_NITRO_FILES_ROOT = getRuntimePath(
 	"Nitro-Files",
 );
 export const DEFAULT_GAMEDATA_ROOT =
-	process.platform === "win32" ? "" : "/var/www/Gamedata";
+	process.platform === "win32" ? "" : "/var/www/gamedata";
 export const DEFAULT_FURNI_ICON_DIR = getRuntimePath(
 	/*turbopackIgnore: true*/ process.cwd(),
 	"public/swf/dcr/hof_furni/icons",

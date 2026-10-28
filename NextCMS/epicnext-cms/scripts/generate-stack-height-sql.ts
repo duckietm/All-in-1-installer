@@ -29,8 +29,8 @@ import { parseNitroBundle } from "@/lib/services/swf/nitro-builder";
  *   pnpm exec tsx scripts/generate-stack-height-sql.ts [options]
  *
  * Options:
- *   --dir=<path>        bundle directory (default: /var/www/Gamedata/bundled/furniture)
- *   --furnidata=<path>  local FurnitureData.json (default: /var/www/Gamedata/config/FurnitureData.json)
+ *   --dir=<path>        bundle directory (default: /var/www/gamedata/bundled/furniture)
+ *   --furnidata=<path>  local FurnitureData.json (default: /var/www/gamedata/config/FurnitureData.json)
  *   --out=<path>        SQL output file     (default: stack-heights.sql)
  *   --types=<list>      items_base types    (default: s,i  → floor + wall furniture)
  *   --all               emit every matched row instead of only changed rows
@@ -46,9 +46,9 @@ for (const raw of process.argv.slice(2)) {
 	else args.set(raw.slice(2, eq), raw.slice(eq + 1));
 }
 
-const DIR = String(args.get("dir") ?? "/var/www/Gamedata/bundled/furniture");
+const DIR = String(args.get("dir") ?? "/var/www/gamedata/bundled/furniture");
 const FURNIDATA = String(
-	args.get("furnidata") ?? "/var/www/Gamedata/config/FurnitureData.json",
+	args.get("furnidata") ?? "/var/www/gamedata/config/FurnitureData.json",
 );
 const OUT = String(args.get("out") ?? "stack-heights.sql");
 const TYPES = String(args.get("types") ?? "s,i")

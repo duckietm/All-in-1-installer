@@ -301,7 +301,7 @@ start_candidate() {
       -v "$deploy_dir/public/nitro-assets:/app/public/nitro-assets" \
       -v "$deploy_dir/public/swf:/app/public/swf" \
       -v "$deploy_dir/storage:/app/storage" \
-      -v /var/www/Gamedata:/var/www/Gamedata \
+      -v /var/www/gamedata:/var/www/gamedata \
       "$image"
   )
 }

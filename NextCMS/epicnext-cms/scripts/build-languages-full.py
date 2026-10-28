@@ -14,9 +14,9 @@ import urllib.request
 import sys
 
 # ── Config ─────────────────────────────────────────────────────────────
-MASTER_PATH = "/var/www/Gamedata/config/FurnitureData.json"
-OUT_DIR = "/var/www/Gamedata/config"
-CACHE_PATH = "/var/www/Gamedata/config/.translations_libre_cache.json"
+MASTER_PATH = "/var/www/gamedata/config/FurnitureData.json"
+OUT_DIR = "/var/www/gamedata/config"
+CACHE_PATH = "/var/www/gamedata/config/.translations_libre_cache.json"
 LIBRE_URL = "http://127.0.0.1:5000/translate"
 CONCURRENCY = 6
 LANGUAGES = [

@@ -24,7 +24,7 @@ const CODE_RE = /^[A-Za-z0-9_+.-]+$/;
 const CODE_MAX_LEN = 50;
 const DEFAULT_BASE = "https://images.habbo.com/c_images/album1584";
 const LOCAL_SWF_BASE = "/swf/c_images/album1584";
-const GEDATA_IMAGES_BASE = "/var/www/Gamedata/c_images/album1584";
+const GEDATA_IMAGES_BASE = "/var/www/gamedata/c_images/album1584";
 const FETCH_TIMEOUT_MS = 5_000;
 
 // Neutral placeholder (grey rounded square) served as a 200 so broken badge
@@ -176,8 +176,8 @@ async function fetchCandidate(
 		}
 	}
 
-	// Local Gamedata path — read from /var/www/Gamedata/c_images/album1584/
-	if (normalized.startsWith("/var/www/Gamedata")) {
+	// Local Gamedata path — read from /var/www/gamedata/c_images/album1584/
+	if (normalized.startsWith("/var/www/gamedata")) {
 		try {
 			const file = join(normalized, `${code}.gif`);
 			const body = new Uint8Array(await readFile(file));

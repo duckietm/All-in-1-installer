@@ -795,11 +795,11 @@ imported assets; with an empty folder it clones the repository into `/var/www/ep
    the step runs that check (`src/env.ts`) itself, so a wrong setting shows in seconds instead of after the build. `HOTEL_NAME`, `APP_URL` and `AUTH_URL` (the site's
    address), `AUTH_TRUST_HOST=true` (behind Traefik), a random `AUTH_SECRET` (made once, so logins stay valid), and
    `RCON_HOST`/`RCON_PORT` from the emulator's `config.ini`.
-4. **Build**: `/var/www/Gamedata` (where EpicNext looks for the gamedata) links to the hotel's gamedata, then
-   `pnpm install --frozen-lockfile`, the base tables (EpicNext was built on an AtomCMS database and its migrations
+4. **Build**: `pnpm install --frozen-lockfile`, the base tables (EpicNext was built on an AtomCMS database and its migrations
    expect AtomCMS' tables, such as `website_housekeeping_permissions`: the ones the hotel database lacks are made
    from its own `drizzle/drafts/0000_premium_spirit.sql`, the emulator's tables are not touched),
-   `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
+   `users.password` widened to `VARCHAR(255)` when it is shorter (Polaris makes it `VARCHAR(64)`, too short for
+   EpicNext's Argon2id hashes; the emulator never reads it), `pnpm db:migrate` (only EpicNext's own tables: `website_*`, `radio_*`, `acl_*`
    ...; the emulator's stay as they are) and `pnpm build`. The build runs under EpicNext's own memory cap
    (`scripts/with-memory-cap.sh`, with 1 GB left for MariaDB, the emulator and NGINX) and needs about 3 GB of free
    memory. The CMS is stopped during the build. It also needs disk space: the step checks for 3 GB free before
@@ -814,7 +814,8 @@ imported assets; with an empty folder it clones the repository into `/var/www/ep
 
 Then register on `/register` (or log in with an account the hotel already has), make it admin in the SQL Editor
 (`UPDATE users SET rank = 7 WHERE username = 'yourname';`). The step sets `nitro_client_url` (`/admin` → **CMS
-Settings**) to `/client/index.html` when it is empty, so EpicNext's `/client` page opens Octane on this site with the
+Settings**) to `/client/index.html` and `gamedata_root` to the hotel's gamedata folder (`/var/www/gamedata`) when they
+are empty, so EpicNext's `/client` page opens Octane on this site with the
 player's SSO ticket (`/client/index.html?sso=<ticket>`). More settings (mail, Valkey, Turnstile, OAuth) go in `/var/www/epicnext/.env`, followed by
 `systemctl restart epicnext-cms`; its log is `journalctl -u epicnext-cms`. To update EpicNext, run the addon again.
 
@@ -866,7 +867,7 @@ CMS needs (`composer install`, `npm run build`) run in **Tools → SSH terminal*
 4. **Test** through Traefik: the site, Polaris' `/api/health` and the websocket.
 
 The CMS' files stay, unless you tick **Also delete the CMS' folder and its NGINX site file** (for EpicNext also its
-service file and the `/var/www/Gamedata` link). Its database tables
+service file and its git checkout). Its database tables
 (such as AtomCMS' `website_*` tables) and the users stay in the hotel database. A CMS again: **Addons → CMS**.
 
 ### Gitea

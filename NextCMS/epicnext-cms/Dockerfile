@@ -84,8 +84,8 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0
 RUN apk add --no-cache tini curl \
     && addgroup -g 33 -S nextjs && adduser -u 33 -S -G nextjs nextjs \
-    && mkdir -p /app/storage /app/public/nitro-assets /app/public/swf /var/www/Gamedata \
-    && chown -R 33:33 /app/storage /app/public /var/www/Gamedata
+    && mkdir -p /app/storage /app/public/nitro-assets /app/public/swf /var/www/gamedata \
+    && chown -R 33:33 /app/storage /app/public /var/www/gamedata
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static

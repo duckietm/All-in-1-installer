@@ -157,7 +157,7 @@ The CMS ships with a multi-stage Dockerfile that automatically detects your pack
 - Docker 24+ and Docker Compose v2
 - `.env` file configured (see step 3 above)
 - A MySQL/MariaDB database reachable from the container (`DATABASE_URL` host should point to the DB server, not `127.0.0.1` unless it's reachable from inside the container)
-- (Optional) A shared `Gamedata` directory at `/var/www/Gamedata` with write access (see [Volumes](#volumes) below)
+- (Optional) A shared `Gamedata` directory at `/var/www/gamedata` with write access (see [Volumes](#volumes) below)
 
 ### Quick Start with Docker
 
@@ -175,8 +175,8 @@ pm2 stop next 2>/dev/null || true
 
 # 3. Ensure the write directories are owned by www-data (UID/GID 33) so the
 #    container user can write imports/uploads to them.
-sudo mkdir -p ./public/nitro-assets ./public/swf ./storage /var/www/Gamedata
-sudo chown -R 33:33 ./public/nitro-assets ./public/swf ./storage /var/www/Gamedata
+sudo mkdir -p ./public/nitro-assets ./public/swf ./storage /var/www/gamedata
+sudo chown -R 33:33 ./public/nitro-assets ./public/swf ./storage /var/www/gamedata
 
 # 4. Build, migrate and start a release tied to the Git commit.
 # Requires Linux, Bash, Git, flock and Docker Compose v2; no host Node/pnpm.
@@ -382,9 +382,9 @@ Only the CMS (and the optional avatar imager container, see [Avatar Imaging](#av
 | `/app/public/nitro-assets` | `./public/nitro-assets` | rw   | Imported furni/pet/effect assets      |
 | `/app/public/swf`          | `./public/swf`          | rw   | SWF costumes / icons (imports)        |
 | `/app/storage`             | `./storage`             | rw   | Uploaded media (persistent)           |
-| `/var/www/Gamedata`        | `/var/www/Gamedata`     | rw   | Shared gamedata root (hardcoded path) |
+| `/var/www/gamedata`        | `/var/www/gamedata`     | rw   | Shared gamedata root (hardcoded path) |
 
-**About the hardcoded `/var/www/Gamedata` path:** `src/lib/services/furni-asset-dirs.ts` defines `DEFAULT_GAMEDATA_ROOT = /var/www/Gamedata` as an absolute on-disk path the CMS reads and mirrors imported assets into. The compose file mounts the host `/var/www/Gamedata` at the identical path inside the container so `existsSync('/var/www/Gamedata')` succeeds and nginx keeps serving `/gamedata/` from the same directory.
+**About the hardcoded `/var/www/gamedata` path:** `src/lib/services/furni-asset-dirs.ts` defines `DEFAULT_GAMEDATA_ROOT = /var/www/gamedata` as an absolute on-disk path the CMS reads and mirrors imported assets into. The compose file mounts the host `/var/www/gamedata` at the identical path inside the container so `existsSync('/var/www/gamedata')` succeeds and nginx keeps serving `/gamedata/` from the same directory.
 
 **The Nitro/Octane client and renderer are NOT mounted** — nginx on the host serves them directly:
 
@@ -394,11 +394,11 @@ Only the CMS (and the optional avatar imager container, see [Avatar Imaging](#av
 | Avatar imager       | `/docker/Polaris-imager` | Docker container `avatar-imaging-pixinode` on port `8082` — see [Avatar Imaging](#avatar-imaging) |
 | Camera uploads      | `/var/www/Camera`        | nginx `/camera/` alias                                                                            |
 
-**Container user & write permissions:** the CMS container runs as `www-data` (UID/GID 33) by default to match the host owner of `/var/www/Gamedata`. Ensure the other write volumes (`./public/nitro-assets`, `./public/swf`, `./storage`) are also owned by `www-data` on the host:
+**Container user & write permissions:** the CMS container runs as `www-data` (UID/GID 33) by default to match the host owner of `/var/www/gamedata`. Ensure the other write volumes (`./public/nitro-assets`, `./public/swf`, `./storage`) are also owned by `www-data` on the host:
 
 ```bash
-sudo mkdir -p ./public/nitro-assets ./public/swf ./storage /var/www/Gamedata
-sudo chown -R 33:33 ./public/nitro-assets ./public/swf ./storage /var/www/Gamedata
+sudo mkdir -p ./public/nitro-assets ./public/swf ./storage /var/www/gamedata
+sudo chown -R 33:33 ./public/nitro-assets ./public/swf ./storage /var/www/gamedata
 sudo chmod -R o+rX ./public/nitro-assets ./public/swf ./storage
 ```
 
@@ -455,7 +455,7 @@ pnpm's store is hard-linked and its `.bin` shims are symlinks, so **node_modules
 
 ```bash
 # Habbo furnidata (auto-detects roomitemtypes / wallitemtypes / effecttypes)
-pnpm db:bulk --file=/var/www/Gamedata/config/FurnitureData.json
+pnpm db:bulk --file=/var/www/gamedata/config/FurnitureData.json
 
 # Flat array of documents → generic JSON store
 pnpm db:bulk --file=/data/products.json --table=docs --category=furni

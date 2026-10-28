@@ -53,8 +53,8 @@ const isSandbox =
 
 const describeGuard = isSandbox ? describe : describe.skip;
 
-const REAL_NITRO_DIR = "/var/www/Gamedata/bundled/furniture";
-const REAL_FURNIDATA = "/var/www/Gamedata/config/FurnitureData.json";
+const REAL_NITRO_DIR = "/var/www/gamedata/bundled/furniture";
+const REAL_FURNIDATA = "/var/www/gamedata/config/FurnitureData.json";
 
 let tmpRoot: string;
 let gamedataDir: string;

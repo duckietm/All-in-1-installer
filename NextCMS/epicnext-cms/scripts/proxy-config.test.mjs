@@ -76,7 +76,7 @@ it.skipIf(!hasCompose)(
 				"/app/public/nitro-assets",
 				"/app/public/swf",
 				"/app/storage",
-				"/var/www/Gamedata",
+				"/var/www/gamedata",
 			]);
 			expect(cms.environment.DATABASE_URL).toBe(
 				"mysql://fixture:fixture@127.0.0.1/fixture",

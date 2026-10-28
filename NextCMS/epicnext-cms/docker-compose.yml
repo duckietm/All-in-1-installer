@@ -52,7 +52,7 @@ x-cms: &cms
     - ./public/nitro-assets:/app/public/nitro-assets
     - ./public/swf:/app/public/swf
     - ./storage:/app/storage
-    - /var/www/Gamedata:/var/www/Gamedata
+    - /var/www/gamedata:/var/www/gamedata
 
   # ── Resource limits ──
   mem_limit: 4g

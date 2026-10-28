@@ -24,7 +24,7 @@ it("locks CI and scheduled deployments using the same production lock", () => {
 it("preserves production runtime configuration and recent cache", () => {
 	expect(deploy).toContain("--net=host");
 	expect(deploy).toContain("--restart always");
-	expect(deploy).toContain("/var/www/Gamedata:/var/www/Gamedata");
+	expect(deploy).toContain("/var/www/gamedata:/var/www/gamedata");
 	expect(deploy).toContain("/app/storage");
 	expect(deploy).not.toContain("--env-file");
 	// The scoped prune lives in docker-prune.sh; deploys invoke it for both CI

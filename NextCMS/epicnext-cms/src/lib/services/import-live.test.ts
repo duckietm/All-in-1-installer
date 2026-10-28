@@ -143,7 +143,7 @@ beforeAll(async () => {
 
 	// Seed the temp dir with the REAL production FurnitureData.json so the
 	// reconcile test audits the actual on-disk file against the real rows.
-	const productionFile = "/var/www/Gamedata/config/FurnitureData.json";
+	const productionFile = "/var/www/gamedata/config/FurnitureData.json";
 	try {
 		await fs.copyFile(
 			productionFile,

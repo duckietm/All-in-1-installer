@@ -6,7 +6,7 @@ import { getRuntimePath } from "@/lib/utils/runtime-path";
 // The CMS default gamedata JSON paths point under public/nitro-assets/gamedata/,
 // but this deployment keeps the gamedata JSON (FigureMap/FigureData/EffectMap…)
 // under the gamedata root (public/Gamedata/config/ or the deployment's
-// `/var/www/Gamedata/config/`). `resolveGamedataFile` falls back there when the
+// `/var/www/gamedata/config/`). `resolveGamedataFile` falls back there when the
 // configured path is absent, so importers read AND write the real file — no
 // manual setting required. (Bundled .nitro stay under the gamedata root's
 // `bundled/` dir, the location the Nitro client loads from.)
@@ -43,7 +43,7 @@ export async function resolveGamedataFile(
 	const configured = pub(url.replace(/^\/+/, ""));
 	if (existsSync(/*turbopackIgnore: true*/ configured)) return configured;
 
-	// Deployment gamedata root (e.g. /var/www/Gamedata/config/…).
+	// Deployment gamedata root (e.g. /var/www/gamedata/config/…).
 	const gamedataRoot = await getGamedataRoot();
 	if (gamedataRoot) {
 		const rootConfig = getRuntimePath(

@@ -9,7 +9,7 @@
 // Env:
 //   NITRO_SRC_DIR              e.g. /var/www/Octane/public/configuration
 //   NITRO_DIST_CONFIG_DIR      e.g. /var/www/Octane/dist/configuration
-//   NITRO_GAMEDATA_CONF_DIR    e.g. /var/www/Gamedata/config
+//   NITRO_GAMEDATA_CONF_DIR    e.g. /var/www/gamedata/config
 //   NITRO_IMAGE_LIBRARY_URL, NITRO_HOF_FURNITURE_URL, NITRO_API_URL,
 //   NITRO_SOCKET_URL, NITRO_GAMEDATA_URL, NITRO_ASSET_URL,
 //   NITRO_FURNI_ASSET_ICON_URL

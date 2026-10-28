@@ -90,7 +90,7 @@ async function resolveDirs(skipGeneric: boolean): Promise<string[]> {
 		push(
 			getRuntimePath(process.cwd(), "public/nitro-assets/bundled/furniture"),
 		);
-		push("/var/www/Gamedata/bundled/furniture");
+		push("/var/www/gamedata/bundled/furniture");
 	}
 
 	let gamedataRoot = "";

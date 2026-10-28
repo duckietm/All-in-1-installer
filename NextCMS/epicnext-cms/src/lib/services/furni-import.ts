@@ -432,7 +432,7 @@ async function syncDirMissingFiles(
 
 /**
  * Backfill any nitro and icon files missing from the emulator's Gamedata
- * bundle (/var/www/Gamedata/bundled/furniture and /var/www/Gamedata/icons)
+ * bundle (/var/www/gamedata/bundled/furniture and /var/www/gamedata/icons)
  * so all imported furniture stays renderable in-game even when a mirror
  * write was skipped.
  */

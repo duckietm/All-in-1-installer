@@ -133,7 +133,7 @@ export async function repairMissingIcons(
 	}
 
 	// Every location the app mirrors furni assets into — the webroot (public/)
-	// plus the live gamedata (e.g. /var/www/Gamedata). Repair writes to all of
+	// plus the live gamedata (e.g. /var/www/gamedata). Repair writes to all of
 	// them so both the CMS and the client see the icon.
 	const iconDirs = uniqueDirs([
 		targets.iconDir,

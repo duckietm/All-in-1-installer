@@ -33,8 +33,8 @@ public static class EpicNextInstaller
     public const string Upstream = "http://127.0.0.1:3002";
     /// <summary>Its .nvmrc: &gt;=26.12.1 &lt;27.</summary>
     public const string NodeMinimum = "26.12.1";
-    /// <summary>The CMS reads and writes the gamedata here (DEFAULT_GAMEDATA_ROOT in its source).</summary>
-    public const string GamedataPath = "/var/www/Gamedata";
+    /// <summary>The link earlier versions made, from before EpicNext read /var/www/gamedata.</summary>
+    private const string OldGamedataLink = "/var/www/Gamedata";
     private const string LogFile = "/var/log/epicnext-cms.log";
 
     // Node.js 26 and corepack come from the Dev tools step; corepack gets the pnpm version package.json pins, without asking.
@@ -323,15 +323,12 @@ public static class EpicNextInstaller
               code=$(cat "$rc"); rm -f "$rc"
               return "$code"
             }
-            # Gamedata where the CMS looks for it, and the folders it writes to.
+            # The hotel's gamedata: EpicNext gets its folder as the gamedata_root setting (below). The
+            # /var/www/Gamedata link of earlier versions is no longer needed.
             g={{OctaneInstaller.Gamedata}}
-            if [ "$g" != {{GamedataPath}} ]; then
-              if [ -L {{GamedataPath}} ] || [ ! -e {{GamedataPath}} ]; then
-                ln -sfn "$g" {{GamedataPath}}
-                echo "> {{GamedataPath}} -> $g (the CMS reads the gamedata there)"
-              else
-                echo "  WARNING: {{GamedataPath}} is a folder of its own, not $g: the CMS uses that one."
-              fi
+            if [ -L {{OldGamedataLink}} ]; then
+              rm -f {{OldGamedataLink}}
+              echo "> {{OldGamedataLink}} link removed: EpicNext reads $g"
             fi
             # Free disk space in MB where the CMS is, and what uses the disk when there is too little.
             free_mb() { df -Pm {{Directory}} | awk 'NR == 2 {print $4}'; }
@@ -388,15 +385,29 @@ public static class EpicNextInstaller
             TS
             run corepack pnpm exec tsx "$check" || { rm -f "$check"; fail "{{Directory}}/.env does not pass EpicNext's checks (see above): fix those settings and run this step again."; }
             rm -f "$check"
+            # New passwords are Argon2id hashes of about 97 characters; Polaris (like Arcturus) makes
+            # users.password VARCHAR(64), so registration failed. The emulator never reads the password.
+            len=$(mariadb -N "$db" -e "SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'password'")
+            if [ -n "$len" ] && [ "$len" -lt 255 ]; then
+              mariadb "$db" -e 'ALTER TABLE `users` MODIFY `password` VARCHAR(255) NOT NULL' || fail "Widening users.password failed (see above)."
+              echo "> users.password: VARCHAR($len) -> VARCHAR(255), room for Argon2id hashes"
+            fi
             echo "> pnpm db:migrate (only the CMS' own tables; the emulator's stay as they are)"
             run corepack pnpm db:migrate || fail "pnpm db:migrate stopped (see above)."
-            # Its /client page frames the game client: Octane on /client/ of this site (the hotel site), unless
-            # staff set another URL in Admin -> CMS Settings.
-            mariadb "$db" <<'SQL' || echo "  WARNING: could not set nitro_client_url (set it in Admin -> CMS Settings: /client/index.html)"
-            UPDATE website_settings SET value = '/client/index.html' WHERE `key` = 'nitro_client_url' AND (value = '' OR value = '/nitro-client/');
-            INSERT INTO website_settings (`key`, value) SELECT 'nitro_client_url', '/client/index.html' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM website_settings WHERE `key` = 'nitro_client_url');
-            SQL
-            echo "  nitro_client_url: $(mariadb -N "$db" -e "SELECT value FROM website_settings WHERE \`key\` = 'nitro_client_url' LIMIT 1" 2>/dev/null)"
+            # Settings this server decides, unless staff already set them in Admin -> CMS Settings (OLD: values
+            # that are replaced too, such as EpicNext's own defaults).
+            setting_default() {
+              v=$(printf '%s' "$2" | sed "s/'/''/g")
+              old=$(printf '%s' "$3" | sed "s/'/''/g")
+              mariadb "$db" -e "UPDATE website_settings SET value = '$v' WHERE \`key\` = '$1' AND (value = '' OR value = '$old');
+                INSERT INTO website_settings (\`key\`, value) SELECT '$1', '$v' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM website_settings WHERE \`key\` = '$1');" ||
+                { echo "  WARNING: could not set $1 (set it in Admin -> CMS Settings: $2)"; return 0; }
+              echo "  $1: $(mariadb -N "$db" -e "SELECT value FROM website_settings WHERE \`key\` = '$1' LIMIT 1" 2>/dev/null)"
+            }
+            # The /client page frames Octane on /client/ of this site (the hotel site), with ?sso=<ticket>.
+            setting_default nitro_client_url /client/index.html /nitro-client/
+            # The folder served on /gamedata, which the CMS reads and imports assets into.
+            setting_default gamedata_root "$g" /var/www/Gamedata
             avail=$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)
             {{StopService}}
             # The CMS is stopped: the old build and its cache go, the build makes them again.
@@ -493,7 +504,7 @@ public static class EpicNextInstaller
               rm -f {{ServiceFile}}
               [ -d /run/systemd/system ] && systemctl daemon-reload
               echo "  {{ServiceFile}} deleted"
-              [ -L {{GamedataPath}} ] && rm -f {{GamedataPath}} && echo "  {{GamedataPath}} link deleted (the gamedata stays)"
+              [ -L {{OldGamedataLink}} ] && rm -f {{OldGamedataLink}} && echo "  {{OldGamedataLink}} link deleted (the gamedata stays)"
               [ -d {{SourceDirectory}} ] && rm -rf {{SourceDirectory}} && echo "  {{SourceDirectory}} (the git checkout) deleted"
             fi
             true

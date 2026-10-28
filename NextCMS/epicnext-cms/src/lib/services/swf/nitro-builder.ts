@@ -489,7 +489,7 @@ export function parseNitroBundle(
 }
 
 /**
- * Some bundled .nitro files (e.g. official /var/www/Gamedata furniture)
+ * Some bundled .nitro files (e.g. official /var/www/gamedata furniture)
  * gzip their contents instead of raw-deflate. Try inflate first, then fall
  * back to gunzip so both formats parse.
  */

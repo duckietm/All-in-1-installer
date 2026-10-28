@@ -94,7 +94,7 @@ mv -f -- "$profile_tmp" "$DIR/.docker-install"; profile_tmp=""
 printf '%s\n' 'Configuration saved. Credentials remain in .env; installation settings are excluded from Git.'
 if [[ "$configure_only" = 1 ]]; then printf '%s\n' 'No container was started. Next: bash cms install'; exit 0; fi
 as_root() { if [[ "$EUID" = 0 ]]; then "$@"; else command -v sudo >/dev/null || fail "sudo is required to prepare runtime directories."; sudo "$@"; fi; }
-for path in "$DIR/public/nitro-assets" "$DIR/public/swf" "$DIR/storage" /var/www/Gamedata; do
+for path in "$DIR/public/nitro-assets" "$DIR/public/swf" "$DIR/storage" /var/www/gamedata; do
   [[ ! -L "$path" ]] || fail "Runtime directory is a symlink: $path. Configure its permissions manually."
   if [[ ! -d "$path" ]]; then as_root install -d -o 33 -g 33 -m 0755 "$path"; fi
   # Do not recursively change ownership of existing assets.

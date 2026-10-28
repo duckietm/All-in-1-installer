@@ -31,7 +31,7 @@ public sealed class EpicNextStep : InstallStep
         [
             $"Gets EpicNext from git into {EpicNextInstaller.Directory}: by default the {EpicNextInstaller.RepositoryFolder} folder of the installer's own repository (its routes on /cms_api, so /api stays Polaris'). Later runs update it.",
             $"Node.js {EpicNextInstaller.NodeMinimum} or newer and pnpm (through corepack), then pnpm install, pnpm db:migrate (only EpicNext's own tables) and pnpm build, under its memory cap.",
-            $".env: the hotel database with the cms login of the server installation, the site's address, a random AUTH_SECRET and RCON. The hotel's gamedata is linked as {EpicNextInstaller.GamedataPath}, where EpicNext looks for it.",
+            $".env: the hotel database with the cms login of the server installation, the site's address, a random AUTH_SECRET and RCON. Settings: the client URL (/client/index.html, Octane on this site) and the gamedata folder ({OctaneInstaller.Gamedata}). users.password is widened for EpicNext's password hashes.",
             $"Runs as the systemd service {EpicNextInstaller.Service} (user www-data, {EpicNextInstaller.Upstream}, started at boot). No PHP.",
             $"NGINX passes the site to it on its own port (the first free one from {CmsSite.FirstPort} to {CmsSite.LastPort}); Octane moves to /client/ with its login screen off; Traefik sends only Polaris' own /api paths to the emulator."
         ],

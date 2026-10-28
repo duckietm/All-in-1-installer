@@ -144,9 +144,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
 				key: "gamedata_root",
 				label: "Production Gamedata root (server path)",
 				description:
-					"Filesystem root served at /gamedata. Auto-detected as /var/www/Gamedata when present.",
+					"Filesystem root served at /gamedata. Auto-detected as /var/www/gamedata when present.",
 				type: "text",
-				placeholder: "/var/www/Gamedata",
+				placeholder: "/var/www/gamedata",
 			},
 		],
 	},
