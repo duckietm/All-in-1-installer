@@ -39,6 +39,7 @@ public sealed class InstallerWindow : Window
     private Button? _dashboardNavigation;
     private Button? _installNavigation;
     private Button? _atomNavigation;
+    private Button? _giteaNavigation;
     private Button? _deployNavigation;
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
@@ -51,6 +52,8 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _atomWizard;
     private readonly ServerWizard _customCmsWizard;
     private readonly ServerWizard _removeCmsWizard;
+    private readonly ServerWizard _giteaWizard;
+    private readonly ServerWizard _removeGiteaWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -74,10 +77,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -105,6 +108,18 @@ public sealed class InstallerWindow : Window
         _removeCmsWizard = new ServerWizard(() => Session, [removeCmsStep],
             (_, _, site, _, steps) => FinishedView.BuildRemoveCms(site, removeCmsStep.RemovedName, removeCmsStep.FilesDeleted, steps),
             "Octane on /", keyStep: false);
+        var giteaStep = new GiteaStep();
+        _giteaWizard = new ServerWizard(() => Session, [giteaStep],
+            (host, _, _, _, steps) => FinishedView.BuildGitea(giteaStep.Settings, giteaStep.Result, GiteaStep.GiteaLoginPath(host), steps),
+            "Your Git server", keyStep: false)
+        {
+            // Gitea's own domain, not the hotel's.
+            OpenUrl = () => giteaStep.Settings?.Url
+        };
+        var removeGiteaStep = new RemoveGiteaStep();
+        _removeGiteaWizard = new ServerWizard(() => Session, [removeGiteaStep],
+            (_, _, _, _, steps) => FinishedView.BuildRemoveGitea(removeGiteaStep.RemovedDomain, removeGiteaStep.DataDeleted, steps),
+            "Gitea removed", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -245,6 +260,8 @@ public sealed class InstallerWindow : Window
             case Page.AtomCms: ShowAtomCmsWizard(); break;
             case Page.CustomCms: ShowCustomCmsWizard(); break;
             case Page.RemoveCms: ShowRemoveCmsWizard(); break;
+            case Page.Gitea: ShowGiteaWizard(); break;
+            case Page.RemoveGitea: ShowRemoveGiteaWizard(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -380,6 +397,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(SidebarLabel("ADDONS"));
         _atomNavigation = NavButton("CMS", Icons.Puzzle, ShowCms);
         nav.Children.Add(_atomNavigation);
+        _giteaNavigation = NavButton("Gitea", Icons.Git, ShowGitea);
+        nav.Children.Add(_giteaNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
         _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, ShowAssetExplorer);
@@ -472,7 +491,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, RemoveCms, Gitea, RemoveGitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -486,6 +505,8 @@ public sealed class InstallerWindow : Window
                 : $"The full hotel stack on {host}: an SSH key for root first, then every part of the hotel."),
             Page.AtomCms => ("AtomCMS", "Addon: AtomCMS as the hotel's website, Octane on /client."),
             Page.CustomCms => ("Your own CMS", "Addon: your own CMS as the hotel's website, Octane on /client."),
+            Page.Gitea => ("Gitea", "Addon: your own Git server in Docker, on a domain of its own behind Traefik."),
+            Page.RemoveGitea => ("Remove Gitea", "Addon: Gitea's container and route away; its data only when you choose."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
@@ -547,6 +568,8 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("CMS", "AtomCMS or your own CMS as the hotel's website; Octane moves to /client.",
                     Icons.Puzzle, Color.Parse("#E8590C"), ShowCms),
+                SmallTile("Gitea", "Your own Git server (like a small GitHub) on git.yourdomain, in Docker behind Traefik.",
+                    Icons.Git, Color.Parse("#609926"), ShowGitea),
                 SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
                 SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
@@ -593,6 +616,26 @@ public sealed class InstallerWindow : Window
     private void ShowAtomCmsWizard() => ShowWizard(Page.AtomCms, _atomNavigation, _atomWizard);
     private void ShowCustomCmsWizard() => ShowWizard(Page.CustomCms, _atomNavigation, _customCmsWizard);
     private void ShowRemoveCmsWizard() => ShowWizard(Page.RemoveCms, _atomNavigation, _removeCmsWizard);
+    private enum GiteaChoice { Install, Remove }
+
+    /// <summary>Addons → Gitea: install (or update) or remove first, unless one of them is running.</summary>
+    private async void ShowGitea()
+    {
+        if (_giteaWizard.IsBusy) { ShowGiteaWizard(); return; }
+        if (_removeGiteaWizard.IsBusy) { ShowRemoveGiteaWizard(); return; }
+        GiteaChoice? choice = await ChoiceDialog.ShowAsync<GiteaChoice?>(this, "Gitea", "Gitea, your own Git server",
+            "Install Gitea (or update it, when it is installed), or remove it.", null,
+            new ChoiceDialog.Option<GiteaChoice?>("Install or update Gitea", "On a domain of its own, such as git.example.com; an update keeps the repositories and accounts.",
+                GiteaChoice.Install, Primary: true),
+            new ChoiceDialog.Option<GiteaChoice?>("Remove Gitea", "Stops it and removes its route; its repositories and accounts stay unless you choose to delete them.",
+                GiteaChoice.Remove),
+            new ChoiceDialog.Option<GiteaChoice?>("Cancel", "Stay on this page.", null));
+        if (choice == GiteaChoice.Install) ShowGiteaWizard();
+        else if (choice == GiteaChoice.Remove) ShowRemoveGiteaWizard();
+    }
+
+    private void ShowGiteaWizard() => ShowWizard(Page.Gitea, _giteaNavigation, _giteaWizard);
+    private void ShowRemoveGiteaWizard() => ShowWizard(Page.RemoveGitea, _giteaNavigation, _removeGiteaWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.
@@ -1034,13 +1077,15 @@ public sealed class InstallerWindow : Window
         return tile;
     }
 
-    // The rows of the dashboard card: the full installation, plus AtomCMS once it is installed.
-    private static readonly (string Name, string Description, string Repository, string Icon, string Color, string Directory, ToolsView.Component Update)[] Rows =
+    // The rows of the dashboard card: the full installation, plus AtomCMS once it is installed. Octane and its renderer
+    // depend on each other: one row, updated together (the renderer first). Traefik and Gitea follow from their images.
+    private static readonly (string Name, string Description, string Repository, string Icon, string Color, string Directory, string? Directory2, ToolsView.Component Update)[] Rows =
     [
-        (Components[0].Name, Components[0].Description, Components[0].Repository, Components[0].Icon, Components[0].Color, EmulatorInstaller.Repository, ToolsView.Component.Emulator),
-        (Components[1].Name, Components[1].Description, Components[1].Repository, Components[1].Icon, Components[1].Color, OctaneInstaller.Octane, ToolsView.Component.Octane),
-        (Components[2].Name, Components[2].Description, Components[2].Repository, Components[2].Icon, Components[2].Color, OctaneInstaller.Renderer, ToolsView.Component.Octane),
-        ("AtomCMS", "The hotel's website (addon), Octane on /client", "ObjectRetros/atomcms", Icons.Puzzle, "#E8590C", AtomCmsInstaller.Directory, ToolsView.Component.AtomCms)
+        (Components[0].Name, Components[0].Description, Components[0].Repository, Components[0].Icon, Components[0].Color, EmulatorInstaller.Repository, null, ToolsView.Component.Emulator),
+        ("Octane and Octane Renderer", "Browser client and its renderer, updated together (renderer first)",
+            $"{Components[1].Repository} + {Components[2].Repository.Split('/')[1]}", Components[1].Icon, Components[1].Color,
+            OctaneInstaller.Octane, OctaneInstaller.Renderer, ToolsView.Component.Octane),
+        ("AtomCMS", "The hotel's website (addon), Octane on /client", "ObjectRetros/atomcms", Icons.Puzzle, "#E8590C", AtomCmsInstaller.Directory, null, ToolsView.Component.AtomCms)
     ];
 
     // Loads the installed versions (no network) once per login and after every update check.
@@ -1085,6 +1130,7 @@ public sealed class InstallerWindow : Window
         ServerConnection? session = Session;
         IReadOnlyList<RepositoryVersion>? versions = ReferenceEquals(_versionsFor, session) ? _versions : null;
         IReadOnlyList<RepositoryUpdate>? updates = session is null ? null : _tools.LastUpdates(session);
+        IReadOnlyList<ImageStatus>? images = session is null ? null : _tools.LastImages(session);
 
         var list = new StackPanel { Spacing = 2 };
         var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(12, 8, 12, 10) };
@@ -1117,6 +1163,17 @@ public sealed class InstallerWindow : Window
             if (component.Update == ToolsView.Component.AtomCms &&
                 (presence == AtomCmsPresence.NotInstalled || (presence == AtomCmsPresence.Detect && version is null))) continue;
             RepositoryUpdate? update = updates?.FirstOrDefault(u => u.Directory == component.Directory);
+            // A combined row (Octane): the second clone's version and update count too.
+            RepositoryVersion? version2 = component.Directory2 is { } d2 ? versions?.FirstOrDefault(v => v.Directory == d2) : null;
+            RepositoryUpdate? update2 = component.Directory2 is { } u2 ? updates?.FirstOrDefault(u => u.Directory == u2) : null;
+            if (update is not null && update2 is not null)
+                update = update with
+                {
+                    Behind = update.Behind + update2.Behind,
+                    Target = update.SwitchesBranch ? update.Target : update2.SwitchesBranch ? update2.Target : update.Target,
+                    Branch = update.SwitchesBranch ? update.Branch : update2.SwitchesBranch ? update2.Branch : update.Branch,
+                    Newest = string.Join("; ", new[] { update2.HasUpdate ? $"Renderer: {update2.Newest}" : null, update.HasUpdate ? $"Octane: {update.Newest}" : null }.Where(n => n is not null))
+                };
 
             Color color = Color.Parse(component.Color);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(12, 8) };
@@ -1133,13 +1190,15 @@ public sealed class InstallerWindow : Window
             var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(Text(component.Name, 13.5, weight: FontWeight.SemiBold));
             text.Children.Add(Text($"{component.Description}  ·  github.com/{component.Repository}", 12, "Pro.Muted"));
-            if (version is not null)
+            foreach ((RepositoryVersion? v, string? label) in new[] { (version2, "Renderer"), (version, component.Directory2 is null ? null : "Octane  ") })
             {
+                if (v is null) continue;
                 string installed = string.Join("  ·  ", new[]
                 {
-                    version.Build,
-                    version.Branch is null ? null : $"{version.Branch} @ {version.Commit}",
-                    version.Date
+                    label,
+                    v.Build,
+                    v.Branch is null ? null : $"{v.Branch} @ {v.Commit}",
+                    v.Date
                 }.Where(p => p is not null));
                 TextBlock line = Text(installed, 11.5, "Pro.Subtle");
                 line.FontFamily = Mono;
@@ -1171,8 +1230,7 @@ public sealed class InstallerWindow : Window
                                      (update.Newest is null ? "" : $"Newest on GitHub: {update.Newest}"));
                 state.Children.Add(chip);
                 var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
-                // Octane and its renderer are built together, so both rows run the same update.
-                if (component.Update == ToolsView.Component.Octane) ToolTip.SetTip(button, "Updates Octane-Renderer and Octane together, then builds the client.");
+                if (component.Update == ToolsView.Component.Octane) ToolTip.SetTip(button, "Updates Octane-Renderer first, then Octane, and builds the client.");
                 button.Click += async (_, _) => await UpdateComponentAsync(component.Update);
                 state.Children.Add(button);
             }
@@ -1180,6 +1238,52 @@ public sealed class InstallerWindow : Window
                 state.Children.Add(Chip("UP TO DATE", "Pro.SuccessBack", "Pro.SuccessText"));
             else
                 state.Children.Add(Chip("NOT CHECKED", "Pro.Hover", "Pro.Muted"));
+            Grid.SetColumn(state, 2);
+            row.Children.Add(state);
+            list.Children.Add(row);
+        }
+
+        // The Docker services: Traefik, and Gitea once it is installed.
+        foreach (ImageStatus image in images ?? [])
+        {
+            bool traefik = image.Name == "Traefik";
+            Color color = Color.Parse(traefik ? "#2563EB" : "#609926");
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(12, 8) };
+            var icon = Icon(traefik ? Icons.Swap : Icons.Git, 17);
+            icon.Foreground = Solid(color);
+            row.Children.Add(new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(9), Background = Solid(Color.FromArgb(0x26, color.R, color.G, color.B)), Child = icon });
+            var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(Text(image.Name, 13.5, weight: FontWeight.SemiBold));
+            text.Children.Add(Text(traefik ? $"The web entrance on 80/443 with the certificates  ·  Docker image {image.Image}"
+                : $"Your Git server (addon)  ·  Docker image {image.Image}", 12, "Pro.Muted"));
+            TextBlock line = Text(string.Join("  ·  ", new[] { image.Version, image.Running ? "running" : "stopped" }.Where(p => p is not null)), 11.5, "Pro.Subtle");
+            line.FontFamily = Mono;
+            text.Children.Add(line);
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+
+            var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+            if (image.HasUpdate)
+            {
+                Border chip = Chip(image.NewestVersion is { } v ? $"{v.TrimStart('v')} AVAILABLE" : image.NewerOnHub ? "UPDATE AVAILABLE" : "RESTART NEEDED",
+                    "Pro.WarningBack", "Pro.WarningText");
+                ToolTip.SetTip(chip, image.NewerOnHub ? $"Docker Hub has a newer {image.Image}." : "A newer image is downloaded, but the container still runs the old one.");
+                state.Children.Add(chip);
+                var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
+                ToolTip.SetTip(button, traefik ? "Pulls the newest image and restarts Traefik: the players are disconnected for a few seconds."
+                    : "Pulls the newest image and restarts Gitea; the repositories stay.");
+                ToolsView.Component update = traefik ? ToolsView.Component.Traefik : ToolsView.Component.Gitea;
+                button.Click += async (_, _) => await UpdateComponentAsync(update);
+                state.Children.Add(button);
+            }
+            else if (image.Problem is { } problem)
+            {
+                Border chip = Chip("NOT CHECKED", "Pro.Hover", "Pro.Muted");
+                ToolTip.SetTip(chip, problem);
+                state.Children.Add(chip);
+            }
+            else
+                state.Children.Add(Chip("UP TO DATE", "Pro.SuccessBack", "Pro.SuccessText"));
             Grid.SetColumn(state, 2);
             row.Children.Add(state);
             list.Children.Add(row);

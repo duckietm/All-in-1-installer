@@ -6,12 +6,8 @@ namespace AllInOneInstaller.Remote;
 /// </summary>
 public static class CmsSite
 {
-    public const int FirstPort = 85;
-    public const int LastPort = 95;
-
-    // Every container's name and the host ports it publishes, also when it is stopped (docker ps only shows running ones).
-    // Go template braces cannot appear in the $$ raw strings.
-    private const string DockerPorts = "{{.Name}} {{range $p, $c := .HostConfig.PortBindings}}{{range $c}}{{.HostPort}} {{end}}{{end}}";
+    public const int FirstPort = LocalPorts.First;
+    public const int LastPort = LocalPorts.Last;
 
     /// <summary>/etc/nginx/sites-available/cms-&lt;name&gt;.</summary>
     public static string File(string name) => $"/etc/nginx/sites-available/cms-{name}";
@@ -70,36 +66,10 @@ public static class CmsSite
     public static string WriteScript(WebAccessSettings site, string name, string root, bool php) => $$"""
         [ -d /etc/nginx/sites-available ] || fail "NGINX is not installed with sites-available. Run the NGINX step first."
         f={{File(name)}}
-        # Why a port cannot be used, or nothing when it is free: something listens on it (any address, IPv4 or IPv6),
-        # another NGINX site or config uses it, or a Docker container (also a stopped one) publishes it.
-        port_taken() {
-          who=$(ss -Hltnp "sport = :$1" 2>/dev/null | grep -oE 'users:\(\("[^"]+"' | head -1 | cut -d'"' -f2)
-          if ss -Hltn "sport = :$1" 2>/dev/null | grep -q .; then
-            # Our own site may listen there already (a run again): that is not taken.
-            [ "$who" = nginx ] && grep -qsE "listen[[:space:]]+([^;[:space:]]*:)?$1([[:space:]]|;)" "$f" && return 1
-            echo "in use by ${who:-a program}"; return 0
-          fi
-          other=$(grep -rlsE "^[^#]*listen[[:space:]]+([^;[:space:]]*:)?$1([[:space:]]|;)" /etc/nginx 2>/dev/null | grep -vx "$f" | head -1)
-          [ -n "$other" ] && { echo "used by $other"; return 0; }
-          if command -v docker >/dev/null 2>&1; then
-            container=$(docker ps -aq 2>/dev/null | xargs -r docker inspect -f '{{DockerPorts}}' 2>/dev/null | grep -E " $1( |$)" | head -1 | awk '{print $1}' | tr -d /)
-            [ -n "$container" ] && { echo "published by the Docker container $container"; return 0; }
-          fi
-          return 1
-        }
+        {{LocalPorts.Functions}}
         # The port this CMS had, when it is still free for it; otherwise the first free one.
-        port=$(grep -sE '^[[:space:]]*listen[[:space:]]+127\.0\.0\.1:[0-9]+' "$f" | head -1 | grep -oE '[0-9]+;' | tr -d ';')
-        if [ -n "$port" ] && reason=$(port_taken "$port"); then
-          echo "  Port $port, which this CMS had, is $reason now: choosing another one"
-          port=
-        fi
-        if [ -z "$port" ]; then
-          for p in $(seq {{FirstPort}} {{LastPort}}); do
-            if reason=$(port_taken "$p"); then echo "  Port $p: $reason"; continue; fi
-            port=$p; break
-          done
-        fi
-        [ -n "$port" ] || fail "Ports {{FirstPort}} to {{LastPort}} are all in use on 127.0.0.1: free one for the CMS and try again."
+        self_file=$f
+        pick_port "$(grep -sE '^[[:space:]]*listen[[:space:]]+127\.0\.0\.1:[0-9]+' "$f" | head -1 | grep -oE '[0-9]+;' | tr -d ';')"
         install -d -m 755 {{HotelSite.LogDirectory}}
         # The proxies the visitor's address is read past: servers set up before this file existed do not have it yet.
         {{HotelSite.RealIpScript(site)}}

@@ -150,6 +150,63 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of the Gitea addon: the address, the admin login and how to use it.</summary>
+    public static Control BuildGitea(GiteaSettings? settings, GiteaResult? result, string loginFile, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        string url = settings?.Url ?? "your Gitea";
+        var banner = new ResultBanner();
+        banner.Show(!clean ? ResultKind.Warning : result is { CertificateValid: false } ? ResultKind.Warning : ResultKind.Success,
+            clean ? $"Gitea runs on {url}" : "Gitea was not installed",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : result is { CertificateValid: false } ? $"{settings?.Domain} has no certificate yet: check its A record{(settings?.Cloudflare == true ? " (proxy on)" : "")}; Traefik keeps trying."
+            : "Open it and log in as the admin.");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+
+        var login = new StackPanel { Spacing = 6 };
+        if (result?.AdminPassword is { } password)
+        {
+            login.Children.Add(Text($"Open {url} and log in as {settings?.AdminUser} with this password (saved on this computer in {loginFile}):", 13));
+            login.Children.Add(CopyBox(password));
+        }
+        else login.Children.Add(Text($"The admin account was there already and is kept. A new password: docker exec -u git gitea gitea admin user change-password --username <name> --password <new>", 13));
+        login.Children.Add(Text("Registration is closed: make accounts in Site Administration → User Accounts.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("1. Log in", login));
+
+        var use = new StackPanel { Spacing = 6 };
+        use.Children.Add(Text("Clone and push over https, with your Gitea name and password (or an access token from Settings → Applications):", 13));
+        use.Children.Add(Code($"git clone {url}/<owner>/<repository>.git"));
+        use.Children.Add(Text("SSH (git@...) is off: Cloudflare's proxy does not pass it, and the server's own SSH stays apart.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("2. Use it", use));
+
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text($"Update Gitea: run this addon again. Its repositories, accounts and settings are in {GiteaInstaller.Directory}/data: include it in your backups.", 13));
+        later.Children.Add(Text($"Settings beyond these: {GiteaInstaller.Directory}/data/gitea/conf/app.ini (docs.gitea.com).", 12, "Pro.Subtle"));
+        page.Children.Add(Section("3. Later", later));
+        return page;
+    }
+
+    /// <summary>Last page of Remove Gitea.</summary>
+    public static Control BuildRemoveGitea(string? domain, bool dataDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning, clean ? "Gitea is removed" : "Gitea was not removed",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : (domain is null ? "" : $"{domain} no longer reaches Gitea. ") +
+              (dataDeleted ? $"{GiteaInstaller.Directory} is deleted." : $"Its repositories, accounts and settings stay in {GiteaInstaller.Directory}."));
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var next = new StackPanel { Spacing = 6 };
+        next.Children.Add(Text(dataDeleted ? "Gitea again: Addons → Gitea → Install, with a new admin." : "Gitea again: Addons → Gitea → Install; it starts with the repositories and accounts that stayed.", 13));
+        if (domain is not null) next.Children.Add(Text($"Remove the A record of {domain} from your DNS when you no longer need it.", 13));
+        page.Children.Add(Section("Next", next));
+        return page;
+    }
+
     /// <summary>Last page of Remove the CMS.</summary>
     public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
     {

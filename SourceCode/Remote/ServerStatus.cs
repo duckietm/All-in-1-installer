@@ -46,6 +46,16 @@ public sealed record StatusSample(
     }
 }
 
+/// <summary>
+/// A Docker service of the hotel (Traefik, Gitea): the version that runs, and whether Docker Hub has a newer image for
+/// its tag, or a newer image is downloaded but not running yet.
+/// </summary>
+public sealed record ImageStatus(string Name, string Container, string Image, string? Version, bool Running, bool NewerOnHub,
+    bool NotRestarted, string? NewestVersion, string? Problem)
+{
+    public bool HasUpdate => NewerOnHub || NotRestarted;
+}
+
 /// <summary>The git state of one hotel repository.</summary>
 public sealed record RepositoryVersion(string Name, string Directory, string? Branch, string? Commit, string? Date, string? Subject, string? Build);
 
@@ -218,6 +228,59 @@ public static class ServerStatus
                 int.TryParse(Part(parts, 2), out int behind) ? behind : 0, newest.Length > 0 ? newest : null));
         }
         return updates;
+    }
+
+    /// <summary>The Docker services the dashboard checks: Traefik always, Gitea when it is installed.</summary>
+    private static readonly (string Name, string Container, string Image, string VersionCommand)[] Images =
+    [
+        ("Traefik", "traefik", "traefik:v3", "docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print $2}'"),
+        ("Gitea", GiteaInstaller.Container, GiteaInstaller.Image, $"docker exec {GiteaInstaller.Container} gitea --version 2>/dev/null | awk '{{print $3}}'")
+    ];
+
+    // Go template braces cannot appear in the $$ raw strings.
+    private const string GoImageId = "{{.Image}}", GoId = "{{.Id}}", GoRunning = "{{.State.Running}}", GoDigests = "{{range .RepoDigests}}{{println .}}{{end}}",
+        GoManifest = "{{.Manifest.Digest}}", GoConfig = "{{json .Image}}";
+
+    /// <summary>
+    /// Compares each service's image with Docker Hub's newest for the same tag (only the registry's index is read:
+    /// nothing is downloaded or changed), and the running container with the image downloaded last.
+    /// </summary>
+    public static async Task<IReadOnlyList<ImageStatus>> ImagesAsync(ServerConnection connection, CancellationToken token = default)
+    {
+        string script = "command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || exit 0\n" + string.Join('\n', Images.Select((m, i) => $$"""
+            if docker inspect {{m.Container}} >/dev/null 2>&1; then
+              running=$(docker inspect -f '{{GoRunning}}' {{m.Container}} 2>/dev/null)
+              version=$({{m.VersionCommand}})
+              # A newer image downloaded, but the container still runs the old one.
+              current=$(docker inspect -f '{{GoImageId}}' {{m.Container}} 2>/dev/null)
+              downloaded=$(docker image inspect -f '{{GoId}}' {{m.Image}} 2>/dev/null)
+              restart=$([ -n "$downloaded" ] && [ "$current" != "$downloaded" ] && echo yes)
+              # The digest Docker Hub has for the tag now, against the one this server pulled.
+              remote=$(timeout 30 docker buildx imagetools inspect {{m.Image}} --format '{{GoManifest}}' 2>/dev/null)
+              mine=$(docker image inspect -f '{{GoDigests}}' {{m.Image}} 2>/dev/null | sed -n 's/.*@//p' | head -1)
+              newest=
+              if [ -z "$remote" ]; then
+                newer=; problem="Docker Hub did not answer"
+              else
+                problem=
+                newer=$([ "$remote" != "$mine" ] && echo yes)
+                [ -n "$newer" ] && newest=$(timeout 30 docker buildx imagetools inspect {{m.Image}} --format '{{GoConfig}}' 2>/dev/null \
+                  | grep -oE '"org.opencontainers.image.version": *"[^"]+"' | head -1 | cut -d'"' -f4)
+              fi
+              echo "image{{i}} $running|$version|$newer|$restart|$newest|$problem"
+            fi
+            """)) + "\ntrue\n";
+        CommandResult result = await connection.RunAsRootAsync(script, token);
+        Dictionary<string, string> lines = KeyValues(result.Output);
+        var images = new List<ImageStatus>();
+        for (int i = 0; i < Images.Length; i++)
+        {
+            if (!lines.TryGetValue($"image{i}", out string? info)) continue;
+            string[] parts = info.Split('|', 6);
+            images.Add(new ImageStatus(Images[i].Name, Images[i].Container, Images[i].Image, Part(parts, 1), Part(parts, 0) == "true",
+                Part(parts, 2) == "yes", Part(parts, 3) == "yes", Part(parts, 4), Part(parts, 5)));
+        }
+        return images;
     }
 
     // "key value" lines; a key without a value is left out.

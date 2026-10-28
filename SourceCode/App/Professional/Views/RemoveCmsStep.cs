@@ -69,7 +69,8 @@ public sealed class RemoveCmsStep : InstallStep
             _deleteWhat.Text = "";
             _deleteFiles.IsEnabled = false;
             Detected.Show(ResultKind.Success, "There is no CMS", $"Octane is the website of {site.Url} already. Running this step anyway sets Octane, NGINX and Traefik back.");
-            return true;
+            // Not "installed": a removal page shows its own button, never "Skip (already installed)".
+            return false;
         }
         _deleteFiles.IsEnabled = Cms(site) is not null;
         _deleteWhat.Text = Cms(site) is { } cms ? $"Deletes {cms.Folder} and {CmsSite.File(cms.SiteName)}." : "";
