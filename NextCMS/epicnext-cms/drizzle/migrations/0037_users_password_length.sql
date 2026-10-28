@@ -1,0 +1,13 @@
+-- 0037_users_password_length.sql
+-- Room for Argon2id password hashes in the emulator's users table.
+--
+-- New passwords are stored as encoded Argon2id hashes (about 97 characters,
+-- `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`), and legacy hashes are
+-- upgraded to that format on login. Polaris and Arcturus create
+-- `users.password` as VARCHAR(64), so under MariaDB's strict mode every
+-- registration failed with "Data too long for column 'password'" (and a
+-- legacy-hash upgrade would fail the same way). The emulator itself never
+-- reads the password (players log in to the hotel with an SSO ticket), so a
+-- wider column changes nothing for it. AtomCMS' bcrypt hashes (60 characters)
+-- still fit as they are.
+ALTER TABLE `users` MODIFY `password` VARCHAR(255) NOT NULL;
