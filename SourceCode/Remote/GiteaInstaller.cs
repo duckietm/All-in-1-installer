@@ -259,7 +259,13 @@ public static partial class GiteaInstaller
         string scheme = https ? "https" : "http";
         string check = domain is null ? "" : $$"""
             echo "> {{scheme}}://{{domain}}/ (through Traefik)"
-            code=$(curl -s --noproxy '*' -k --max-time 10 --resolve "{{domain}}:{{port}}:127.0.0.1" -o /dev/null -w '%{http_code}' "{{scheme}}://{{domain}}/" || true)
+            # Traefik notices the removed route file and reloads a moment later (it waits about 2 seconds for more
+            # changes): until then it still has the route, without Gitea behind it (502).
+            for i in $(seq 1 20); do
+              code=$(curl -s --noproxy '*' -k --max-time 5 --resolve "{{domain}}:{{port}}:127.0.0.1" -o /dev/null -w '%{http_code}' "{{scheme}}://{{domain}}/" || true)
+              [ "$code" = 404 ] && break
+              sleep 1
+            done
             case "$code" in
               404) echo "  HTTP 404: Traefik has no route for it any more" ;;
               000|"") echo "  Nothing answers (Traefik does not run?)" ;;
@@ -268,16 +274,17 @@ public static partial class GiteaInstaller
             """;
         string script = RemoteScript.Prelude + $$"""
             g={{Directory}}
+            # The route first: while Gitea stops, visitors get Traefik's 404 instead of a 502.
+            if [ -f {{RouteFile}} ]; then
+              rm -f {{RouteFile}}
+              echo "> {{RouteFile}} removed: Traefik no longer answers for {{domain ?? "Gitea's domain"}}"
+            fi
             if [ -f "$g/compose.yaml" ] && command -v docker >/dev/null 2>&1; then
               echo "> docker compose down (Gitea and its network)"
               docker compose -f "$g/compose.yaml" down --remove-orphans 2>&1 | grep -v '^ *$' | sed 's/^/  /' || true
             fi
             if docker inspect {{Container}} >/dev/null 2>&1; then docker rm -f {{Container}} >/dev/null && echo "  container {{Container}} removed"; fi
             docker network rm gitea >/dev/null 2>&1 && echo "  network gitea removed" || true
-            if [ -f {{RouteFile}} ]; then
-              rm -f {{RouteFile}}
-              echo "> {{RouteFile}} removed: Traefik no longer answers for {{domain ?? "Gitea's domain"}}"
-            fi
             if [ {{(deleteData ? "yes" : "no")}} = yes ]; then
               if [ -d "$g" ]; then
                 echo "> Deleting $g ($(du -sh "$g" 2>/dev/null | cut -f1)): the repositories, accounts and settings"
