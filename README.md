@@ -1243,8 +1243,16 @@ installer is available** at startup with **Open the download page** (<https://gi
 download the new `Program` folder, close the installer and start the new one; settings and saved logins stay.
 **About → Check for updates** checks again at any time and says when you have the latest version.
 
-**Publishing a new version:** raise `<Version>` in `SourceCode/All-in-1 Installer.csproj` with every new build of
-the `Program` folder on `main`, or the check cannot tell the builds apart.
+**Publishing a new version** is automatic: every push to `main` runs `.github/workflows/release.yml`, which
+1. takes the next version: the last `v*` tag plus one (`1.0.4` → `1.0.5`), or `<Version>` in
+   `SourceCode/All-in-1 Installer.csproj` when you raised it by hand above the last release (`1.1.0`);
+2. rebuilds the `Program` folder with that version (its `Assets` folder stays as it is) and builds both single-file
+   programs;
+3. commits the new `<Version>` and `Program` to `main` as `Version X.Y.Z` (pull before your next push), tags it
+   `vX.Y.Z` and publishes a GitHub release with the single-file programs, which those programs update themselves
+   from.
+
+The workflow pushes to `main` as the `github-actions` bot: when `main` is protected, allow that bot to push.
 
 ## Building
 
