@@ -43,7 +43,7 @@ public sealed class ToolsView
     public IReadOnlyList<RepositoryUpdate>? LastUpdates(ServerConnection connection) =>
         ReferenceEquals(_lastUpdatesFor, connection) ? _lastUpdates : null;
 
-    /// <summary>What the last check found for the Docker services (Traefik, Gitea), or null when it has not finished yet.</summary>
+    /// <summary>What the last check found for the Docker services (Traefik, Gitea, CrowdSec), or null when it has not finished yet.</summary>
     public IReadOnlyList<ImageStatus>? LastImages(ServerConnection connection) =>
         ReferenceEquals(_lastUpdatesFor, connection) ? _lastImages : null;
 
@@ -51,7 +51,7 @@ public sealed class ToolsView
     public bool IsRunning => _running;
 
     /// <summary>What the dashboard's Update buttons update.</summary>
-    public enum Component { Emulator, Octane, AtomCms, Traefik, Gitea }
+    public enum Component { Emulator, Octane, AtomCms, Traefik, Gitea, CrowdSec }
 
     /// <summary>Runs the update tool of a component, with its question and progress on the Tools page.</summary>
     public Task UpdateAsync(Component component) => component switch
@@ -60,6 +60,7 @@ public sealed class ToolsView
         Component.Octane => RunToolAsync("Update Octane", UpdateOctaneAsync),
         Component.Traefik => RunToolAsync("Update Traefik", UpdateTraefikAsync),
         Component.Gitea => RunToolAsync("Update Gitea", UpdateGiteaAsync),
+        Component.CrowdSec => RunToolAsync("Update CrowdSec", UpdateCrowdSecAsync),
         _ => RunToolAsync("Update AtomCMS", UpdateAtomCmsAsync)
     };
 
@@ -128,7 +129,8 @@ public sealed class ToolsView
             Tool("Update Octane", "Octane-Renderer first, then Octane: git pull, fresh yarn install, build", Icons.Cube, UpdateOctaneAsync),
             Tool("Update AtomCMS", "git pull, composer install, migrations, theme build", Icons.Puzzle, UpdateAtomCmsAsync),
             Tool("Update Traefik", "The newest traefik:v3 image (Docker Hub)", Icons.Swap, UpdateTraefikAsync),
-            Tool("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", Icons.Git, UpdateGiteaAsync));
+            Tool("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", Icons.Git, UpdateGiteaAsync),
+            Tool("Update CrowdSec", "The newest image and detection rules; bans and enrollment stay", Icons.Shield, UpdateCrowdSecAsync));
         updates.Children.Add(_updates);
         page.Children.Add(updates);
         page.Children.Add(_runHost);
@@ -760,12 +762,13 @@ public sealed class ToolsView
         foreach ((string tool, string description, string name) in new[]
                  {
                      ("Update Traefik", "The newest traefik:v3 image (Docker Hub)", "Traefik"),
-                     ("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", "Gitea")
+                     ("Update Gitea", "The newest gitea/gitea:1 image; the repositories stay", "Gitea"),
+                     ("Update CrowdSec", "The newest image and detection rules; bans and enrollment stay", "CrowdSec")
                  })
         {
             if (!_toolCaptions.TryGetValue(tool, out TextBlock? caption)) continue;
             ImageStatus? image = _lastImages?.FirstOrDefault(i => i.Name == name);
-            caption.Text = image is null ? (name == "Gitea" ? $"not installed · {description}" : description)
+            caption.Text = image is null ? (name != "Traefik" ? $"not installed · {description}" : description)
                 : image.HasUpdate ? $"{(image.NewestVersion is { } v ? $"{v} available" : "update available")} · {description}"
                 : image.Problem is not null ? $"{image.Version} · {description}"
                 : $"{image.Version}, up to date · {description}";
@@ -937,6 +940,20 @@ public sealed class ToolsView
         await Task.Run(() => GiteaInstaller.UpdateAsync(connection, run.Log));
         run.Done("runs");
         await FinishAsync(run, ResultKind.Success, "Gitea is updated", $"{state.Domain} runs the newest {GiteaInstaller.Image} image; the repositories and accounts are the same.");
+        await CheckUpdatesQuietlyAsync(connection);
+    }
+
+    private async Task UpdateCrowdSecAsync(Window owner, ServerConnection connection)
+    {
+        CrowdSecState state = await Task.Run(() => CrowdSecInstaller.InspectAsync(connection));
+        if (!state.Installed) throw new ServerConnectionException("CrowdSec is not installed on this server: install it with Addons → CrowdSec.");
+        if (!await ConfirmAsync(owner, "Update CrowdSec?",
+                $"Downloads the newest {CrowdSecInstaller.Image} image (CrowdSec restarts when it changed) and the newest detection rules. " +
+                "The bans, the whitelist and the enrollment stay; the hotel stays reachable while CrowdSec restarts (Traefik is not restarted).", "Update CrowdSec")) return;
+        RunPanel run = StartRun("docker compose pull and up -d, then the detection rules");
+        await Task.Run(() => CrowdSecInstaller.UpdateAsync(connection, run.Log));
+        run.Done("runs");
+        await FinishAsync(run, ResultKind.Success, "CrowdSec is updated", "It runs the newest image with the newest detection rules; the bans, whitelist and enrollment are the same.");
         await CheckUpdatesQuietlyAsync(connection);
     }
 

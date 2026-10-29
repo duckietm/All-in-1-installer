@@ -998,6 +998,10 @@ Running the Web access step again keeps CrowdSec in Traefik's configuration. You
 service go in `compose.override.yaml` next to its `compose.yaml` (`/opt/crowdsec`, `/opt/traefik`): the installer uses
 it and never overwrites it.
 
+Updating: **Tools → Update CrowdSec** (or **Update** on the dashboard, which checks its image like Traefik's and
+Gitea's) downloads the newest image and detection rules; the bans, whitelist and enrollment stay. Running the addon
+again also updates Traefik's plugin to the version this installer knows.
+
 Later: **Tools → CrowdSec whitelist and bans** edits the whitelist (Traefik reads it without a restart) and lifts bans;
 **Debug → CrowdSec** shows its log live. On the server: `docker exec crowdsec cscli decisions list`,
 `cscli decisions delete -i <IP>`, `cscli alerts list`, `cscli metrics`.
@@ -1259,8 +1263,9 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Update emulator** | `git pull` in `/var/www/emulator` on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first) and the missing files of its `Assets/` copied into gamedata (see Deploy Assets → Images); when there are new commits: `build.sh` and a restart. The start script runs the newest `target/*-jar-with-dependencies.jar`, so a new version number is picked up by itself; the result shows old → new version. No new commits: nothing is rebuilt or restarted |
 | **Update Octane** | `git pull` of Octane-Renderer and Octane, both on the branch chosen in **Settings → Repository branches** (a clone on another branch is switched over first), then in both `rm -rf node_modules yarn.lock` and `yarn install`, then the configuration for the site (keeps AtomCMS' `/client` layout), `yarn build` and a test. The next pull puts the repository's `yarn.lock` back first |
 | **Update AtomCMS** | `git pull` in `/var/www/atomcms`, `composer install`, `php artisan migrate` (an installed AtomCMS only runs the new migrations; its settings and the hotel name stay) and the theme build. Octane is not touched |
-| **Update Traefik** | `docker compose pull` and `up -d` in `/opt/traefik`: the newest `traefik:v3` image, and a restart only when it changed (routes, settings and certificates stay; the players are disconnected for a few seconds) |
+| **Update Traefik** | `docker compose pull` and `up -d` in `/opt/traefik`: the newest `traefik:v3` image, and a restart only when it changed (routes, settings and certificates stay; the players are disconnected for a few seconds). When Docker Hub does not answer nothing is changed, and it says so (also for Gitea and CrowdSec) |
 | **Update Gitea** | the same for Gitea in `/opt/gitea` (`gitea/gitea:1`); the repositories and accounts stay |
+| **Update CrowdSec** | the same for CrowdSec in `/opt/crowdsec` (`crowdsecurity/crowdsec:latest`), then the newest detection rules (`cscli hub update` and `upgrade`; CrowdSec restarts only when a rule changed). The bans, whitelist and enrollment stay, Traefik is not restarted and the hotel stays reachable. It also says when Traefik's CrowdSec plugin is older than the one this installer knows (run Addons → CrowdSec again to update it) |
 
 ### Import Plus database
 

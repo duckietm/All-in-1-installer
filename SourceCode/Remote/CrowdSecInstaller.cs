@@ -461,6 +461,43 @@ public static partial class CrowdSecInstaller
         return RemoteScript.RunAsync(connection, script, log, "Unbanning failed", token);
     }
 
+    /// <summary>The version that runs: "v1.8.1".</summary>
+    public const string VersionCommand = "docker exec " + Container + " cscli version 2>&1 | awk '/^version:/ {print $2}' | cut -d- -f1";
+
+    /// <summary>
+    /// Pulls the newest image and recreates the container when it changed, then brings the detection rules (the hub's
+    /// collections, parsers and scenarios) up to date. The bans, the enrollment and the bouncer stay; while CrowdSec
+    /// restarts the bouncer keeps its ban list and the hotel stays reachable.
+    /// </summary>
+    public static async Task UpdateAsync(ServerConnection connection, Action<string> log, CancellationToken token = default)
+    {
+        await ServerTools.UpdateImageAsync(connection, "CrowdSec", Directory, Container, VersionCommand,
+            $"docker exec {Container} cscli lapi status >/dev/null 2>&1", log, token);
+        string script = RemoteScript.Prelude + $$"""
+            echo "> cscli hub update and upgrade (the detection rules)"
+            docker exec {{Container}} cscli hub update 2>&1 | grep -viE '^ *$|level=info' | sed 's/^/  /' || true
+            out=$(docker exec {{Container}} cscli hub upgrade 2>&1) || { echo "$out" | tail -5 | sed 's/^/  /'; fail "CrowdSec's hub could not be reached: the rules stay as they were."; }
+            changed=$(echo "$out" | grep -ciE 'upgrad(ed|ing)|updated|installed' || true)
+            if [ "${changed:-0}" -gt 0 ]; then
+              echo "$out" | grep -iE 'upgrad(ed|ing)|updated|installed' | head -20 | sed 's/^/  /'
+              echo "  Restarting CrowdSec to load the new rules"
+              docker restart {{Container}} >/dev/null
+              for i in $(seq 1 45); do docker exec {{Container}} cscli lapi status >/dev/null 2>&1 && break; sleep 2; done
+              docker exec {{Container}} cscli lapi status >/dev/null 2>&1 || fail "CrowdSec does not start again after the rule update (see: docker logs crowdsec)."
+            else
+              echo "  The rules were up to date"
+            fi
+            # The bouncer plugin comes with the installer: Addons → CrowdSec puts the version this installer knows in Traefik.
+            plugin=$(grep -A3 '{{Plugin}}:' {{WebAccessInstaller.TraefikDirectory}}/traefik.yml 2>/dev/null | sed -n 's/^ *version: *//p' | head -1)
+            if [ -n "$plugin" ] && [ "$plugin" != "{{PluginVersion}}" ]; then
+              echo "  Traefik's CrowdSec plugin is $plugin; this installer has {{PluginVersion}}: run Addons → CrowdSec again to update it"
+            elif [ -n "$plugin" ]; then
+              echo "  Traefik's CrowdSec plugin: $plugin (the newest this installer knows)"
+            fi
+            """;
+        await RemoteScript.RunAsync(connection, script, log, "Updating CrowdSec's rules failed", token);
+    }
+
     /// <summary>Takes the bouncer out of Traefik, then stops CrowdSec; its data only when asked.</summary>
     public static Task RemoveAsync(ServerConnection connection, WebAccessSettings? site, bool deleteData, Action<string> log, CancellationToken token = default)
     {

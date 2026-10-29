@@ -1217,7 +1217,7 @@ public sealed class InstallerWindow : Window
     }
 
     // The rows of the dashboard card: the full installation, plus AtomCMS once it is installed. Octane and its renderer
-    // depend on each other: one row, updated together (the renderer first). Traefik and Gitea follow from their images.
+    // depend on each other: one row, updated together (the renderer first). Traefik, Gitea and CrowdSec follow from their images.
     private static readonly (string Name, string Description, string Repository, string Icon, string Color, string Directory, string? Directory2, ToolsView.Component Update)[] Rows =
     [
         (Components[0].Name, Components[0].Description, Components[0].Repository, Components[0].Icon, Components[0].Color, EmulatorInstaller.Repository, null, ToolsView.Component.Emulator),
@@ -1382,18 +1382,20 @@ public sealed class InstallerWindow : Window
             list.Children.Add(row);
         }
 
-        // The Docker services: Traefik, and Gitea once it is installed.
+        // The Docker services: Traefik, and Gitea and CrowdSec once they are installed.
         foreach (ImageStatus image in images ?? [])
         {
             bool traefik = image.Name == "Traefik";
-            Color color = Color.Parse(traefik ? "#2563EB" : "#609926");
+            bool crowdSec = image.Name == "CrowdSec";
+            Color color = Color.Parse(traefik ? "#2563EB" : crowdSec ? "#7C3AED" : "#609926");
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(12, 8) };
-            var icon = Icon(traefik ? Icons.Swap : Icons.Git, 17);
+            var icon = Icon(traefik ? Icons.Swap : crowdSec ? Icons.Shield : Icons.Git, 17);
             icon.Foreground = Solid(color);
             row.Children.Add(new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(9), Background = Solid(Color.FromArgb(0x26, color.R, color.G, color.B)), Child = icon });
             var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(Text(image.Name, 13.5, weight: FontWeight.SemiBold));
             text.Children.Add(Text(traefik ? $"The web entrance on 80/443 with the certificates  ·  Docker image {image.Image}"
+                : crowdSec ? $"Blocks attackers in Traefik (addon)  ·  Docker image {image.Image}"
                 : $"Your Git server (addon)  ·  Docker image {image.Image}", 12, "Pro.Muted"));
             TextBlock line = Text(string.Join("  ·  ", new[] { image.Version, image.Running ? "running" : "stopped" }.Where(p => p is not null)), 11.5, "Pro.Subtle");
             line.FontFamily = Mono;
@@ -1411,8 +1413,9 @@ public sealed class InstallerWindow : Window
                 state.Children.Add(chip);
                 var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
                 ToolTip.SetTip(button, traefik ? "Pulls the newest image and restarts Traefik: the players are disconnected for a few seconds."
+                    : crowdSec ? "Pulls the newest image and detection rules and restarts CrowdSec; bans and enrollment stay, the hotel stays reachable."
                     : "Pulls the newest image and restarts Gitea; the repositories stay.");
-                ToolsView.Component update = traefik ? ToolsView.Component.Traefik : ToolsView.Component.Gitea;
+                ToolsView.Component update = traefik ? ToolsView.Component.Traefik : crowdSec ? ToolsView.Component.CrowdSec : ToolsView.Component.Gitea;
                 button.Click += async (_, _) => await UpdateComponentAsync(update);
                 state.Children.Add(button);
             }
