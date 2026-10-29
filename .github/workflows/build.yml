@@ -1,11 +1,10 @@
 name: Build
 
-# Every push and pull request builds both single-file programs, so a broken build is caught before it is
-# merged. Pushing a tag like v1.1.0 also publishes them as a release, which is what the installer's own
-# update check at startup looks for.
+# Every pull request builds both single-file programs, so a broken build is caught before it is merged.
+# Pushes to main are built and released by release.yml (new version, Program folder, tag and release). A tag
+# like v1.1.0 pushed by hand still publishes a release from here.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:

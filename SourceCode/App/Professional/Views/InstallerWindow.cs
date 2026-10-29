@@ -313,12 +313,34 @@ public sealed class InstallerWindow : Window
     private async Task<bool> CheckForUpdateAsync()
     {
         AppUpdate.CleanUp();
-        if (await AppUpdate.CheckAsync() is not { } update) return false;
+        if (await AppUpdate.CheckAsync() is not { } update)
+        {
+            // No release to install by itself (none published, or this is the Program folder with its .dll files):
+            // compare with the version on GitHub and say where to get it.
+            if (await AppUpdate.LatestPublishedVersionAsync() is { } latest && AppUpdate.IsNewer(latest))
+                await ShowNewerVersionAsync(latest);
+            return false;
+        }
         SetStatus($"Version {update.Version} of the installer is available.");
         if (!await UpdateDialog.ShowAsync(this, update)) return false;
         AppUpdate.Restart();
         (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
         return true;
+    }
+
+    private enum NewerVersionChoice { Download, Later }
+
+    /// <summary>A newer installer is on GitHub: offer its download page (the program cannot replace a folder of files itself).</summary>
+    private async Task ShowNewerVersionAsync(Version latest)
+    {
+        SetStatus($"Version {latest} of the installer is available (you have {AppUpdate.Current}).");
+        NewerVersionChoice choice = await ChoiceDialog.ShowAsync(this, "Update", $"Version {latest} of the installer is available",
+            $"You are running {AppUpdate.Current}. Download the new version from {AppUpdate.DownloadPage} (the Program folder), " +
+            "close this one and start the new one. Your settings and saved logins stay.",
+            NewerVersionChoice.Later,
+            new ChoiceDialog.Option<NewerVersionChoice>("Open the download page", AppUpdate.DownloadPage, NewerVersionChoice.Download, Primary: true),
+            new ChoiceDialog.Option<NewerVersionChoice>("Later", "The About page can check again.", NewerVersionChoice.Later));
+        if (choice == NewerVersionChoice.Download) await Launcher.LaunchUriAsync(new Uri(AppUpdate.DownloadPage));
     }
 
     private Control BuildLayout()
@@ -763,6 +785,28 @@ public sealed class InstallerWindow : Window
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Text("All-in-1 Installer", 16, weight: FontWeight.SemiBold));
         panel.Children.Add(Text($"Version {AppUpdate.Current}", 12.5, "Pro.Subtle"));
+        var check = new Button { Content = "Check for updates", Padding = new Thickness(14, 7), Classes = { "secondary" } };
+        TextBlock checkResult = Text("", 12.5, "Pro.Muted");
+        checkResult.VerticalAlignment = VerticalAlignment.Center;
+        check.Click += async (_, _) =>
+        {
+            check.IsEnabled = false;
+            checkResult.Text = "Checking GitHub ...";
+            Version? latest = await AppUpdate.LatestPublishedVersionAsync();
+            check.IsEnabled = true;
+            if (latest is null)
+                checkResult.Text = $"Could not reach GitHub: check your internet connection, or look at {AppUpdate.DownloadPage}.";
+            else if (AppUpdate.IsNewer(latest))
+            {
+                checkResult.Text = $"Version {latest} is available.";
+                await ShowNewerVersionAsync(latest);
+            }
+            else checkResult.Text = $"You have the latest version ({AppUpdate.Current}).";
+        };
+        var checkRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        checkRow.Children.Add(check);
+        checkRow.Children.Add(checkResult);
+        panel.Children.Add(checkRow);
         panel.Children.Add(Text("Installs a full hotel server (Polaris Emulator, Octane and Octane Renderer) on an Ubuntu Server or Debian machine over SSH.", 13, "Pro.Muted"));
 
         TextBlock heading = Text("CREDITS", 11, "Pro.Muted", FontWeight.SemiBold);

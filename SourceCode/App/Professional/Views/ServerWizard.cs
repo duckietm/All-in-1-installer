@@ -115,7 +115,10 @@ public sealed class ServerWizard
         _next.Click += async (_, _) => await NextAsync();
         _leave.Click += (_, _) =>
         {
-            if (!IsBusy) Exited?.Invoke();
+            if (IsBusy) return;
+            // Leaving with Back ends this run: opening the wizard again starts at its first step (the login stays).
+            _startedFor = null;
+            Exited?.Invoke();
         };
         _login.Click += (_, _) => LoginRequested?.Invoke();
         _keyStep.Status += SetStatus;
@@ -201,7 +204,8 @@ public sealed class ServerWizard
             Render();
             return;
         }
-        if (ReferenceEquals(_startedFor, connection))
+        // Back from another page (the sidebar, Tools) in the middle of a run continues it; a finished run starts over.
+        if (ReferenceEquals(_startedFor, connection) && !OnFinishStep)
         {
             Render();
             return;
