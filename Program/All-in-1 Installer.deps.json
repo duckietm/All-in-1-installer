@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v11.0": {
-      "All-in-1 Installer/1.0.1": {
+      "All-in-1 Installer/1.0.2": {
         "dependencies": {
           "Avalonia": "12.0.3",
           "Avalonia.Controls.DataGrid": "12.0.0",
@@ -604,7 +604,7 @@
     }
   },
   "libraries": {
-    "All-in-1 Installer/1.0.1": {
+    "All-in-1 Installer/1.0.2": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
