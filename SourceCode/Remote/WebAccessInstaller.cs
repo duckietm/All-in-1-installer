@@ -171,20 +171,70 @@ public static class WebAccessInstaller
     public static Task ConfigureTraefikAsync(ServerConnection connection, WebAccessSettings settings, Action<string> log,
         CancellationToken token = default)
     {
-        string redirect = settings.Https ? """
+        string script = RemoteScript.Prelude + $$"""
+            t={{TraefikDirectory}}
+            install -d -m 755 "$t" "$t/dynamic"
+            install -d -m 700 "$t/letsencrypt"
+
+            {{StaticConfigScript(settings)}}
+
+            {{RoutesScript(settings)}}
+
+            {{ComposeScript()}}
+
+            echo "> docker compose pull (traefik:v3)"
+            pulled=
+            for i in 1 2 3; do
+              if compose_in "$t" pull -q 2>"$t/pull.log"; then pulled=yes; break; fi
+              tail -1 "$t/pull.log" | sed 's/^/  /'
+              [ $i -lt 3 ] && { echo "  Trying again in $((i * 20)) seconds ..."; sleep $((i * 20)); }
+            done
+            rm -f "$t/pull.log"
+            if [ -z "$pulled" ]; then
+              docker image inspect traefik:v3 >/dev/null 2>&1 || fail "Could not download the Traefik image from Docker Hub (see above). Try again later."
+              echo "  Docker Hub did not answer: using the traefik:v3 image that is already on this server"
+            fi
+            echo "> docker compose up -d"
+            compose_in "$t" up -d --force-recreate 2>&1 | grep -v '^ *$'
+            {{WaitForTraefikScript}}
+
+            ufw_allow 80/tcp 443/tcp
+            """;
+        return RemoteScript.RunAsync(connection, script, log, "Setting up Traefik failed", token);
+    }
+
+    /// <summary>Waits until the traefik container runs and listens on port 80; fails with its log otherwise.</summary>
+    internal const string WaitForTraefikScript = $$"""
+        for i in $(seq 1 20); do
+          [ "$(docker inspect -f '{{GoRunning}}' traefik 2>/dev/null)" = true ] && ss -Hltn 'sport = :80' | grep -q . && break
+          sleep 1
+        done
+        [ "$(docker inspect -f '{{GoRunning}}' traefik 2>/dev/null)" = true ] || { docker logs --tail 20 traefik 2>&1 | sed 's/^/  /'; fail "The Traefik container does not run."; }
+        ss -Hltn 'sport = :80' | grep -q . || { docker logs --tail 20 traefik 2>&1 | sed 's/^/  /'; fail "Traefik runs, but does not listen on port 80."; }
+        echo "  $(docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print "Traefik " $2}') is running"
+        """;
+
+    // Traefik's static configuration. With the CrowdSec addon: the access log CrowdSec reads, the bouncer plugin, and
+    // the bouncer on both entry points (so on every route, Gitea's too). [TRUSTED] becomes Cloudflare's ranges.
+    private static string StaticYaml(WebAccessSettings settings, bool crowdsec)
+    {
+        string middlewares = crowdsec ? $"\n      middlewares: [{CrowdSecInstaller.Middleware}@file]" : "";
+        string web = settings.Https
+            ? $"""
 
                 http:
                   redirections:
                     entryPoint:
                       to: websecure
-                      scheme: https
-            """ : "";
-        string websecure = settings.Https ? """
+                      scheme: https{middlewares}
+            """
+            : crowdsec ? $"\n    http:{middlewares}" : "";
+        string websecure = settings.Https ? $"""
 
               websecure:
                 address: ":443"
                 forwardedHeaders:
-                  trustedIPs: [TRUSTED]
+                  trustedIPs: [TRUSTED]{(crowdsec ? $"\n    http:{middlewares}" : "")}
             """ : "";
         string acme = settings.Https ? """
 
@@ -195,83 +245,81 @@ public static class WebAccessInstaller
                   httpChallenge:
                     entryPoint: web
             """ : "";
+        string extra = crowdsec ? $"""
 
-        string script = RemoteScript.Prelude + $$"""
-            t={{TraefikDirectory}}
-            install -d -m 755 "$t" "$t/dynamic"
-            install -d -m 700 "$t/letsencrypt"
-
-            # Only Cloudflare, when used, may set X-Forwarded-For. Otherwise Traefik writes the visitor's
-            # address itself, so the header cannot be faked.
-            trusted=
-            if [ {{(settings.Cloudflare ? "yes" : "no")}} = yes ]; then
-              load_cloudflare_ranges
-              trusted=$(echo "$ranges" | sed 's/.*/"&"/' | paste -sd, -)
-            fi
-
-            echo "> $t/traefik.yml"
-            cat > "$t/traefik.yml" <<'EOF'
+            # CrowdSec (Addons → CrowdSec): it reads this log; the plugin blocks the addresses it bans.
+            accessLog:
+              filePath: {CrowdSecInstaller.AccessLog}
+            experimental:
+              plugins:
+                {CrowdSecInstaller.Plugin}:
+                  moduleName: {CrowdSecInstaller.PluginModule}
+                  version: {CrowdSecInstaller.PluginVersion}
+            """ : "";
+        return $"""
             # Traefik static configuration (written by All-in-1 Installer).
             entryPoints:
               web:
                 address: ":80"
                 forwardedHeaders:
-                  trustedIPs: [TRUSTED]{{redirect}}{{websecure}}
+                  trustedIPs: [TRUSTED]{web}{websecure}
             providers:
               file:
                 directory: /etc/traefik/dynamic
-                watch: true{{acme}}
+                watch: true{acme}
             log:
               level: INFO
-              noColor: true
-            EOF
-            sed -i "s#\[TRUSTED\]#[$trusted]#" "$t/traefik.yml"
-
-            {{RoutesScript(settings)}}
-
-            # With the host network Traefik reaches NGINX and Polaris on 127.0.0.1, and Polaris trusts 127.0.0.1
-            # as the proxy that sets X-Forwarded-For.
-            echo "> $t/compose.yaml"
-            cat > "$t/compose.yaml" <<'EOF'
-            # Traefik for the hotel (written by All-in-1 Installer). Update: docker compose pull && docker compose up -d
-            services:
-              traefik:
-                image: traefik:v3
-                container_name: traefik
-                restart: unless-stopped
-                network_mode: host
-                volumes:
-                  - ./traefik.yml:/etc/traefik/traefik.yml:ro
-                  - ./dynamic:/etc/traefik/dynamic:ro
-                  - ./letsencrypt:/letsencrypt
-            EOF
-
-            echo "> docker compose pull (traefik:v3)"
-            pulled=
-            for i in 1 2 3; do
-              if docker compose -f "$t/compose.yaml" pull -q 2>"$t/pull.log"; then pulled=yes; break; fi
-              tail -1 "$t/pull.log" | sed 's/^/  /'
-              [ $i -lt 3 ] && { echo "  Trying again in $((i * 20)) seconds ..."; sleep $((i * 20)); }
-            done
-            rm -f "$t/pull.log"
-            if [ -z "$pulled" ]; then
-              docker image inspect traefik:v3 >/dev/null 2>&1 || fail "Could not download the Traefik image from Docker Hub (see above). Try again later."
-              echo "  Docker Hub did not answer: using the traefik:v3 image that is already on this server"
-            fi
-            echo "> docker compose up -d"
-            docker compose -f "$t/compose.yaml" up -d --force-recreate 2>&1 | grep -v '^ *$'
-            for i in $(seq 1 20); do
-              [ "$(docker inspect -f '{{GoRunning}}' traefik 2>/dev/null)" = true ] && ss -Hltn 'sport = :80' | grep -q . && break
-              sleep 1
-            done
-            [ "$(docker inspect -f '{{GoRunning}}' traefik 2>/dev/null)" = true ] || { docker logs --tail 20 traefik 2>&1 | sed 's/^/  /'; fail "The Traefik container does not run."; }
-            ss -Hltn 'sport = :80' | grep -q . || { docker logs --tail 20 traefik 2>&1 | sed 's/^/  /'; fail "Traefik runs, but does not listen on port 80."; }
-            echo "  $(docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print "Traefik " $2}') is running"
-
-            ufw_allow 80/tcp 443/tcp
+              noColor: true{extra}
             """;
-        return RemoteScript.RunAsync(connection, script, log, "Setting up Traefik failed", token);
     }
+
+    /// <summary>
+    /// Writes $t/traefik.yml, with the CrowdSec parts while the CrowdSec addon's middleware file exists. Only Cloudflare,
+    /// when used, may set X-Forwarded-For; otherwise Traefik writes the visitor's address itself, so it cannot be faked.
+    /// </summary>
+    internal static string StaticConfigScript(WebAccessSettings settings) => $$"""
+        trusted=
+        if [ {{(settings.Cloudflare ? "yes" : "no")}} = yes ]; then
+          load_cloudflare_ranges
+          trusted=$(echo "$ranges" | sed 's/.*/"&"/' | paste -sd, -)
+        fi
+        if [ -f {{CrowdSecInstaller.MiddlewareFile}} ]; then
+          echo "> $t/traefik.yml (with CrowdSec)"
+          cat > "$t/traefik.yml" <<'EOF'
+        {{StaticYaml(settings, true)}}
+        EOF
+        else
+          echo "> $t/traefik.yml"
+          cat > "$t/traefik.yml" <<'EOF'
+        {{StaticYaml(settings, false)}}
+        EOF
+        fi
+        sed -i "s#\[TRUSTED\]#[$trusted]#" "$t/traefik.yml"
+        """;
+
+    /// <summary>
+    /// Writes $t/compose.yaml. With the host network Traefik reaches NGINX, Polaris (which trusts 127.0.0.1 as the proxy
+    /// that sets X-Forwarded-For) and CrowdSec on 127.0.0.1. The access log folder and the plugin storage are for CrowdSec.
+    /// </summary>
+    internal static string ComposeScript() => $$"""
+        echo "> $t/compose.yaml"
+        install -d -m 755 {{CrowdSecInstaller.AccessLogDirectory}} "$t/plugins-storage"
+        cat > "$t/compose.yaml" <<'EOF'
+        # Traefik for the hotel (written by All-in-1 Installer). Update: docker compose pull && docker compose up -d
+        services:
+          traefik:
+            image: traefik:v3
+            container_name: traefik
+            restart: unless-stopped
+            network_mode: host
+            volumes:
+              - ./traefik.yml:/etc/traefik/traefik.yml:ro
+              - ./dynamic:/etc/traefik/dynamic:ro
+              - ./letsencrypt:/letsencrypt
+              - ./plugins-storage:/plugins-storage
+              - {{CrowdSecInstaller.AccessLogDirectory}}:{{CrowdSecInstaller.AccessLogDirectory}}
+        EOF
+        """;
 
     /// <summary>Polaris' own /api paths. With AtomCMS only these go to Polaris because the CMS has its own /api.</summary>
     public static readonly string[] PolarisApiPaths =
@@ -422,8 +470,8 @@ public static class WebAccessInstaller
 
         # Traefik: the entry points trust X-Forwarded-For only from Cloudflare. A restart drops the players for a moment.
         traefik={{TraefikDirectory}}/traefik.yml
+        list=$(echo "$ranges" | sed 's/.*/"&"/' | paste -sd, -)
         if [ -f "$traefik" ]; then
-          list=$(echo "$ranges" | sed 's/.*/"&"/' | paste -sd, -)
           sed -E "s#^([[:space:]]*trustedIPs:).*#\1 [$list]#" "$traefik" > "$traefik.new"
           if ! cmp -s "$traefik.new" "$traefik"; then
             mv "$traefik.new" "$traefik"
@@ -432,6 +480,19 @@ public static class WebAccessInstaller
             rm -f "$traefik.new"
             echo "  Traefik: up to date"
           fi
+        fi
+
+        # CrowdSec's bouncer (Addons → CrowdSec) takes the visitor past the same ranges. Traefik reads it again by itself.
+        bouncer={{CrowdSecInstaller.MiddlewareFile}}
+        if [ -f "$bouncer" ] && grep -q 'forwardedHeadersTrustedIPs:' "$bouncer"; then
+          sed -E "s#^([[:space:]]*forwardedHeadersTrustedIPs:).*#\1 [$list]#" "$bouncer" > "$bouncer.new"
+          if ! cmp -s "$bouncer.new" "$bouncer"; then
+            cat "$bouncer.new" > "$bouncer"
+            echo "  CrowdSec bouncer: updated"
+          else
+            echo "  CrowdSec bouncer: up to date"
+          fi
+          rm -f "$bouncer.new"
         fi
 
         # Polaris: the proxies it reads X-Forwarded-For past. Only stopped (and started again) when the list changed:

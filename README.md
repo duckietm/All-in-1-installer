@@ -943,6 +943,69 @@ addresses: tick one to let it in again. Saving restarts fail2ban with the new wh
 were banned are let in at once. **Debug → Fail2Ban** shows its log live (failed logins, bans, unbans). Locked out anyway? Log in from another address (or the provider's web console) and run
 `fail2ban-client set sshd unbanip <your IP>`.
 
+### CrowdSec
+
+**Addons → CrowdSec** adds [CrowdSec](https://www.crowdsec.net) to the hotel's Traefik: it watches every request and
+blocks addresses that attack the site (vulnerability scans, probing, known exploits, brute force). Attacks seen by all
+CrowdSec users are shared, so addresses that attacked others are blocked before they reach you. It asks first:
+**Install or update CrowdSec** or **Remove CrowdSec**. Run the Web access step first (Docker and Traefik).
+
+What you need: **a free CrowdSec account and its enrollment key**. The step walks you through it:
+
+1. **Make a free CrowdSec account**: **Open app.crowdsec.net** opens the console; sign up (the free Community plan is
+   enough) or log in.
+2. **Copy your enrollment key**: in the console, **Security Engines → Engines → Add Security Engine** (a new account
+   shows it on the welcome page) shows a command like `sudo cscli console enroll -e context cm1abc...`. Paste it in
+   the step: the whole command is fine, the installer takes the key out (and says when it found one).
+3. **Name of this server in the console** (the hotel's address is filled in), and the **whitelist** (never banned;
+   this computer's IP is filled in).
+4. After the install: **accept the server in the console** (the finish page's **Open https://app.crowdsec.net**
+   button; on the welcome page or under Security Engines, **Accept enroll**).
+
+**Cloudflare** is checked first, because it decides which address is the visitor's:
+
+- The step reads how Web access was set up and looks up the domain: is its address one of Cloudflare's (proxy on)?
+- Behind Cloudflare, CrowdSec and the bouncer take the visitor's real address from `X-Forwarded-For`, trusted only from
+  Cloudflare's IP ranges (the weekly `CF_Refresh.sh` keeps the bouncer's list current too). Someone who reaches the
+  server around Cloudflare cannot fake an address that way.
+- When the domain points to Cloudflare but Web access was set up **without** Cloudflare, the step stops: every visitor
+  would look like Cloudflare, and a ban would block everyone. Run Web access again with Cloudflare on **Yes** first.
+- Without Cloudflare (or on an IP address) visitors connect straight to the server and CrowdSec sees their own address.
+
+What it sets up:
+
+- **The security engine** in Docker (`/opt/crowdsec`, `crowdsecurity/crowdsec:latest`) with the collections
+  `crowdsecurity/traefik`, `crowdsecurity/http-cve` and `crowdsecurity/whitelist-good-actors`. It reads Traefik's access
+  log (`/var/log/traefik/access.log`, rotated daily, a week kept). Its API listens only on `127.0.0.1` (the first free
+  port from 8080). The whitelist becomes CrowdSec's allowlist `all-in-1`.
+- **The hotel's own files are never counted**: requests for `/gamedata/`, `/client/`, `/custom/`, `/swf/`,
+  `/nitro-assets/`, `/assets/` and `/_next/static/` are skipped (a room loads hundreds of furniture files at once, which
+  would otherwise look like a crawler).
+- **The console**: `cscli console enroll` with your key and name. A key the console does not take is reported, with
+  CrowdSec's own error; nothing is marked as enrolled then. On a rerun the key may stay empty: the enrollment is kept.
+- **The bouncer**: Traefik's [CrowdSec plugin](https://github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin)
+  (v1.8.1), on both entry points, so on every route (the hotel, the CMS, Polaris, Gitea). A banned address gets
+  `403 Forbidden`. It keeps the ban list in memory and fetches it once a minute (no question to CrowdSec per request).
+  If CrowdSec stops, the hotel stays reachable (nobody is blocked until it runs again). Its settings are in
+  `/opt/traefik/dynamic/crowdsec.yml`.
+- **Safely**: Traefik restarts once (players are disconnected for a moment). The step compares the hotel's answer
+  through Traefik before and after (status and server), and checks Traefik's log for plugin errors. If anything
+  differs, for example because the server cannot reach `plugins.traefik.io` to download the plugin, the previous
+  Traefik configuration comes back by itself and the hotel runs as before.
+- **Test**: waits until the bouncer has fetched the ban list, and shows how many lines of the access log CrowdSec read.
+
+Running the Web access step again keeps CrowdSec in Traefik's configuration. Your own additions to either Docker
+service go in `compose.override.yaml` next to its `compose.yaml` (`/opt/crowdsec`, `/opt/traefik`): the installer uses
+it and never overwrites it.
+
+Later: **Tools → CrowdSec whitelist and bans** edits the whitelist (Traefik reads it without a restart) and lifts bans;
+**Debug → CrowdSec** shows its log live. On the server: `docker exec crowdsec cscli decisions list`,
+`cscli decisions delete -i <IP>`, `cscli alerts list`, `cscli metrics`.
+
+**Removing CrowdSec** takes the bouncer out of Traefik first (and restarts it), then stops CrowdSec. `/opt/crowdsec`
+(its data and enrollment) stays, so installing again needs no new key, unless you tick **Also delete CrowdSec's data
+and enrollment**. Remove the engine from your console yourself when you no longer need it.
+
 ### Deploy Assets
 
 **Deploy Assets** copies what the [All-in-1 downloader](https://github.com/duckietm/all-in-1-converter) downloaded to
@@ -1155,6 +1218,7 @@ the old container still runs (a `docker restart` keeps the image the container w
 | **NGINX access** | `/var/log/nginx/hotel/access.log`: every request that reaches the hotel site |
 | **Traefik** | `docker logs traefik`: certificates, routing and connection errors |
 | **Firewall** | `/var/log/ufw.log` (see the Harden step), or the kernel journal's UFW lines without rsyslog |
+| **CrowdSec** | `docker logs crowdsec`: the bans it decides, the hub, the console and the bouncer's connections (see the [CrowdSec](#crowdsec) addon) |
 | **Fail2Ban** | `/var/log/fail2ban.log` (see the [Fail2Ban](#fail2ban) addon): failed SSH logins it counted (`Found`), bans (`Ban`) and unbans (`Unban`); the fail2ban journal when there is no log file. Says so when fail2ban is not installed. Type `Ban` in the filter to see only the bans |
 
 It starts with the last lines of the log and then shows what comes in. **Filter** shows only the lines with a text
@@ -1184,6 +1248,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Fix visitor IPs** | for a hotel behind Cloudflare whose players show up with a Cloudflare address: gives Polaris (`ws.ip.header.trusted`), NGINX (`/etc/nginx/hotel-real-ip.conf`) and Traefik Cloudflare's current ranges and sets up the weekly refresh (`/var/scripts/CF_Refresh.sh`, `/etc/cron.d/cf-refresh`). Asks first: the emulator restarts when its setting changes, Traefik when its list changes. A hotel set up without Cloudflare gets the advice to run Web access again with Cloudflare on |
 | **Enable firewall** | switches ufw on with the Harden step's rules: when that step set them up they are switched on again, after checking that every SSH port (and the one you are connected on) is in them, so you cannot lock yourself out; on a server where it never ran, the same rules are set up (SSH rate limited, 80/443 for everyone or only Cloudflare's ranges, everything else closed) |
 | **Disable firewall** | `ufw disable` (asks first: every port is reachable again, also the emulator's 3000 and 2096). The rules are kept, so Enable firewall switches the same rules on again; for testing a connection problem |
+| **CrowdSec whitelist and bans** | for the [CrowdSec](#crowdsec) addon: edit the whitelist (CrowdSec's allowlist and the bouncer's trusted addresses; Traefik reads it without a restart, and bans of whitelisted addresses are lifted) and tick banned addresses to let them in again (the bouncer knows within a minute). Only this server's own bans are listed, not the community blocklist |
 | **Whitelist and bans** | for the [Fail2Ban](#fail2ban) addon: edit the whitelist (addresses and networks that are never banned, with **Add my IP**) and tick banned addresses to let them in again. Saving rewrites `/etc/fail2ban/jail.d/all-in-1.local` (checked with `fail2ban-client -t` first) and restarts fail2ban; on a server without fail2ban it points to the addon |
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |
 | **Import full database** | uploads a `.sql` or `.sql.gz`, makes a safety backup (`<db>-before-import-<time>.sql.gz`), stops the emulator, recreates the database with its character set and imports (database names in `CREATE DATABASE` / `USE` lines become the hotel's), clears AtomCMS' cache, and starts the emulator, which updates the database to its version. A file that is not a SQL dump is refused before anything changes |
@@ -1358,7 +1423,9 @@ SourceCode/
   App/Professional/Views/RemoveGiteaStep.cs Gitea addon: remove Gitea, its data only when asked
   App/Professional/Views/Fail2BanStep.cs  Fail2Ban addon: ban settings and the whitelist (your IP filled in)
   App/Professional/Views/RemoveFail2BanStep.cs Fail2Ban addon: stop and uninstall
-  App/Professional/Views/Fail2BanDialog.cs Tools → Fail2Ban: edit the whitelist, unban addresses
+  App/Professional/Views/WhitelistBansDialog.cs Tools → Fail2Ban / CrowdSec: edit the whitelist, unban addresses
+  App/Professional/Views/CrowdSecStep.cs  CrowdSec addon: account, enrollment key, name, whitelist, Cloudflare check
+  App/Professional/Views/RemoveCrowdSecStep.cs CrowdSec addon: bouncer out of Traefik, engine stopped
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata
@@ -1366,7 +1433,7 @@ SourceCode/
   App/Professional/Views/NameDialog.cs    Asks for a file or folder name (rename, new folder)
   App/Professional/Views/SqlEditorView.cs SQL Editor: database tree, table data (edit, filter, pages), structure, query editor
   App/Professional/Views/DatabaseLoginDialog.cs  MariaDB user, password and port for the SQL Editor
-  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik, the firewall and Fail2Ban
+  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik, the firewall, Fail2Ban and CrowdSec
   App/Professional/Views/ToolsView.cs     Tools page: server tools and the settings backup
   App/Professional/Views/TerminalView.cs  SSH terminal page (toolbar, terminal, ssh command)
   App/Professional/Views/SettingsView.cs  Settings page: servers and default key, importing SSH keys, downloader path
@@ -1409,6 +1476,7 @@ SourceCode/
   Remote/LocalPorts.cs                    The first free local port from 85 to 95 (CMS sites, Gitea)
   Remote/GiteaInstaller.cs                Gitea in Docker behind Traefik: DNS check, compose, route, admin, test
   Remote/Fail2BanInstaller.cs             Fail2ban for SSH: install, settings and whitelist, unban, remove
+  Remote/CrowdSecInstaller.cs             CrowdSec in Docker, console enrollment, Traefik bouncer (with rollback), test
   Remote/AssetSync.cs                     Deploy Assets: compare with /var/www/gamedata, upload as a tar stream
   Remote/UiTextsInstaller.cs              Installs UITexts_<language>.jsonc.example as gamedata/config/UITexts.jsonc
   Remote/EmulatorAssetsInstaller.cs       Polaris' / the installer's Assets (images, hotel view, badge parts) into gamedata, missing files only

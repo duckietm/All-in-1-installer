@@ -290,6 +290,65 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of the CrowdSec addon: accept the engine in the console, what it does, and later.</summary>
+    public static Control BuildCrowdSec(WebAccessSettings? site, string? name, bool enrolledNow, CrowdSecResult? result,
+        IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(!clean ? ResultKind.Warning : result is { BouncerConnected: false } ? ResultKind.Warning : ResultKind.Success,
+            clean ? "CrowdSec protects the hotel" : "CrowdSec was not set up",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : result is { BouncerConnected: false } ? "Traefik's plugin had not fetched the ban list yet: check Debug → Traefik for crowdsec lines in a minute."
+            : "Every request through Traefik is checked; banned addresses get 403 Forbidden.");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+
+        var accept = new StackPanel { Spacing = 6 };
+        if (enrolledNow)
+        {
+            accept.Children.Add(Text($"Open the CrowdSec console with the button below (or app.crowdsec.net) and accept \"{name}\": on the welcome page or under Security Engines, " +
+                "click Accept enroll. Only then do its alerts and bans show in the console.", 13));
+            accept.Children.Add(Text("Not there? Refresh the page after a minute: CrowdSec sends the request when it starts.", 12, "Pro.Subtle"));
+        }
+        else accept.Children.Add(Text($"This server was enrolled before and stays enrolled as \"{name}\": its alerts are in the CrowdSec console (app.crowdsec.net).", 13));
+        page.Children.Add(Section("1. Accept the server in the CrowdSec console", accept));
+
+        var does = new StackPanel { Spacing = 6 };
+        does.Children.Add(Text(site?.Cloudflare == true
+            ? "Behind Cloudflare: CrowdSec and the bouncer use the visitor's real address from Cloudflare's X-Forwarded-For (trusted only from Cloudflare's ranges, refreshed weekly), never Cloudflare's own."
+            : "Visitors connect straight to the server: CrowdSec sees their own addresses.", 13));
+        does.Children.Add(Text("It bans for scans, probing, known exploits (CVEs) and brute force seen in Traefik's access log, plus the community blocklist. The hotel's own files (gamedata, the client) are never counted.", 13));
+        does.Children.Add(Text($"If CrowdSec stops, the hotel stays reachable (nobody is blocked until it runs again). Traefik's access log: {CrowdSecInstaller.AccessLog} (a week kept).", 12, "Pro.Subtle"));
+        page.Children.Add(Section("2. What it does", does));
+
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text("Whitelist and bans: Tools → CrowdSec. Live log: Debug → CrowdSec.", 13));
+        later.Children.Add(Text("On the server: docker exec crowdsec cscli decisions list (bans), cscli decisions delete -i <IP> (unban), cscli alerts list, cscli metrics.", 12, "Pro.Subtle"));
+        later.Children.Add(Text($"Update CrowdSec: run this addon again (its data and enrollment stay). Your own compose additions go in {CrowdSecInstaller.Directory}/compose.override.yaml.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("3. Later", later));
+        return page;
+    }
+
+    /// <summary>Last page of Remove CrowdSec.</summary>
+    public static Control BuildRemoveCrowdSec(bool dataDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning, clean ? "CrowdSec is removed" : "CrowdSec was not removed",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : "Traefik no longer checks visitors with CrowdSec. " + (dataDeleted ? $"{CrowdSecInstaller.Directory} is deleted." : $"Its data and enrollment stay in {CrowdSecInstaller.Directory}."));
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var next = new StackPanel { Spacing = 6 };
+        next.Children.Add(Text(dataDeleted ? "CrowdSec again: Addons → CrowdSec → Install, with a new enrollment key." : "CrowdSec again: Addons → CrowdSec → Install; no new key needed.", 13));
+        next.Children.Add(Text("Remove the engine from your CrowdSec console (app.crowdsec.net → Security Engines) when you no longer need it.", 13));
+        page.Children.Add(Section("Next", next));
+        return page;
+    }
+
     /// <summary>Last page of Remove the CMS.</summary>
     public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
     {

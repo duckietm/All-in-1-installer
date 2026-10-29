@@ -10,6 +10,11 @@ public static class RemoteScript
         . /etc/os-release
         codename="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}"
         fail() { echo "ERROR: $*"; exit 1; }
+        # docker compose in a folder, with the owner's own compose.override.yaml when there is one (it survives reruns).
+        compose_in() {
+          if [ -f "$1/compose.override.yaml" ]; then docker compose -f "$1/compose.yaml" -f "$1/compose.override.yaml" "${@:2}"
+          else docker compose -f "$1/compose.yaml" "${@:2}"; fi
+        }
 
         # apt refuses repository files dated in the future ("Release file ... is not valid yet"), so a server
         # clock that runs behind breaks every apt-get update. Compare it with the Date header of a trusted

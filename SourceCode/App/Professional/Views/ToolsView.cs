@@ -114,6 +114,8 @@ public sealed class ToolsView
             Tool("Disable firewall", "ufw off: every port is reachable again", Icons.Alert, DisableFirewallAsync)));
         page.Children.Add(Section("Fail2Ban",
             Tool("Whitelist and bans", "Edit the addresses that are never banned; see and lift SSH bans", Icons.Shield, Fail2BanAsync)));
+        page.Children.Add(Section("CrowdSec",
+            Tool("CrowdSec whitelist and bans", "Addresses never banned; see and lift CrowdSec's bans", Icons.Shield, CrowdSecAsync)));
         page.Children.Add(Section("Database",
             Tool("Create full database backup", "Dump on the server, download to this computer", Icons.Download, BackupDatabaseAsync),
             Tool("Import full database", "Replace the hotel database with a backup", Icons.Folder, ImportDatabaseAsync),
@@ -442,7 +444,7 @@ public sealed class ToolsView
                 "Install it first: Addons → Fail2Ban → Install. It protects SSH and sets up the whitelist.");
             return;
         }
-        if (await Fail2BanDialog.ShowAsync(owner, state) is not { } changes) return;
+        if (await WhitelistBansDialog.ShowAsync(owner, state) is not { } changes) return;
         // Not set up by the installer yet: the defaults, with the whitelist from the dialog.
         Fail2BanSettings settings = (state.Settings ?? Fail2BanInstaller.Defaults) with { Whitelist = changes.Whitelist ?? state.Settings?.Whitelist ?? [] };
         IReadOnlyList<int> ports = state.SshPorts.Count > 0 ? state.SshPorts : [connection.Login.Port];
@@ -465,6 +467,39 @@ public sealed class ToolsView
                 ? (settings.Whitelist.Count == 0 ? "Only the server itself is never banned. " : $"Never banned: {string.Join(", ", settings.Whitelist)}. ")
                 : "") +
             (changes.Unban.Count > 0 ? $"Let in again: {string.Join(", ", changes.Unban)}. " : "") +
+            (clientMissing ? $"This computer ({state.ClientIp}) is not on the whitelist." : ""));
+    }
+
+    private async Task CrowdSecAsync(Window owner, ServerConnection connection)
+    {
+        CrowdSecState state = await Task.Run(() => CrowdSecInstaller.InspectAsync(connection));
+        if (!state.Installed || !state.Running || state.Site is null)
+        {
+            Show("CrowdSec", ResultKind.Warning, state.Installed ? "CrowdSec does not run" : "CrowdSec is not installed",
+                "Install it first: Addons → CrowdSec → Install. It protects every route through Traefik and sets up the whitelist.");
+            return;
+        }
+        if (await WhitelistBansDialog.ShowAsync(owner, state) is not { } changes) return;
+        var checks = new List<string>();
+        if (changes.Whitelist is not null) checks.Add("Save the whitelist");
+        if (changes.Unban.Count > 0) checks.Add("Unban");
+        RunPanel run = StartRun([.. checks]);
+        IReadOnlyList<string> whitelist = changes.Whitelist ?? state.Whitelist;
+        if (changes.Whitelist is not null)
+        {
+            await Task.Run(() => CrowdSecInstaller.SaveWhitelistAsync(connection, state.Site, state.Port, whitelist, run.Log));
+            run.Done($"{whitelist.Count} entries");
+        }
+        foreach (string value in changes.Unban)
+            await Task.Run(() => CrowdSecInstaller.UnbanAsync(connection, value, run.Log));
+        if (changes.Unban.Count > 0) run.Done(string.Join(", ", changes.Unban));
+        bool clientMissing = state.ClientIp is { } client && !whitelist.Contains(client);
+        await FinishAsync(run, clientMissing ? ResultKind.Warning : ResultKind.Success,
+            changes.Whitelist is not null ? "The whitelist is saved" : "Unbanned",
+            (changes.Whitelist is not null
+                ? (whitelist.Count == 0 ? "Nothing is whitelisted. " : $"Never banned: {string.Join(", ", whitelist)} (Traefik reads it without a restart). ")
+                : "") +
+            (changes.Unban.Count > 0 ? $"Let in again: {string.Join(", ", changes.Unban)} (the bouncer knows within a minute). " : "") +
             (clientMissing ? $"This computer ({state.ClientIp}) is not on the whitelist." : ""));
     }
 
