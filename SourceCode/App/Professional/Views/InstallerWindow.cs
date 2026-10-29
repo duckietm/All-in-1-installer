@@ -562,8 +562,8 @@ public sealed class InstallerWindow : Window
                 : $"The databases of {host}: browse and edit tables, run queries."),
             Page.DeployAssets => ("Deploy Assets", $"Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {OctaneInstaller.Gamedata} on the server."),
             Page.Debug => ("Debug", session is null
-                ? "Live logs of the emulator, NGINX, Traefik and the firewall."
-                : $"Live logs on {host}: the emulator, NGINX, Traefik and the firewall."),
+                ? "Live logs of the emulator, NGINX, Traefik, the firewall and Fail2Ban."
+                : $"Live logs on {host}: the emulator, NGINX, Traefik, the firewall and Fail2Ban."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
             Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
@@ -628,7 +628,7 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("Tools", "Restarts, database backup and import, updates, settings backup.",
                     Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools),
-                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik and the firewall.",
+                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik, the firewall and Fail2Ban.",
                     Icons.Bug, Color.Parse("#DC2626"), ShowDebug))
         ]);
         _componentsHost.Content = BuildComponentsCard();

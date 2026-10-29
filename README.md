@@ -940,7 +940,7 @@ change Fail2Ban** or **Remove Fail2Ban**.
 
 Later, **Tools → Fail2Ban → Whitelist and bans** edits the whitelist (with **Add my IP**) and shows the banned
 addresses: tick one to let it in again. Saving restarts fail2ban with the new whitelist; whitelisted addresses that
-were banned are let in at once. Locked out anyway? Log in from another address (or the provider's web console) and run
+were banned are let in at once. **Debug → Fail2Ban** shows its log live (failed logins, bans, unbans). Locked out anyway? Log in from another address (or the provider's web console) and run
 `fail2ban-client set sshd unbanip <your IP>`.
 
 ### Deploy Assets
@@ -1155,6 +1155,7 @@ the old container still runs (a `docker restart` keeps the image the container w
 | **NGINX access** | `/var/log/nginx/hotel/access.log`: every request that reaches the hotel site |
 | **Traefik** | `docker logs traefik`: certificates, routing and connection errors |
 | **Firewall** | `/var/log/ufw.log` (see the Harden step), or the kernel journal's UFW lines without rsyslog |
+| **Fail2Ban** | `/var/log/fail2ban.log` (see the [Fail2Ban](#fail2ban) addon): failed SSH logins it counted (`Found`), bans (`Ban`) and unbans (`Unban`); the fail2ban journal when there is no log file. Says so when fail2ban is not installed. Type `Ban` in the filter to see only the bans |
 
 It starts with the last lines of the log and then shows what comes in. **Filter** shows only the lines with a text
 (for example `BLOCK` or a player's IP), **Pause** holds the view still while lines keep being collected, **Clear**
@@ -1365,7 +1366,7 @@ SourceCode/
   App/Professional/Views/NameDialog.cs    Asks for a file or folder name (rename, new folder)
   App/Professional/Views/SqlEditorView.cs SQL Editor: database tree, table data (edit, filter, pages), structure, query editor
   App/Professional/Views/DatabaseLoginDialog.cs  MariaDB user, password and port for the SQL Editor
-  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik and the firewall
+  App/Professional/Views/DebugView.cs     Debug page: live logs of the emulator, NGINX, Traefik, the firewall and Fail2Ban
   App/Professional/Views/ToolsView.cs     Tools page: server tools and the settings backup
   App/Professional/Views/TerminalView.cs  SSH terminal page (toolbar, terminal, ssh command)
   App/Professional/Views/SettingsView.cs  Settings page: servers and default key, importing SSH keys, downloader path
