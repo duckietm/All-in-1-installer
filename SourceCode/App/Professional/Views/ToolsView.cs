@@ -112,6 +112,8 @@ public sealed class ToolsView
         page.Children.Add(Section("Firewall",
             Tool("Enable firewall", "ufw on: SSH, 80 and 443 only (the Harden step's rules)", Icons.Shield, EnableFirewallAsync),
             Tool("Disable firewall", "ufw off: every port is reachable again", Icons.Alert, DisableFirewallAsync)));
+        page.Children.Add(Section("Fail2Ban",
+            Tool("Whitelist and bans", "Edit the addresses that are never banned; see and lift SSH bans", Icons.Shield, Fail2BanAsync)));
         page.Children.Add(Section("Database",
             Tool("Create full database backup", "Dump on the server, download to this computer", Icons.Download, BackupDatabaseAsync),
             Tool("Import full database", "Replace the hotel database with a backup", Icons.Folder, ImportDatabaseAsync),
@@ -429,6 +431,41 @@ public sealed class ToolsView
         await FinishAsync(run, ResultKind.Success, "The firewall is on",
             (fresh ? "The Harden step's rules are set up: " : "The Harden step's rules are active again: ") +
             $"SSH (port {connection.Login.Port}, rate limited), HTTP and HTTPS (only from Cloudflare when the site uses it) are open; MariaDB and the emulator's ports are closed (HeidiSQL works through an SSH tunnel).");
+    }
+
+    private async Task Fail2BanAsync(Window owner, ServerConnection connection)
+    {
+        Fail2BanState state = await Task.Run(() => Fail2BanInstaller.InspectAsync(connection));
+        if (!state.Installed || !state.Running)
+        {
+            Show("Fail2Ban", ResultKind.Warning, state.Installed ? "Fail2ban does not run" : "Fail2ban is not installed",
+                "Install it first: Addons → Fail2Ban → Install. It protects SSH and sets up the whitelist.");
+            return;
+        }
+        if (await Fail2BanDialog.ShowAsync(owner, state) is not { } changes) return;
+        // Not set up by the installer yet: the defaults, with the whitelist from the dialog.
+        Fail2BanSettings settings = (state.Settings ?? Fail2BanInstaller.Defaults) with { Whitelist = changes.Whitelist ?? state.Settings?.Whitelist ?? [] };
+        IReadOnlyList<int> ports = state.SshPorts.Count > 0 ? state.SshPorts : [connection.Login.Port];
+        var checks = new List<string>();
+        if (changes.Whitelist is not null) checks.Add("Save the whitelist and restart fail2ban");
+        if (changes.Unban.Count > 0) checks.Add("Unban");
+        RunPanel run = StartRun([.. checks]);
+        if (changes.Whitelist is not null)
+        {
+            await Task.Run(() => Fail2BanInstaller.SaveAsync(connection, settings, ports, run.Log));
+            run.Done($"{settings.Whitelist.Count} entries");
+        }
+        foreach (string ip in changes.Unban)
+            await Task.Run(() => Fail2BanInstaller.UnbanAsync(connection, ip, run.Log));
+        if (changes.Unban.Count > 0) run.Done(string.Join(", ", changes.Unban));
+        bool clientMissing = state.ClientIp is { } client && !settings.Whitelist.Contains(client);
+        await FinishAsync(run, clientMissing ? ResultKind.Warning : ResultKind.Success,
+            changes.Whitelist is not null ? "The whitelist is saved" : "Unbanned",
+            (changes.Whitelist is not null
+                ? (settings.Whitelist.Count == 0 ? "Only the server itself is never banned. " : $"Never banned: {string.Join(", ", settings.Whitelist)}. ")
+                : "") +
+            (changes.Unban.Count > 0 ? $"Let in again: {string.Join(", ", changes.Unban)}. " : "") +
+            (clientMissing ? $"This computer ({state.ClientIp}) is not on the whitelist." : ""));
     }
 
     private async Task DisableFirewallAsync(Window owner, ServerConnection connection)

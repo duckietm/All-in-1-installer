@@ -40,6 +40,7 @@ public sealed class InstallerWindow : Window
     private Button? _installNavigation;
     private Button? _atomNavigation;
     private Button? _giteaNavigation;
+    private Button? _fail2BanNavigation;
     private Button? _deployNavigation;
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
@@ -55,6 +56,8 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _removeCmsWizard;
     private readonly ServerWizard _giteaWizard;
     private readonly ServerWizard _removeGiteaWizard;
+    private readonly ServerWizard _fail2BanWizard;
+    private readonly ServerWizard _removeFail2BanWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -78,10 +81,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _epicNextWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _epicNextWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _fail2BanWizard, _removeFail2BanWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.EpicNext => _epicNextWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.EpicNext => _epicNextWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.Fail2Ban => _fail2BanWizard, Page.RemoveFail2Ban => _removeFail2BanWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -125,6 +128,14 @@ public sealed class InstallerWindow : Window
         _removeGiteaWizard = new ServerWizard(() => Session, [removeGiteaStep],
             (_, _, _, _, steps) => FinishedView.BuildRemoveGitea(removeGiteaStep.RemovedDomain, removeGiteaStep.DataDeleted, steps),
             "Gitea removed", keyStep: false);
+        var fail2BanStep = new Fail2BanStep();
+        _fail2BanWizard = new ServerWizard(() => Session, [fail2BanStep],
+            (_, _, _, _, steps) => FinishedView.BuildFail2Ban(fail2BanStep.Settings, fail2BanStep.SshPorts, fail2BanStep.ClientIp, steps),
+            "SSH protected", keyStep: false);
+        var removeFail2BanStep = new RemoveFail2BanStep();
+        _removeFail2BanWizard = new ServerWizard(() => Session, [removeFail2BanStep],
+            (_, _, _, _, steps) => FinishedView.BuildRemoveFail2Ban(steps),
+            "Fail2Ban removed", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -268,6 +279,8 @@ public sealed class InstallerWindow : Window
             case Page.RemoveCms: ShowRemoveCmsWizard(); break;
             case Page.Gitea: ShowGiteaWizard(); break;
             case Page.RemoveGitea: ShowRemoveGiteaWizard(); break;
+            case Page.Fail2Ban: ShowFail2BanWizard(); break;
+            case Page.RemoveFail2Ban: ShowRemoveFail2BanWizard(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -427,6 +440,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(_atomNavigation);
         _giteaNavigation = NavButton("Gitea", Icons.Git, ShowGitea);
         nav.Children.Add(_giteaNavigation);
+        _fail2BanNavigation = NavButton("Fail2Ban", Icons.Shield, ShowFail2Ban);
+        nav.Children.Add(_fail2BanNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
         _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, ShowAssetExplorer);
@@ -519,7 +534,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, EpicNext, RemoveCms, Gitea, RemoveGitea, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, EpicNext, RemoveCms, Gitea, RemoveGitea, Fail2Ban, RemoveFail2Ban, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -536,6 +551,8 @@ public sealed class InstallerWindow : Window
             Page.EpicNext => ("EpicNext CMS", "Addon: EpicNext CMS (Next.js) as the hotel's website, Octane on /client."),
             Page.Gitea => ("Gitea", "Addon: your own Git server in Docker, on a domain of its own behind Traefik."),
             Page.RemoveGitea => ("Remove Gitea", "Addon: Gitea's container and route away; its data only when you choose."),
+            Page.Fail2Ban => ("Fail2Ban", "Addon: bans addresses that guess SSH passwords; your whitelist is never banned."),
+            Page.RemoveFail2Ban => ("Remove Fail2Ban", "Addon: fail2ban stopped and uninstalled; every ban is lifted."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
@@ -599,6 +616,8 @@ public sealed class InstallerWindow : Window
                     Icons.Puzzle, Color.Parse("#E8590C"), ShowCms),
                 SmallTile("Gitea", "Your own Git server (like a small GitHub) on git.yourdomain, in Docker behind Traefik.",
                     Icons.Git, Color.Parse("#609926"), ShowGitea),
+                SmallTile("Fail2Ban", "Bans addresses that guess SSH passwords; a whitelist for your own IPs (Tools → Fail2Ban).",
+                    Icons.Shield, Color.Parse("#DC2626"), ShowFail2Ban),
                 SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
                 SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
@@ -669,6 +688,27 @@ public sealed class InstallerWindow : Window
 
     private void ShowGiteaWizard() => ShowWizard(Page.Gitea, _giteaNavigation, _giteaWizard);
     private void ShowRemoveGiteaWizard() => ShowWizard(Page.RemoveGitea, _giteaNavigation, _removeGiteaWizard);
+
+    private enum Fail2BanChoice { Install, Remove }
+
+    /// <summary>Addons → Fail2Ban: install (or change the settings) or remove first, unless one of them is running.</summary>
+    private async void ShowFail2Ban()
+    {
+        if (_fail2BanWizard.IsBusy) { ShowFail2BanWizard(); return; }
+        if (_removeFail2BanWizard.IsBusy) { ShowRemoveFail2BanWizard(); return; }
+        Fail2BanChoice? choice = await ChoiceDialog.ShowAsync<Fail2BanChoice?>(this, "Fail2Ban", "Fail2Ban, SSH brute-force protection",
+            "Install Fail2Ban (or change its settings, when it is installed), or remove it. The whitelist and bans are also in Tools → Fail2Ban.", null,
+            new ChoiceDialog.Option<Fail2BanChoice?>("Install or change Fail2Ban", "Bans an address after too many failed SSH logins; your own IP goes on the whitelist.",
+                Fail2BanChoice.Install, Primary: true),
+            new ChoiceDialog.Option<Fail2BanChoice?>("Remove Fail2Ban", "Stops and uninstalls it; every ban is lifted.",
+                Fail2BanChoice.Remove),
+            new ChoiceDialog.Option<Fail2BanChoice?>("Cancel", "Stay on this page.", null));
+        if (choice == Fail2BanChoice.Install) ShowFail2BanWizard();
+        else if (choice == Fail2BanChoice.Remove) ShowRemoveFail2BanWizard();
+    }
+
+    private void ShowFail2BanWizard() => ShowWizard(Page.Fail2Ban, _fail2BanNavigation, _fail2BanWizard);
+    private void ShowRemoveFail2BanWizard() => ShowWizard(Page.RemoveFail2Ban, _fail2BanNavigation, _removeFail2BanWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.

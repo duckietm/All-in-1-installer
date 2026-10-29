@@ -241,6 +241,55 @@ public static class FinishedView
         return page;
     }
 
+    /// <summary>Last page of the Fail2Ban addon: the settings, the whitelist and where to change them.</summary>
+    public static Control BuildFail2Ban(Fail2BanSettings? settings, IReadOnlyList<int> sshPorts, string? clientIp, IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        string ports = sshPorts.Count > 0 ? string.Join(", ", sshPorts) : "22";
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning, clean ? $"Fail2Ban protects SSH (port {ports})" : "Fail2Ban was not set up",
+            !clean ? "Run the step again (see the step for what went wrong)."
+            : settings is null ? "Fail2ban runs."
+            : $"{settings.MaxRetry} failed logins within {settings.FindTimeMinutes} minutes ban an address for {settings.BanTimeMinutes} minutes{(settings.Increment ? ", longer for repeat offenders" : "")}.");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+
+        var whitelist = new StackPanel { Spacing = 6 };
+        if (settings is { Whitelist.Count: > 0 })
+        {
+            whitelist.Children.Add(Text("Never banned (besides this server itself):", 13));
+            whitelist.Children.Add(Code(string.Join("\n", settings.Whitelist)));
+        }
+        else whitelist.Children.Add(Text("The whitelist is empty: only the server itself is never banned.", 13));
+        if (clientIp is not null && settings?.Whitelist.Contains(clientIp) != true)
+            whitelist.Children.Add(Text($"This computer ({clientIp}) is not on it: after {settings?.MaxRetry ?? 5} wrong passwords you are locked out for a while too.", 12, "Pro.WarningText"));
+        whitelist.Children.Add(Text("Edit it, and see or lift bans: Tools → Fail2Ban.", 12, "Pro.Subtle"));
+        page.Children.Add(Section("1. Whitelist", whitelist));
+
+        var later = new StackPanel { Spacing = 6 };
+        later.Children.Add(Text("Locked out anyway? Log in from another address (or the provider's web console) and run: fail2ban-client set sshd unbanip <your IP>", 13));
+        later.Children.Add(Text($"Status on the server: fail2ban-client status sshd. Settings: {Fail2BanInstaller.ConfigFile} (rewritten by this addon and by Tools → Fail2Ban).", 12, "Pro.Subtle"));
+        page.Children.Add(Section("2. Later", later));
+        return page;
+    }
+
+    /// <summary>Last page of Remove Fail2Ban.</summary>
+    public static Control BuildRemoveFail2Ban(IReadOnlyList<(string Title, StepSummary Result)> steps)
+    {
+        var page = new StackPanel { Spacing = 18 };
+        bool clean = steps.All(s => s.Result is StepSummary.Done or StepSummary.AlreadyInstalled);
+        var banner = new ResultBanner();
+        banner.Show(clean ? ResultKind.Success : ResultKind.Warning, clean ? "Fail2Ban is removed" : "Fail2Ban was not removed",
+            clean ? "SSH is no longer protected by fail2ban; every ban is lifted." : "Run the step again (see the step for what went wrong).");
+        page.Children.Add(banner);
+        page.Children.Add(StepList(steps));
+        var next = new StackPanel { Spacing = 6 };
+        next.Children.Add(Text("Fail2Ban again: Addons → Fail2Ban → Install.", 13));
+        page.Children.Add(Section("Next", next));
+        return page;
+    }
+
     /// <summary>Last page of Remove the CMS.</summary>
     public static Control BuildRemoveCms(WebAccessSettings? site, string? removed, bool filesDeleted, IReadOnlyList<(string Title, StepSummary Result)> steps)
     {
