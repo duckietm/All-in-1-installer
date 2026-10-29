@@ -22,6 +22,12 @@ public static class AppUpdate
 
     private static readonly string LatestRelease = $"https://api.github.com/repos/{Repository}/releases/latest";
 
+    /// <summary>The branch whose Program folder people download.</summary>
+    public const string Branch = "main";
+    /// <summary>Where to get the newest program by hand.</summary>
+    public const string DownloadPage = $"https://github.com/{Repository}";
+    private const string ProjectFile = $"https://raw.githubusercontent.com/{Repository}/{Branch}/SourceCode/All-in-1%20Installer.csproj";
+
     // Renamed out of the way while the new file takes its place; removed at the next start.
     private const string OldSuffix = ".old";
     private const string NewSuffix = ".new";
@@ -100,6 +106,32 @@ public static class AppUpdate
             return null;
         }
     }
+
+    /// <summary>
+    /// The version in the project file on <see cref="Branch"/>, which the Program folder in the repository is built
+    /// from: works for every build (also the folder with its .dll files), with or without GitHub releases. Null when
+    /// it cannot be read (no internet, GitHub unreachable). Never throws.
+    /// </summary>
+    public static async Task<Version?> LatestPublishedVersionAsync(CancellationToken token = default)
+    {
+        try
+        {
+            using HttpClient client = Client();
+            client.Timeout = TimeSpan.FromSeconds(15);
+            string project = await client.GetStringAsync(ProjectFile, token);
+            var match = System.Text.RegularExpressions.Regex.Match(project, @"<Version>\s*([0-9][0-9.]*)\s*</Version>");
+            return match.Success && Version.TryParse(match.Groups[1].Value, out Version? version) ? version : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Major.minor.build, so 1.2 and 1.2.0 count as the same version.</summary>
+    public static bool IsNewer(Version candidate) => Normalize(candidate) > Normalize(Current);
+
+    private static Version Normalize(Version v) => new(v.Major, Math.Max(v.Minor, 0), Math.Max(v.Build, 0));
 
     /// <summary>
     /// Downloads the release file next to the running one, moves the running one aside and puts the new one

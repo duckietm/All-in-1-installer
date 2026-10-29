@@ -1236,6 +1236,16 @@ The version it compares is `<Version>` in `SourceCode/All-in-1 Installer.csproj`
 (`v1.2.0` and `1.2.0` both work). The file it downloads is the release asset for your system: the `.exe` on
 Windows, the Linux one otherwise, preferring the one whose name matches your architecture.
 
+**Without a release** (the repository has none yet, or you run the `Program` folder with its `.dll` files, which
+cannot replace itself), the installer compares its version with `<Version>` in
+`SourceCode/All-in-1 Installer.csproj` on the `main` branch. When that is newer, it shows **Version X of the
+installer is available** at startup with **Open the download page** (<https://github.com/duckietm/All-in-1-installer>):
+download the new `Program` folder, close the installer and start the new one; settings and saved logins stay.
+**About → Check for updates** checks again at any time and says when you have the latest version.
+
+**Publishing a new version:** raise `<Version>` in `SourceCode/All-in-1 Installer.csproj` with every new build of
+the `Program` folder on `main`, or the check cannot tell the builds apart.
+
 ## Building
 
 Requires the .NET 11 SDK (see [Requirements](#requirements)).
