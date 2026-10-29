@@ -47,7 +47,7 @@ public sealed record StatusSample(
 }
 
 /// <summary>
-/// A Docker service of the hotel (Traefik, Gitea): the version that runs, and whether Docker Hub has a newer image for
+/// A Docker service of the hotel (Traefik, Gitea, CrowdSec): the version that runs, and whether Docker Hub has a newer image for
 /// its tag, or a newer image is downloaded but not running yet.
 /// </summary>
 public sealed record ImageStatus(string Name, string Container, string Image, string? Version, bool Running, bool NewerOnHub,
@@ -230,11 +230,12 @@ public static class ServerStatus
         return updates;
     }
 
-    /// <summary>The Docker services the dashboard checks: Traefik always, Gitea when it is installed.</summary>
+    /// <summary>The Docker services the dashboard checks: Traefik always, Gitea and CrowdSec when they are installed.</summary>
     private static readonly (string Name, string Container, string Image, string VersionCommand)[] Images =
     [
         ("Traefik", "traefik", "traefik:v3", "docker exec traefik traefik version 2>/dev/null | awk '/^Version/ {print $2}'"),
-        ("Gitea", GiteaInstaller.Container, GiteaInstaller.Image, $"docker exec {GiteaInstaller.Container} gitea --version 2>/dev/null | awk '{{print $3}}'")
+        ("Gitea", GiteaInstaller.Container, GiteaInstaller.Image, $"docker exec {GiteaInstaller.Container} gitea --version 2>/dev/null | awk '{{print $3}}'"),
+        ("CrowdSec", CrowdSecInstaller.Container, CrowdSecInstaller.Image, CrowdSecInstaller.VersionCommand)
     ];
 
     // Go template braces cannot appear in the $$ raw strings.

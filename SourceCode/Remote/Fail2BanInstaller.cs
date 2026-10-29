@@ -29,6 +29,8 @@ public sealed record Fail2BanState(
 public static class Fail2BanInstaller
 {
     public const string ConfigFile = "/etc/fail2ban/jail.d/all-in-1.local";
+    /// <summary>fail2ban's own log (logtarget in fail2ban.conf on Debian and Ubuntu): Found, Ban and Unban lines.</summary>
+    public const string LogFile = "/var/log/fail2ban.log";
     public const string Jail = "sshd";
     public const int MaxWhitelistEntries = 100;
 

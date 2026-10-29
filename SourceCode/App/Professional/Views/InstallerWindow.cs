@@ -41,6 +41,7 @@ public sealed class InstallerWindow : Window
     private Button? _atomNavigation;
     private Button? _giteaNavigation;
     private Button? _fail2BanNavigation;
+    private Button? _crowdSecNavigation;
     private Button? _deployNavigation;
     private Button? _explorerNavigation;
     private Button? _sqlNavigation;
@@ -58,6 +59,8 @@ public sealed class InstallerWindow : Window
     private readonly ServerWizard _removeGiteaWizard;
     private readonly ServerWizard _fail2BanWizard;
     private readonly ServerWizard _removeFail2BanWizard;
+    private readonly ServerWizard _crowdSecWizard;
+    private readonly ServerWizard _removeCrowdSecWizard;
     private readonly ServerWizard _deployWizard;
     private readonly AssetExplorerView _explorer;
     private readonly SqlEditorView _sqlEditor;
@@ -81,10 +84,10 @@ public sealed class InstallerWindow : Window
     private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(3) };
     private ServerConnection? Session => _session is { IsConnected: true } session ? session : null;
 
-    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _epicNextWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _fail2BanWizard, _removeFail2BanWizard, _deployWizard];
+    private ServerWizard[] Wizards => [_wizard, _atomWizard, _customCmsWizard, _epicNextWizard, _removeCmsWizard, _giteaWizard, _removeGiteaWizard, _fail2BanWizard, _removeFail2BanWizard, _crowdSecWizard, _removeCrowdSecWizard, _deployWizard];
     private bool AnyBusy => _toolsBusy || Wizards.Any(w => w.IsBusy);
     // The wizard on screen, whose status line the footer shows.
-    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.EpicNext => _epicNextWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.Fail2Ban => _fail2BanWizard, Page.RemoveFail2Ban => _removeFail2BanWizard, Page.DeployAssets => _deployWizard, _ => null };
+    private ServerWizard? CurrentWizard => _page switch { Page.Install => _wizard, Page.AtomCms => _atomWizard, Page.CustomCms => _customCmsWizard, Page.EpicNext => _epicNextWizard, Page.RemoveCms => _removeCmsWizard, Page.Gitea => _giteaWizard, Page.RemoveGitea => _removeGiteaWizard, Page.Fail2Ban => _fail2BanWizard, Page.RemoveFail2Ban => _removeFail2BanWizard, Page.CrowdSec => _crowdSecWizard, Page.RemoveCrowdSec => _removeCrowdSecWizard, Page.DeployAssets => _deployWizard, _ => null };
 
     public InstallerWindow()
     {
@@ -136,6 +139,18 @@ public sealed class InstallerWindow : Window
         _removeFail2BanWizard = new ServerWizard(() => Session, [removeFail2BanStep],
             (_, _, _, _, steps) => FinishedView.BuildRemoveFail2Ban(steps),
             "Fail2Ban removed", keyStep: false);
+        var crowdSecStep = new CrowdSecStep();
+        _crowdSecWizard = new ServerWizard(() => Session, [crowdSecStep],
+            (_, _, _, _, steps) => FinishedView.BuildCrowdSec(crowdSecStep.Site, crowdSecStep.InstanceName, crowdSecStep.EnrolledNow, crowdSecStep.Result, steps),
+            "Hotel protected", keyStep: false)
+        {
+            // The finish page's Open button: the console, where the new engine is accepted.
+            OpenUrl = () => CrowdSecInstaller.ConsoleUrl
+        };
+        var removeCrowdSecStep = new RemoveCrowdSecStep();
+        _removeCrowdSecWizard = new ServerWizard(() => Session, [removeCrowdSecStep],
+            (_, _, _, _, steps) => FinishedView.BuildRemoveCrowdSec(removeCrowdSecStep.DataDeleted, steps),
+            "CrowdSec removed", keyStep: false);
         var syncStep = new AssetSyncStep();
         var textsStep = new UiTextsStep();
         var emulatorAssetsStep = new EmulatorAssetsStep();
@@ -281,6 +296,8 @@ public sealed class InstallerWindow : Window
             case Page.RemoveGitea: ShowRemoveGiteaWizard(); break;
             case Page.Fail2Ban: ShowFail2BanWizard(); break;
             case Page.RemoveFail2Ban: ShowRemoveFail2BanWizard(); break;
+            case Page.CrowdSec: ShowCrowdSecWizard(); break;
+            case Page.RemoveCrowdSec: ShowRemoveCrowdSecWizard(); break;
             case Page.DeployAssets: ShowDeployAssets(); break;
             case Page.AssetExplorer: ShowAssetExplorer(); break;
             case Page.SqlEditor: ShowSqlEditor(); break;
@@ -442,6 +459,8 @@ public sealed class InstallerWindow : Window
         nav.Children.Add(_giteaNavigation);
         _fail2BanNavigation = NavButton("Fail2Ban", Icons.Shield, ShowFail2Ban);
         nav.Children.Add(_fail2BanNavigation);
+        _crowdSecNavigation = NavButton("CrowdSec", Icons.Shield, ShowCrowdSec);
+        nav.Children.Add(_crowdSecNavigation);
         _deployNavigation = NavButton("Deploy Assets", Icons.Download, ShowDeployAssets);
         nav.Children.Add(_deployNavigation);
         _explorerNavigation = NavButton("Asset Explorer", Icons.FolderSync, ShowAssetExplorer);
@@ -534,7 +553,7 @@ public sealed class InstallerWindow : Window
         _pageScroll.Offset = default;
     }
 
-    private enum Page { Dashboard, Install, AtomCms, CustomCms, EpicNext, RemoveCms, Gitea, RemoveGitea, Fail2Ban, RemoveFail2Ban, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
+    private enum Page { Dashboard, Install, AtomCms, CustomCms, EpicNext, RemoveCms, Gitea, RemoveGitea, Fail2Ban, RemoveFail2Ban, CrowdSec, RemoveCrowdSec, DeployAssets, AssetExplorer, SqlEditor, Debug, Tools, ServerStatus, EmulatorMonitor, Terminal, Settings, About }
     private Page _page;
 
     private void RefreshHeader()
@@ -553,6 +572,8 @@ public sealed class InstallerWindow : Window
             Page.RemoveGitea => ("Remove Gitea", "Addon: Gitea's container and route away; its data only when you choose."),
             Page.Fail2Ban => ("Fail2Ban", "Addon: bans addresses that guess SSH passwords; your whitelist is never banned."),
             Page.RemoveFail2Ban => ("Remove Fail2Ban", "Addon: fail2ban stopped and uninstalled; every ban is lifted."),
+            Page.CrowdSec => ("CrowdSec", "Addon: blocks attackers in Traefik, with the community's blocklist; Cloudflare aware."),
+            Page.RemoveCrowdSec => ("Remove CrowdSec", "Addon: the bouncer out of Traefik and CrowdSec stopped; its data only when you choose."),
             Page.RemoveCms => ("Remove the CMS", "Addon: Octane as the hotel's website again, as after the server installation."),
             Page.AssetExplorer => ("Asset Explorer", session is null
                 ? $"Addon: manage the files in {OctaneInstaller.Gamedata}, with this computer next to it."
@@ -562,8 +583,8 @@ public sealed class InstallerWindow : Window
                 : $"The databases of {host}: browse and edit tables, run queries."),
             Page.DeployAssets => ("Deploy Assets", $"Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {OctaneInstaller.Gamedata} on the server."),
             Page.Debug => ("Debug", session is null
-                ? "Live logs of the emulator, NGINX, Traefik and the firewall."
-                : $"Live logs on {host}: the emulator, NGINX, Traefik and the firewall."),
+                ? "Live logs of the emulator, NGINX, Traefik, the firewall, Fail2Ban and CrowdSec."
+                : $"Live logs on {host}: the emulator, NGINX, Traefik, the firewall, Fail2Ban and CrowdSec."),
             Page.Tools => ("Tools", "Restart services, back up and import the database, update, and move your settings."),
             Page.ServerStatus => ("Server status", $"Live figures of {host}, every 2 seconds."),
             Page.Terminal => ("SSH terminal", $"A shell on {host}, logged in as {session?.Login.User ?? "root"}."),
@@ -618,6 +639,8 @@ public sealed class InstallerWindow : Window
                     Icons.Git, Color.Parse("#609926"), ShowGitea),
                 SmallTile("Fail2Ban", "Bans addresses that guess SSH passwords; a whitelist for your own IPs (Tools → Fail2Ban).",
                     Icons.Shield, Color.Parse("#DC2626"), ShowFail2Ban),
+                SmallTile("CrowdSec", "Blocks attackers on every route through Traefik, with the community's blocklist. Cloudflare aware.",
+                    Icons.Shield, Color.Parse("#7C3AED"), ShowCrowdSec),
                 SmallTile("Deploy Assets", $"The All-in-1 downloader's assets and the UI texts to {OctaneInstaller.Gamedata}.",
                     Icons.Download, Color.Parse("#8B5CF6"), ShowDeployAssets),
                 SmallTile("Asset Explorer", $"Two panes: this computer and {OctaneInstaller.Gamedata}. Upload, download, rename.",
@@ -628,7 +651,7 @@ public sealed class InstallerWindow : Window
             TileGrid(
                 SmallTile("Tools", "Restarts, database backup and import, updates, settings backup.",
                     Icons.Wrench, Color.Parse("#0E9F9E"), ShowTools),
-                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik and the firewall.",
+                SmallTile("Debug", "Live logs: the emulator, NGINX, Traefik, the firewall, Fail2Ban and CrowdSec.",
                     Icons.Bug, Color.Parse("#DC2626"), ShowDebug))
         ]);
         _componentsHost.Content = BuildComponentsCard();
@@ -709,6 +732,27 @@ public sealed class InstallerWindow : Window
 
     private void ShowFail2BanWizard() => ShowWizard(Page.Fail2Ban, _fail2BanNavigation, _fail2BanWizard);
     private void ShowRemoveFail2BanWizard() => ShowWizard(Page.RemoveFail2Ban, _fail2BanNavigation, _removeFail2BanWizard);
+
+    private enum CrowdSecChoice { Install, Remove }
+
+    /// <summary>Addons → CrowdSec: install (or update) or remove first, unless one of them is running.</summary>
+    private async void ShowCrowdSec()
+    {
+        if (_crowdSecWizard.IsBusy) { ShowCrowdSecWizard(); return; }
+        if (_removeCrowdSecWizard.IsBusy) { ShowRemoveCrowdSecWizard(); return; }
+        CrowdSecChoice? choice = await ChoiceDialog.ShowAsync<CrowdSecChoice?>(this, "CrowdSec", "CrowdSec, attackers blocked in Traefik",
+            "Install CrowdSec (or update it, when it is installed), or remove it. You need a free account on app.crowdsec.net: the step shows where to get the key.", null,
+            new ChoiceDialog.Option<CrowdSecChoice?>("Install or update CrowdSec", "In Docker next to Traefik, with the bouncer on every route; checks Cloudflare.",
+                CrowdSecChoice.Install, Primary: true),
+            new ChoiceDialog.Option<CrowdSecChoice?>("Remove CrowdSec", "The bouncer out of Traefik and CrowdSec stopped; its data stays unless you choose otherwise.",
+                CrowdSecChoice.Remove),
+            new ChoiceDialog.Option<CrowdSecChoice?>("Cancel", "Stay on this page.", null));
+        if (choice == CrowdSecChoice.Install) ShowCrowdSecWizard();
+        else if (choice == CrowdSecChoice.Remove) ShowRemoveCrowdSecWizard();
+    }
+
+    private void ShowCrowdSecWizard() => ShowWizard(Page.CrowdSec, _crowdSecNavigation, _crowdSecWizard);
+    private void ShowRemoveCrowdSecWizard() => ShowWizard(Page.RemoveCrowdSec, _crowdSecNavigation, _removeCrowdSecWizard);
     private void ShowDeployAssets() => ShowWizard(Page.DeployAssets, _deployNavigation, _deployWizard);
 
     // The wizard asks for a login when there is none, starts for a new login, or shows the step where it was.
@@ -1173,7 +1217,7 @@ public sealed class InstallerWindow : Window
     }
 
     // The rows of the dashboard card: the full installation, plus AtomCMS once it is installed. Octane and its renderer
-    // depend on each other: one row, updated together (the renderer first). Traefik and Gitea follow from their images.
+    // depend on each other: one row, updated together (the renderer first). Traefik, Gitea and CrowdSec follow from their images.
     private static readonly (string Name, string Description, string Repository, string Icon, string Color, string Directory, string? Directory2, ToolsView.Component Update)[] Rows =
     [
         (Components[0].Name, Components[0].Description, Components[0].Repository, Components[0].Icon, Components[0].Color, EmulatorInstaller.Repository, null, ToolsView.Component.Emulator),
@@ -1338,18 +1382,20 @@ public sealed class InstallerWindow : Window
             list.Children.Add(row);
         }
 
-        // The Docker services: Traefik, and Gitea once it is installed.
+        // The Docker services: Traefik, and Gitea and CrowdSec once they are installed.
         foreach (ImageStatus image in images ?? [])
         {
             bool traefik = image.Name == "Traefik";
-            Color color = Color.Parse(traefik ? "#2563EB" : "#609926");
+            bool crowdSec = image.Name == "CrowdSec";
+            Color color = Color.Parse(traefik ? "#2563EB" : crowdSec ? "#7C3AED" : "#609926");
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(12, 8) };
-            var icon = Icon(traefik ? Icons.Swap : Icons.Git, 17);
+            var icon = Icon(traefik ? Icons.Swap : crowdSec ? Icons.Shield : Icons.Git, 17);
             icon.Foreground = Solid(color);
             row.Children.Add(new Border { Width = 34, Height = 34, CornerRadius = new CornerRadius(9), Background = Solid(Color.FromArgb(0x26, color.R, color.G, color.B)), Child = icon });
             var text = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(Text(image.Name, 13.5, weight: FontWeight.SemiBold));
             text.Children.Add(Text(traefik ? $"The web entrance on 80/443 with the certificates  ·  Docker image {image.Image}"
+                : crowdSec ? $"Blocks attackers in Traefik (addon)  ·  Docker image {image.Image}"
                 : $"Your Git server (addon)  ·  Docker image {image.Image}", 12, "Pro.Muted"));
             TextBlock line = Text(string.Join("  ·  ", new[] { image.Version, image.Running ? "running" : "stopped" }.Where(p => p is not null)), 11.5, "Pro.Subtle");
             line.FontFamily = Mono;
@@ -1367,8 +1413,9 @@ public sealed class InstallerWindow : Window
                 state.Children.Add(chip);
                 var button = new Button { Content = "Update", Padding = new Thickness(16, 6), FontSize = 12.5, Classes = { "primary" } };
                 ToolTip.SetTip(button, traefik ? "Pulls the newest image and restarts Traefik: the players are disconnected for a few seconds."
+                    : crowdSec ? "Pulls the newest image and detection rules and restarts CrowdSec; bans and enrollment stay, the hotel stays reachable."
                     : "Pulls the newest image and restarts Gitea; the repositories stay.");
-                ToolsView.Component update = traefik ? ToolsView.Component.Traefik : ToolsView.Component.Gitea;
+                ToolsView.Component update = traefik ? ToolsView.Component.Traefik : crowdSec ? ToolsView.Component.CrowdSec : ToolsView.Component.Gitea;
                 button.Click += async (_, _) => await UpdateComponentAsync(update);
                 state.Children.Add(button);
             }

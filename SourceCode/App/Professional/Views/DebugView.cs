@@ -11,7 +11,7 @@ using static AllInOneInstaller.App.Professional.ProfessionalTheme;
 namespace AllInOneInstaller.App.Professional.Views;
 
 /// <summary>
-/// Live logs of the server: the emulator, NGINX, Traefik and the firewall, followed over the login while the page is
+/// Live logs of the server: the emulator, NGINX, Traefik, the firewall, Fail2Ban and CrowdSec, followed over the login while the page is
 /// on screen. Leaving the page stops the follower on the server.
 /// </summary>
 public sealed class DebugView : Grid
@@ -39,7 +39,16 @@ public sealed class DebugView : Grid
         new("Firewall", $"{HardenInstaller.UfwLog}: connections ufw blocked (BLOCK) or let through and logged",
             $"{HardenInstaller.UfwLog} (or the journal without rsyslog)",
             $"if [ -f {HardenInstaller.UfwLog} ]; then tail -n 200 -F {HardenInstaller.UfwLog}; " +
-            "else echo 'No ufw.log (no rsyslog): following the journal instead.'; journalctl -k -f -n 200 -o short-iso | grep --line-buffered UFW; fi")
+            "else echo 'No ufw.log (no rsyslog): following the journal instead.'; journalctl -k -f -n 200 -o short-iso | grep --line-buffered UFW; fi"),
+        new("Fail2Ban", $"{Fail2BanInstaller.LogFile}: failed SSH logins it counted (Found), bans (Ban) and unbans (Unban)",
+            $"{Fail2BanInstaller.LogFile} (or the journal)",
+            "if ! command -v fail2ban-client >/dev/null 2>&1; then echo 'Fail2ban is not installed on this server (Addons -> Fail2Ban).'; sleep infinity; " +
+            $"elif [ -f {Fail2BanInstaller.LogFile} ]; then tail -n 200 -F {Fail2BanInstaller.LogFile}; " +
+            "else echo 'No fail2ban.log: following the journal instead.'; journalctl -u fail2ban -f -n 200 -o short-iso; fi"),
+        new("CrowdSec", "docker logs of the crowdsec container: bans it decides, the hub, the console and the bouncer's connections",
+            "docker logs crowdsec",
+            $"if docker inspect {CrowdSecInstaller.Container} >/dev/null 2>&1; then docker logs -f --tail 200 {CrowdSecInstaller.Container}; " +
+            "else echo 'CrowdSec is not installed on this server (Addons -> CrowdSec).'; sleep infinity; fi")
     ];
 
     private readonly Func<ServerConnection?> _connection;

@@ -108,9 +108,15 @@ public static class ServerTools
             [ -f "$d/compose.yaml" ] || fail "{{name}} is not set up by the installer on this server ($d/compose.yaml is missing)."
             before=$({{versionCommand}})
             echo "> docker compose pull ({{name}} ${before:-?})"
-            docker compose -f "$d/compose.yaml" pull 2>&1 | grep -vE '^ *$' | tail -3 | sed 's/^/  /'
+            if ! compose_in "$d" pull >"$d/.pull.log" 2>&1; then
+              grep -vE '^ *$' "$d/.pull.log" | tail -3 | sed 's/^/  /'
+              rm -f "$d/.pull.log"
+              fail "Docker Hub did not answer (see above): nothing was changed, {{name}} keeps running ${before:-as it was}. Try again later."
+            fi
+            grep -vE '^ *$' "$d/.pull.log" | tail -3 | sed 's/^/  /'
+            rm -f "$d/.pull.log"
             echo "> docker compose up -d   (recreates {{name}} only when its image changed)"
-            docker compose -f "$d/compose.yaml" up -d 2>&1 | grep -v '^ *$' | sed 's/^/  /'
+            compose_in "$d" up -d 2>&1 | grep -v '^ *$' | sed 's/^/  /'
             for i in $(seq 1 30); do {{readyCheck}} && break; sleep 2; done
             {{readyCheck}} || { docker logs --tail 20 {{container}} 2>&1 | sed 's/^/  /'; fail "{{name}} does not run after the update (see its log above)."; }
             after=$({{versionCommand}})
