@@ -918,6 +918,31 @@ delete the repositories, accounts and settings**: then `/opt/gitea`, the image a
 
 ![Remove Gitea](docs/screenshots/gitea-remove.png)
 
+### Fail2Ban
+
+**Addons → Fail2Ban** installs [fail2ban](https://github.com/fail2ban/fail2ban) to protect SSH against password
+guessing: after too many failed logins an address is banned in the firewall for a while. It asks first: **Install or
+change Fail2Ban** or **Remove Fail2Ban**.
+
+- **Settings**: failed logins before a ban (5), counted within (10 minutes), ban time (60 minutes), and whether repeat
+  offenders are banned longer each time (`bantime.increment`, up to a week).
+- **Whitelist** (`ignoreip`): addresses and networks that are never banned, one per line (IPv4, IPv6 or a network such
+  as `192.168.1.0/24`; text after `#` is a comment). The address this computer reaches the server from is filled in,
+  so a wrong password cannot lock you out. The server itself (`127.0.0.1/8`, `::1`) is always on it.
+- **Install**: `apt-get install fail2ban python3-systemd`; the settings go to `/etc/fail2ban/jail.d/all-in-1.local`
+  (the distribution's own files stay untouched). The `sshd` jail watches every port sshd listens on and reads the
+  systemd journal (Ubuntu 24.04+ and Debian 12+ have no `auth.log` by default); without systemd it reads
+  `/var/log/auth.log` (rsyslog is installed for it). `fail2ban-client -t` checks the configuration first: one it
+  refuses is not used, the previous one stays. Then fail2ban is enabled at boot, restarted and the jail checked.
+- Running the addon again saves new settings; bans stay.
+- **Remove Fail2Ban** stops it (every ban is lifted), takes it off at boot, deletes `all-in-1.local` and removes the
+  package.
+
+Later, **Tools → Fail2Ban → Whitelist and bans** edits the whitelist (with **Add my IP**) and shows the banned
+addresses: tick one to let it in again. Saving restarts fail2ban with the new whitelist; whitelisted addresses that
+were banned are let in at once. Locked out anyway? Log in from another address (or the provider's web console) and run
+`fail2ban-client set sshd unbanip <your IP>`.
+
 ### Deploy Assets
 
 **Deploy Assets** copies what the [All-in-1 downloader](https://github.com/duckietm/all-in-1-converter) downloaded to
@@ -1158,6 +1183,7 @@ backup at the bottom. Without a login the server tools are greyed out, with a **
 | **Fix visitor IPs** | for a hotel behind Cloudflare whose players show up with a Cloudflare address: gives Polaris (`ws.ip.header.trusted`), NGINX (`/etc/nginx/hotel-real-ip.conf`) and Traefik Cloudflare's current ranges and sets up the weekly refresh (`/var/scripts/CF_Refresh.sh`, `/etc/cron.d/cf-refresh`). Asks first: the emulator restarts when its setting changes, Traefik when its list changes. A hotel set up without Cloudflare gets the advice to run Web access again with Cloudflare on |
 | **Enable firewall** | switches ufw on with the Harden step's rules: when that step set them up they are switched on again, after checking that every SSH port (and the one you are connected on) is in them, so you cannot lock yourself out; on a server where it never ran, the same rules are set up (SSH rate limited, 80/443 for everyone or only Cloudflare's ranges, everything else closed) |
 | **Disable firewall** | `ufw disable` (asks first: every port is reachable again, also the emulator's 3000 and 2096). The rules are kept, so Enable firewall switches the same rules on again; for testing a connection problem |
+| **Whitelist and bans** | for the [Fail2Ban](#fail2ban) addon: edit the whitelist (addresses and networks that are never banned, with **Add my IP**) and tick banned addresses to let them in again. Saving rewrites `/etc/fail2ban/jail.d/all-in-1.local` (checked with `fail2ban-client -t` first) and restarts fail2ban; on a server without fail2ban it points to the addon |
 | **Create full database backup** | `mariadb-dump --single-transaction --routines --triggers --events` of the hotel database into `/var/backups/all-in-1/<db>-<time>.sql.gz` (root only; the newest 10 are kept), then downloads it over SFTP to a file you choose (owner-only on Linux/macOS) |
 | **Import full database** | uploads a `.sql` or `.sql.gz`, makes a safety backup (`<db>-before-import-<time>.sql.gz`), stops the emulator, recreates the database with its character set and imports (database names in `CREATE DATABASE` / `USE` lines become the hotel's), clears AtomCMS' cache, and starts the emulator, which updates the database to its version. A file that is not a SQL dump is refused before anything changes |
 | **Import Plus database** | a PlusEMU dump (such as Plus' fresh install) into the Polaris hotel database: the reverse of [plus-migrator](https://github.com/plus-emulator/plus-migrator). Choose **Furniture and catalog** or **Furniture only**. It uploads the `.sql` / `.sql.gz`, makes a safety backup (`<db>-before-plus-import-<time>.sql.gz`), stops the emulator, loads the dump into a staging database `plus_import` next to the hotel's, converts, drops the staging database and starts the emulator. See [Import Plus database](#import-plus-database) |
@@ -1329,6 +1355,9 @@ SourceCode/
   App/Professional/Views/RemoveCmsStep.cs CMS addon: remove the CMS, Octane on / again
   App/Professional/Views/GiteaStep.cs     Gitea addon: domain, Cloudflare, admin, DNS warning
   App/Professional/Views/RemoveGiteaStep.cs Gitea addon: remove Gitea, its data only when asked
+  App/Professional/Views/Fail2BanStep.cs  Fail2Ban addon: ban settings and the whitelist (your IP filled in)
+  App/Professional/Views/RemoveFail2BanStep.cs Fail2Ban addon: stop and uninstall
+  App/Professional/Views/Fail2BanDialog.cs Tools → Fail2Ban: edit the whitelist, unban addresses
   App/Professional/Views/AssetSyncStep.cs Deploy Assets page (sync from the All-in-1 downloader)
   App/Professional/Views/UiTextsStep.cs   Deploy Assets page: the client's UI texts (UITexts.jsonc) in a language
   App/Professional/Views/EmulatorAssetsStep.cs  Deploy Assets page: Polaris' images and group badge parts into gamedata
@@ -1378,6 +1407,7 @@ SourceCode/
   Remote/CmsSite.cs                       A CMS' own NGINX site on the first free port from 85 to 95
   Remote/LocalPorts.cs                    The first free local port from 85 to 95 (CMS sites, Gitea)
   Remote/GiteaInstaller.cs                Gitea in Docker behind Traefik: DNS check, compose, route, admin, test
+  Remote/Fail2BanInstaller.cs             Fail2ban for SSH: install, settings and whitelist, unban, remove
   Remote/AssetSync.cs                     Deploy Assets: compare with /var/www/gamedata, upload as a tar stream
   Remote/UiTextsInstaller.cs              Installs UITexts_<language>.jsonc.example as gamedata/config/UITexts.jsonc
   Remote/EmulatorAssetsInstaller.cs       Polaris' / the installer's Assets (images, hotel view, badge parts) into gamedata, missing files only
