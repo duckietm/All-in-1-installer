@@ -12,6 +12,7 @@ use eframe::egui::{self, RichText};
 
 use super::sql_editor::login::{Login, Prompt};
 use super::sql_editor::text;
+use crate::gui::dialogs::Choice;
 use crate::gui::icons::{self, Icon};
 use crate::gui::theme::{Fixed, Palette};
 use crate::gui::{widgets, Page as AppPage, Request, Shared, View};
@@ -259,17 +260,24 @@ impl Ctl {
         let Some(page) = self.lock().page_edit.clone() else { return };
         self.with(generation, |s| s.busy = true);
         let saved = catalog_admin::save_page(&session, &database, &page).await;
-        self.with(generation, |s| {
+        let id = self.with(generation, |s| {
             s.busy = false;
             match saved {
-                Ok(_) => {
+                Ok(id) => {
                     s.unpublished = true;
                     s.status = Status::ok(tf("Page {name} saved. Publish to show it in the hotel.", &[("name", &page.caption)]));
+                    Some(id)
                 }
-                Err(error) => s.status = Status::error(error.to_string()),
+                Err(error) => {
+                    s.status = Status::error(error.to_string());
+                    None
+                }
             }
         });
-        self.load_pages(Some(page.id)).await;
+        if let Some(Some(id)) = id {
+            self.with(generation, |s| s.page = None);
+            self.load_pages(Some(id)).await;
+        }
     }
 
     async fn save_offer(self) {
@@ -277,12 +285,90 @@ impl Ctl {
         let Some(offer) = self.lock().offer_edit.clone() else { return };
         self.with(generation, |s| s.busy = true);
         let saved = catalog_admin::save_offer(&session, &database, &offer).await;
-        let page_id = self.with(generation, |s| {
+        let result = self.with(generation, |s| {
             s.busy = false;
-            match saved {
-                Ok(_) => {
+            let id = match saved {
+                Ok(id) => {
                     s.unpublished = true;
                     s.status = Status::ok(tf("Offer {name} saved. Publish to show it in the hotel.", &[("name", &offer.catalog_name)]));
+                    Some(id)
+                }
+                Err(error) => {
+                    s.status = Status::error(error.to_string());
+                    None
+                }
+            };
+            (id, s.page.as_ref().map(|p| p.id))
+        });
+        if let Some((Some(offer_id), Some(page_id))) = result {
+            self.select_page(page_id).await;
+            self.with(generation, |s| {
+                if let Some(found) = s.offers.iter().find(|o| o.id == offer_id).cloned() {
+                    s.offer = Some(found.clone());
+                    s.offer_edit = Some(found);
+                }
+            });
+        }
+    }
+
+    /// Asks first, then deletes the page shown with its offers.
+    async fn delete_page(self) {
+        let Some((generation, session, database)) = self.session() else { return };
+        let (page, problem, offers) = {
+            let s = self.lock();
+            let Some(page) = s.page.clone().filter(|p| p.id > 0) else { return };
+            (page.clone(), catalog_admin::page_delete_problem(&s.pages, &s.offers, page.id), s.offers.len())
+        };
+        if let Some(problem) = problem {
+            self.with(generation, |s| s.status = Status::error(problem));
+            return;
+        }
+        let message = tf("The page {name} and its {count} offers are deleted from the database. This cannot be undone.", &[("name", &page.caption), ("count", &offers.to_string())]);
+        let options = vec![Choice::new(t("Delete the page"), t("Delete it and its offers."), true).primary(), Choice::new(t("Cancel"), t("Keep the page."), false)];
+        if !self.shared.dialogs.choose(t("Are you sure?"), &tf("Delete {name}?", &[("name", &page.caption)]), &message, false, options).await {
+            return;
+        }
+        self.with(generation, |s| s.busy = true);
+        let deleted = catalog_admin::delete_page(&session, &database, page.id).await;
+        self.with(generation, |s| {
+            s.busy = false;
+            match deleted {
+                Ok(_) => {
+                    s.unpublished = true;
+                    s.page = None;
+                    s.page_edit = None;
+                    s.offers.clear();
+                    s.offer = None;
+                    s.offer_edit = None;
+                    s.status = Status::ok(tf("Page {name} deleted. Publish to take it out of the hotel.", &[("name", &page.caption)]));
+                }
+                Err(error) => s.status = Status::error(error.to_string()),
+            }
+        });
+        self.load_pages(None).await;
+    }
+
+    /// Asks first, then deletes the offer shown.
+    async fn delete_offer(self) {
+        let Some((generation, session, database)) = self.session() else { return };
+        let Some(offer) = self.lock().offer.clone().filter(|o| o.id > 0) else { return };
+        if let Some(problem) = catalog_admin::offer_delete_problem(&offer) {
+            self.with(generation, |s| s.status = Status::error(problem));
+            return;
+        }
+        let options = vec![Choice::new(t("Delete the offer"), t("Take it off the page for good."), true).primary(), Choice::new(t("Cancel"), t("Keep the offer."), false)];
+        let message = t("The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.");
+        if !self.shared.dialogs.choose(t("Are you sure?"), &tf("Delete {name}?", &[("name", &offer.catalog_name)]), message, false, options).await {
+            return;
+        }
+        self.with(generation, |s| s.busy = true);
+        let deleted = catalog_admin::delete_offer(&session, &database, offer.id).await;
+        let page_id = self.with(generation, |s| {
+            s.busy = false;
+            match deleted {
+                Ok(_) => {
+                    s.unpublished = true;
+                    s.status = Status::ok(tf("Offer {name} deleted. Publish to take it out of the hotel.", &[("name", &offer.catalog_name)]));
                 }
                 Err(error) => s.status = Status::error(error.to_string()),
             }
@@ -290,12 +376,6 @@ impl Ctl {
         });
         if let Some(Some(page_id)) = page_id {
             self.select_page(page_id).await;
-            self.with(generation, |s| {
-                if let Some(found) = s.offers.iter().find(|o| o.id == offer.id).cloned() {
-                    s.offer = Some(found.clone());
-                    s.offer_edit = Some(found);
-                }
-            });
         }
     }
 
@@ -350,6 +430,8 @@ enum Action {
     SelectPage(i64),
     SavePage,
     SaveOffer,
+    DeletePage,
+    DeleteOffer,
     Publish,
 }
 
@@ -389,6 +471,8 @@ impl View for CatalogManagerView {
                 Action::SelectPage(id) => ctl.spawn(|c| async move { c.select_page(id).await }),
                 Action::SavePage => ctl.spawn(|c| c.save_page()),
                 Action::SaveOffer => ctl.spawn(|c| c.save_offer()),
+                Action::DeletePage => ctl.spawn(|c| c.delete_page()),
+                Action::DeleteOffer => ctl.spawn(|c| c.delete_offer()),
                 Action::Publish => ctl.spawn(|c| c.publish()),
             }
         }
@@ -446,6 +530,19 @@ fn body(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Vec<A
 }
 
 fn tree(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        let ready = s.session.is_some() && !s.busy;
+        if ui.add_enabled(ready, small(t("New page"))).on_hover_text(t("A new page under the page shown, or at the top level.")).clicked() {
+            let parent = s.page.as_ref().filter(|p| p.id > 0).map_or(-1, |p| p.id);
+            let draft = catalog_admin::new_page(&s.pages, parent);
+            s.page = Some(draft.clone());
+            s.page_edit = Some(draft);
+            s.offers.clear();
+            s.offer = None;
+            s.offer_edit = None;
+        }
+    });
+    ui.add_space(4.0);
     ui.add(egui::TextEdit::singleline(&mut s.search).hint_text(t("Search pages")).desired_width(f32::INFINITY));
     ui.add_space(6.0);
     let query = s.search.trim().to_lowercase();
@@ -501,10 +598,11 @@ fn editors(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Ve
     }
     let pages = s.pages.clone();
     let busy = s.busy;
-    let page_changed = s.page_edit != s.page;
+    let is_new_page = s.page_edit.as_ref().is_some_and(|p| p.id <= 0);
+    let page_changed = s.page_edit != s.page || is_new_page;
     let page_problem = s.page_edit.as_ref().and_then(|p| catalog_admin::page_problem(p, &pages));
 
-    ui.label(widgets::title_text(t("Page"), 17.0));
+    ui.label(widgets::title_text(if is_new_page { t("New page") } else { t("Page") }, 17.0));
     ui.add_space(4.0);
     if let Some(page) = s.page_edit.as_mut() {
         egui::Grid::new("catalog-page-form").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
@@ -561,7 +659,15 @@ fn editors(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Ve
             actions.push(Action::SavePage);
         }
         if ui.add_enabled(page_changed && !busy, small(t("Undo changes"))).clicked() {
-            s.page_edit = s.page.clone();
+            if is_new_page {
+                s.page = None;
+                s.page_edit = None;
+            } else {
+                s.page_edit = s.page.clone();
+            }
+        }
+        if !is_new_page && ui.add_enabled(!busy, small(t("Delete page"))).clicked() {
+            actions.push(Action::DeletePage);
         }
         if let Some(problem) = &page_problem {
             ui.label(RichText::new(problem).size(12.0).color(palette.error_text));
@@ -570,8 +676,20 @@ fn editors(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Ve
         }
     });
 
+    if is_new_page || s.page_edit.is_none() {
+        return;
+    }
     ui.add_space(14.0);
-    ui.label(widgets::title_text(&tf("Offers ({count})", &[("count", &s.offers.len().to_string())]), 17.0));
+    ui.horizontal(|ui| {
+        ui.label(widgets::title_text(&tf("Offers ({count})", &[("count", &s.offers.len().to_string())]), 17.0));
+        if ui.add_enabled(!busy, small(t("New offer"))).clicked() {
+            if let Some(page) = s.page.as_ref() {
+                let draft = catalog_admin::new_offer(&s.offers, page.id);
+                s.offer = Some(draft.clone());
+                s.offer_edit = Some(draft);
+            }
+        }
+    });
     ui.add_space(4.0);
     offers_table(ui, palette, s);
 
@@ -616,12 +734,14 @@ fn offers_table(ui: &mut egui::Ui, palette: &Palette, s: &mut State) {
 
 fn offer_form(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut Vec<Action>) {
     let busy = s.busy;
-    let changed = s.offer_edit != s.offer;
+    let is_new = s.offer_edit.as_ref().is_some_and(|o| o.id <= 0);
+    let changed = s.offer_edit != s.offer || is_new;
     let problem = s.offer_edit.as_ref().and_then(catalog_admin::offer_problem);
     let pages = s.pages.clone();
     let Some(offer) = s.offer_edit.as_mut() else { return };
 
-    ui.label(widgets::title_text(&tf("Offer #{id}", &[("id", &offer.id.to_string())]), 15.0));
+    let title = if is_new { t("New offer").to_string() } else { tf("Offer #{id}", &[("id", &offer.id.to_string())]) };
+    ui.label(widgets::title_text(&title, 15.0));
     ui.add_space(4.0);
     egui::Grid::new("catalog-offer-form").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
         labelled(ui, palette, t("Name"));
@@ -681,7 +801,15 @@ fn offer_form(ui: &mut egui::Ui, palette: &Palette, s: &mut State, actions: &mut
             actions.push(Action::SaveOffer);
         }
         if ui.add_enabled(changed && !busy, small(t("Undo changes"))).clicked() {
-            s.offer_edit = s.offer.clone();
+            if is_new {
+                s.offer = None;
+                s.offer_edit = None;
+            } else {
+                s.offer_edit = s.offer.clone();
+            }
+        }
+        if !is_new && ui.add_enabled(!busy, small(t("Delete offer"))).clicked() {
+            actions.push(Action::DeleteOffer);
         }
         if let Some(problem) = &problem {
             ui.label(RichText::new(problem).size(12.0).color(palette.error_text));

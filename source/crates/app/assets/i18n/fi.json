@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "items_base-tunnukset: yksi tunnus tai useampi pakettina (100;200).",
   "type": "tyyppi",
   "{count} pages.": "{count} sivua.",
-  "{sold} sold": "{sold} myyty"
+  "{sold} sold": "{sold} myyty",
+  "A new page under the page shown, or at the top level.": "Uusi sivu näytetyn sivun alle tai ylimmälle tasolle.",
+  "Delete it and its offers.": "Poista se tarjouksineen.",
+  "Delete offer": "Poista tarjous",
+  "Delete page": "Poista sivu",
+  "Delete the offer": "Poista tarjous",
+  "Delete the page": "Poista sivu",
+  "Delete {name}?": "Poistetaanko {name}?",
+  "Keep the offer.": "Pidä tarjous.",
+  "Keep the page.": "Pidä sivu.",
+  "New offer": "Uusi tarjous",
+  "New page": "Uusi sivu",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "Tarjous {name} poistettu. Julkaise, niin se poistuu hotellista.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "Sivu {name} poistettu. Julkaise, niin se poistuu hotellista.",
+  "Take it off the page for good.": "Poista se sivulta lopullisesti.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "Tarjous poistetaan tietokannasta. Pelaajien jo ostamat kalusteet jäävät heille. Tätä ei voi perua.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "Sivu {name} ja sen {count} tarjousta poistetaan tietokannasta. Tätä ei voi perua."
 }

@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "IDs de items_base: un ID, o varios como paquete (100;200).",
   "type": "tipo",
   "{count} pages.": "{count} páginas.",
-  "{sold} sold": "{sold} vendidos"
+  "{sold} sold": "{sold} vendidos",
+  "A new page under the page shown, or at the top level.": "Una página nueva bajo la página mostrada, o en el nivel superior.",
+  "Delete it and its offers.": "Borrarla con sus ofertas.",
+  "Delete offer": "Borrar oferta",
+  "Delete page": "Borrar página",
+  "Delete the offer": "Borrar la oferta",
+  "Delete the page": "Borrar la página",
+  "Delete {name}?": "¿Borrar {name}?",
+  "Keep the offer.": "Conservar la oferta.",
+  "Keep the page.": "Conservar la página.",
+  "New offer": "Nueva oferta",
+  "New page": "Nueva página",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "Oferta {name} borrada. Publica para quitarla del hotel.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "Página {name} borrada. Publica para quitarla del hotel.",
+  "Take it off the page for good.": "Quitarla de la página para siempre.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "La oferta se borra de la base de datos. Los furnis que los jugadores ya compraron siguen siendo suyos. No se puede deshacer.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "La página {name} y sus {count} ofertas se borran de la base de datos. No se puede deshacer."
 }

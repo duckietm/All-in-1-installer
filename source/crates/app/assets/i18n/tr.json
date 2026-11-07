@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "items_base kimlikleri: bir kimlik ya da paket olarak birkaç tane (100;200).",
   "type": "tür",
   "{count} pages.": "{count} sayfa.",
-  "{sold} sold": "{sold} satıldı"
+  "{sold} sold": "{sold} satıldı",
+  "A new page under the page shown, or at the top level.": "Gösterilen sayfanın altında ya da en üst seviyede yeni bir sayfa.",
+  "Delete it and its offers.": "Teklifleriyle birlikte sil.",
+  "Delete offer": "Teklifi sil",
+  "Delete page": "Sayfayı sil",
+  "Delete the offer": "Teklifi sil",
+  "Delete the page": "Sayfayı sil",
+  "Delete {name}?": "{name} silinsin mi?",
+  "Keep the offer.": "Teklifi tut.",
+  "Keep the page.": "Sayfayı tut.",
+  "New offer": "Yeni teklif",
+  "New page": "Yeni sayfa",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "{name} teklifi silindi. Otelden kaldırmak için yayınla.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "{name} sayfası silindi. Otelden kaldırmak için yayınla.",
+  "Take it off the page for good.": "Sayfadan kalıcı olarak kaldır.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "Teklif veritabanından silinir. Oyuncuların aldığı mobiler onlarda kalır. Bu geri alınamaz.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "{name} sayfası ve {count} teklifi veritabanından silinir. Bu geri alınamaz."
 }

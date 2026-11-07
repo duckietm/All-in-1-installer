@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "items_base-id's: één id, of meerdere als bundel (100;200).",
   "type": "soort",
   "{count} pages.": "{count} pagina's.",
-  "{sold} sold": "{sold} verkocht"
+  "{sold} sold": "{sold} verkocht",
+  "A new page under the page shown, or at the top level.": "Een nieuwe pagina onder de getoonde pagina, of op het bovenste niveau.",
+  "Delete it and its offers.": "Verwijder hem met zijn aanbiedingen.",
+  "Delete offer": "Aanbieding verwijderen",
+  "Delete page": "Pagina verwijderen",
+  "Delete the offer": "De aanbieding verwijderen",
+  "Delete the page": "De pagina verwijderen",
+  "Delete {name}?": "{name} verwijderen?",
+  "Keep the offer.": "Houd de aanbieding.",
+  "Keep the page.": "Houd de pagina.",
+  "New offer": "Nieuwe aanbieding",
+  "New page": "Nieuwe pagina",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "Aanbieding {name} verwijderd. Publiceer om hem uit het hotel te halen.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "Pagina {name} verwijderd. Publiceer om hem uit het hotel te halen.",
+  "Take it off the page for good.": "Haal hem voorgoed van de pagina.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "De aanbieding wordt uit de database verwijderd. Meubels die spelers al kochten blijven van hen. Dit kan niet ongedaan worden.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "De pagina {name} en zijn {count} aanbiedingen worden uit de database verwijderd. Dit kan niet ongedaan worden."
 }

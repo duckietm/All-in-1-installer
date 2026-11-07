@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "IDs de items_base: um ID, ou vários como pacote (100;200).",
   "type": "tipo",
   "{count} pages.": "{count} páginas.",
-  "{sold} sold": "{sold} vendidos"
+  "{sold} sold": "{sold} vendidos",
+  "A new page under the page shown, or at the top level.": "Uma página nova abaixo da página mostrada, ou no nível principal.",
+  "Delete it and its offers.": "Excluí-la com as ofertas dela.",
+  "Delete offer": "Excluir oferta",
+  "Delete page": "Excluir página",
+  "Delete the offer": "Excluir a oferta",
+  "Delete the page": "Excluir a página",
+  "Delete {name}?": "Excluir {name}?",
+  "Keep the offer.": "Manter a oferta.",
+  "Keep the page.": "Manter a página.",
+  "New offer": "Nova oferta",
+  "New page": "Nova página",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "Oferta {name} excluída. Publique para tirá-la do hotel.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "Página {name} excluída. Publique para tirá-la do hotel.",
+  "Take it off the page for good.": "Tirá-la da página de vez.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "A oferta é excluída do banco de dados. Os mobis que os jogadores já compraram continuam deles. Não dá para desfazer.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "A página {name} e suas {count} ofertas são excluídas do banco de dados. Não dá para desfazer."
 }

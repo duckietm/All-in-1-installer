@@ -2596,5 +2596,21 @@
   "items_base ids: one id, or several as a bundle (100;200).": "IDs items_base : un ID, ou plusieurs pour un lot (100;200).",
   "type": "type",
   "{count} pages.": "{count} pages.",
-  "{sold} sold": "{sold} vendus"
+  "{sold} sold": "{sold} vendus",
+  "A new page under the page shown, or at the top level.": "Une nouvelle page sous la page affichée, ou au premier niveau.",
+  "Delete it and its offers.": "La supprimer avec ses offres.",
+  "Delete offer": "Supprimer l'offre",
+  "Delete page": "Supprimer la page",
+  "Delete the offer": "Supprimer l'offre",
+  "Delete the page": "Supprimer la page",
+  "Delete {name}?": "Supprimer {name} ?",
+  "Keep the offer.": "Garder l'offre.",
+  "Keep the page.": "Garder la page.",
+  "New offer": "Nouvelle offre",
+  "New page": "Nouvelle page",
+  "Offer {name} deleted. Publish to take it out of the hotel.": "Offre {name} supprimée. Publie pour la retirer de l'hôtel.",
+  "Page {name} deleted. Publish to take it out of the hotel.": "Page {name} supprimée. Publie pour la retirer de l'hôtel.",
+  "Take it off the page for good.": "La retirer de la page pour de bon.",
+  "The offer is deleted from the database. Furni players already bought stays theirs. This cannot be undone.": "L'offre est supprimée de la base. Les meubles déjà achetés restent aux joueurs. Impossible d'annuler.",
+  "The page {name} and its {count} offers are deleted from the database. This cannot be undone.": "La page {name} et ses {count} offres sont supprimées de la base. Impossible d'annuler."
 }

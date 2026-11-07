@@ -389,6 +389,89 @@ pub fn update_offer_params(offer: &Offer) -> Vec<SqlValue> {
     ]
 }
 
+pub fn insert_page_sql(database: &str) -> String {
+    format!(
+        "INSERT INTO {}.catalog_pages (parent_id, caption, caption_save, page_layout, icon_image, min_rank, order_num, visible, enabled, \
+         club_only, catalog_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        quote(database)
+    )
+}
+
+/// The values of [`update_page_params`] without the id at the end.
+pub fn insert_page_params(page: &Page) -> Vec<SqlValue> {
+    let mut params = update_page_params(page);
+    params.pop();
+    params
+}
+
+pub fn insert_offer_sql(database: &str) -> String {
+    format!(
+        "INSERT INTO {}.catalog_items (page_id, catalog_name, item_ids, cost_credits, cost_points, points_type, amount, limited_stack, \
+         order_number, offer_id, club_only, have_offer, extradata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        quote(database)
+    )
+}
+
+/// The values of [`update_offer_params`] without the id at the end.
+pub fn insert_offer_params(offer: &Offer) -> Vec<SqlValue> {
+    let mut params = update_offer_params(offer);
+    params.pop();
+    params
+}
+
+/// A new page under `parent_id` (-1: the top level), after the pages already there; not saved yet (id 0).
+pub fn new_page(pages: &[Page], parent_id: i64) -> Page {
+    let order_num = pages.iter().filter(|p| p.parent_id == parent_id).map(|p| p.order_num).max().map_or(1, |o| o + 1);
+    Page {
+        id: 0,
+        parent_id,
+        caption: "New page".into(),
+        caption_save: String::new(),
+        layout: "default_3x3".into(),
+        icon_image: 1,
+        min_rank: 1,
+        order_num,
+        visible: false,
+        enabled: true,
+        club_only: false,
+        catalog_mode: "NORMAL".into(),
+    }
+}
+
+/// A new offer on the page, after the offers already there; not saved yet (id 0). The furni ids are left to fill in.
+pub fn new_offer(offers: &[Offer], page_id: i64) -> Offer {
+    let order_number = offers.iter().map(|o| o.order_number).max().map_or(1, |o| o + 1);
+    Offer {
+        id: 0,
+        page_id,
+        catalog_name: String::new(),
+        item_ids: String::new(),
+        cost_credits: 3,
+        amount: 1,
+        order_number,
+        offer_id: -1,
+        have_offer: true,
+        ..Offer::default()
+    }
+}
+
+/// Why the page cannot be deleted, or None. Its sub-pages go first (they would lose their place in the tree), and an
+/// offer with limited sales keeps the record of who has which number.
+pub fn page_delete_problem(pages: &[Page], offers: &[Offer], id: i64) -> Option<String> {
+    let children = pages.iter().filter(|p| p.parent_id == id && p.id != id).count();
+    if children > 0 {
+        return Some(format!("The page has {children} sub-pages: move or delete them first."));
+    }
+    offers.iter().find(|o| o.page_id == id && o.limited_sells > 0).map(|o| {
+        format!("The offer {} sold {} limited numbers: it cannot be deleted.", o.catalog_name, o.limited_sells)
+    })
+}
+
+/// Why the offer cannot be deleted, or None: its limited sales would be lost.
+pub fn offer_delete_problem(offer: &Offer) -> Option<String> {
+    (offer.limited_sells > 0).then(|| format!("{} limited numbers are sold: the offer cannot be deleted.", offer.limited_sells))
+}
+
 /// Every page of the hotel database.
 pub async fn load_pages(session: &SqlSession, database: &str) -> Result<Vec<Page>> {
     let rows = session.select(&pages_sql(database), Vec::new()).await?;
@@ -401,12 +484,40 @@ pub async fn load_offers(session: &SqlSession, database: &str, page_id: i64) -> 
     Ok(rows.iter().map(|row| offer_from_row(row)).collect())
 }
 
-pub async fn save_page(session: &SqlSession, database: &str, page: &Page) -> Result<u64> {
-    Ok(session.execute(&[(update_page_sql(database), update_page_params(page))]).await?.0)
+/// Saves the page; a new one (id 0) is added. Returns its id.
+pub async fn save_page(session: &SqlSession, database: &str, page: &Page) -> Result<i64> {
+    if page.id <= 0 {
+        let (_, id) = session.execute(&[(insert_page_sql(database), insert_page_params(page))]).await?;
+        return Ok(id as i64);
+    }
+    session.execute(&[(update_page_sql(database), update_page_params(page))]).await?;
+    Ok(page.id)
 }
 
-pub async fn save_offer(session: &SqlSession, database: &str, offer: &Offer) -> Result<u64> {
-    Ok(session.execute(&[(update_offer_sql(database), update_offer_params(offer))]).await?.0)
+/// Saves the offer; a new one (id 0) is added. Returns its id.
+pub async fn save_offer(session: &SqlSession, database: &str, offer: &Offer) -> Result<i64> {
+    if offer.id <= 0 {
+        let (_, id) = session.execute(&[(insert_offer_sql(database), insert_offer_params(offer))]).await?;
+        return Ok(id as i64);
+    }
+    session.execute(&[(update_offer_sql(database), update_offer_params(offer))]).await?;
+    Ok(offer.id)
+}
+
+/// Deletes the page with its offers, in one transaction. Check [`page_delete_problem`] first.
+pub async fn delete_page(session: &SqlSession, database: &str, id: i64) -> Result<u64> {
+    let db = quote(database);
+    let statements = vec![
+        (format!("DELETE FROM {db}.catalog_items WHERE page_id = ?"), vec![SqlValue::Int(id)]),
+        (format!("DELETE FROM {db}.catalog_pages WHERE id = ?"), vec![SqlValue::Int(id)]),
+    ];
+    Ok(session.execute(&statements).await?.0)
+}
+
+/// Deletes the offer. Check [`offer_delete_problem`] first.
+pub async fn delete_offer(session: &SqlSession, database: &str, id: i64) -> Result<u64> {
+    let statements = vec![(format!("DELETE FROM {}.catalog_items WHERE id = ?", quote(database)), vec![SqlValue::Int(id)])];
+    Ok(session.execute(&statements).await?.0)
 }
 
 /// The script that finds the hotel database the emulator uses (config.ini) and prints its name.
@@ -573,6 +684,39 @@ mod tests {
         assert_eq!(update_page_params(&p).len(), update_page_sql("hotel").matches('?').count());
         assert_eq!(update_offer_params(&offer()).len(), update_offer_sql("hotel").matches('?').count());
         assert!(pages_sql("my`db").contains("`my``db`.catalog_pages"));
+    }
+
+    #[test]
+    fn new_pages_and_offers_go_after_the_others() {
+        let pages = vec![page(1, -1, "Shop", 4), page(2, 1, "Rares", 7), page(3, 1, "Old", 2)];
+        let new = new_page(&pages, 1);
+        assert_eq!((new.id, new.parent_id, new.order_num, new.visible), (0, 1, 8, false));
+        assert_eq!(new_page(&pages, -1).order_num, 5);
+        assert_eq!(new_page(&[], -1).order_num, 1);
+        assert_eq!(page_problem(&new, &pages), None);
+
+        let mut first = offer();
+        first.order_number = 3;
+        let made = new_offer(&[first], 5);
+        assert_eq!((made.id, made.page_id, made.order_number, made.amount), (0, 5, 4, 1));
+        assert!(offer_problem(&made).is_some(), "the furni ids still have to be filled in");
+        assert_eq!(insert_page_params(&new).len(), insert_page_sql("hotel").matches('?').count());
+        assert_eq!(insert_offer_params(&made).len(), insert_offer_sql("hotel").matches('?').count());
+    }
+
+    #[test]
+    fn deleting_keeps_sub_pages_and_limited_sales() {
+        let pages = vec![page(1, -1, "Shop", 0), page(2, 1, "Rares", 0)];
+        let mut sold = offer();
+        sold.page_id = 2;
+        sold.limited_stack = 10;
+        sold.limited_sells = 3;
+
+        assert_eq!(page_delete_problem(&pages, &[], 1), Some("The page has 1 sub-pages: move or delete them first.".into()));
+        assert_eq!(page_delete_problem(&pages, &[offer()], 2), None);
+        assert!(page_delete_problem(&pages, std::slice::from_ref(&sold), 2).is_some());
+        assert_eq!(offer_delete_problem(&offer()), None);
+        assert_eq!(offer_delete_problem(&sold), Some("3 limited numbers are sold: the offer cannot be deleted.".into()));
     }
 
     #[test]

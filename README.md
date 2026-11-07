@@ -1327,6 +1327,10 @@ through the same SSH tunnel and MariaDB login as the SQL Editor.
 - **Offers:** the offers of the page with their furni, prices, limited series (sold / size) and order. Click one to
   edit its name, furni ids (one id, or a bundle `100;200`), credits, points and their type, amount, limited size (never
   below what is sold), order, offer id, page, extra data, club only and bulk buying.
+- **New page** makes a page under the page shown (or at the top level), after its sisters and hidden until you tick
+  Visible; **New offer** adds one to the page (fill in its furni ids). **Delete page** removes a page with its offers
+  and **Delete offer** one offer, after asking. A page with sub-pages, or an offer with sold limited numbers, is
+  never deleted: move the sub-pages first, and the record of who has which number stays.
 - **Publish** asks the running emulator over its RCON port (`rcon.port` in `config.ini`, on 127.0.0.1 of the server) to
   load the catalogue again (`updatecatalog`); the players online are told to refresh it. Saved changes show in the hotel
   after a publish.
