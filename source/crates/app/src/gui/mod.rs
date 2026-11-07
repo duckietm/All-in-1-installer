@@ -57,6 +57,7 @@ pub enum Page {
     AssetTools,
     AssetExplorer,
     SqlEditor,
+    CatalogManager,
     Debug,
     Tools,
     ServerStatus,
@@ -216,6 +217,7 @@ pub struct App {
     get_assets: views::get_assets::GetAssetsView,
     asset_tools: views::asset_tools::AssetToolsView,
     sql: views::sql_editor::SqlEditorView,
+    catalog: views::catalog_manager::CatalogManagerView,
     debug: views::debug::DebugView,
     history: views::history::HistoryView,
     about: views::about::AboutView,
@@ -259,6 +261,7 @@ impl App {
             get_assets: views::get_assets::GetAssetsView::new(&shared),
             asset_tools: views::asset_tools::AssetToolsView::new(&shared),
             sql: views::sql_editor::SqlEditorView::new(&shared),
+            catalog: views::catalog_manager::CatalogManagerView::new(&shared),
             debug: views::debug::DebugView::new(&shared),
             history: views::history::HistoryView::new(&shared),
             about: views::about::AboutView::new(&shared),
@@ -281,6 +284,7 @@ impl App {
             || self.tools.busy()
             || self.explorer.busy()
             || self.sql.busy()
+            || self.catalog.busy()
             || self.settings.busy()
     }
 
@@ -342,6 +346,7 @@ impl App {
         self.tools.session_changed(&shared);
         self.explorer.session_changed(&shared);
         self.sql.session_changed(&shared);
+        self.catalog.session_changed(&shared);
         self.debug.session_changed(&shared);
         self.history.session_changed(&shared);
         self.settings.session_changed(&shared);
@@ -493,6 +498,14 @@ impl App {
                     tf("The databases of {host}: browse and edit tables, run queries.", &[("host", &host)])
                 },
             ),
+            Page::CatalogManager => (
+                t("Catalogue").into(),
+                if session.is_none() {
+                    t("The hotel catalogue: pages and offers, edited in the database through the SSH login.").into()
+                } else {
+                    tf("The catalogue of {host}: pages and offers, published to the hotel at once.", &[("host", &host)])
+                },
+            ),
             Page::DeployAssets => (
                 t("Deploy Assets").into(),
                 tf("Addon: copy the hotel's assets, the client's UI texts and the emulator's images to {gamedata} on the server.", &[("gamedata", &gamedata)]),
@@ -606,7 +619,7 @@ impl App {
                 egui::ScrollArea::vertical().id_salt("sidebar-nav").max_height(list_height).auto_shrink([false, true]).show(ui, |ui| {
                     nav(ui, t("Dashboard"), Icon::Home, Page::Dashboard);
                     // Each group folds away with a click on its heading; a folded group still shows the page you are on.
-                    let groups: [(&str, &str, Vec<(&str, Icon, Page)>); 4] = [
+                    let groups: [(&str, &str, Vec<(&str, Icon, Page)>); 5] = [
                         // The addons are one page of picture buttons, not a long list here.
                         (
                             "sidebar:server",
@@ -628,6 +641,7 @@ impl App {
                                 ("Asset Explorer", Icon::FolderSync, Page::AssetExplorer),
                             ],
                         ),
+                        ("sidebar:hotel", t("HOTEL"), vec![(t("Catalogue"), Icon::Shopping, Page::CatalogManager)]),
                         ("sidebar:tools", t("TOOLS"), vec![(t("Tools"), Icon::Wrench, Page::Tools), ("Debug", Icon::Bug, Page::Debug), (t("History"), Icon::History, Page::History)]),
                         ("sidebar:general", t("GENERAL"), vec![(t("Settings"), Icon::Cog, Page::Settings), (t("About"), Icon::Info, Page::About)]),
                     ];
@@ -709,7 +723,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let wizard_status = match self.page {
-                        Page::Dashboard | Page::Tools | Page::Settings | Page::About | Page::AssetExplorer | Page::GetAssets | Page::RetroAssets | Page::AssetTools | Page::SqlEditor | Page::Debug | Page::History => None,
+                        Page::Dashboard | Page::Tools | Page::Settings | Page::About | Page::AssetExplorer | Page::GetAssets | Page::RetroAssets | Page::AssetTools | Page::SqlEditor | Page::CatalogManager | Page::Debug | Page::History => None,
                         _ => Some(()),
                     }
                     .and_then(|_| self.wizards.all().into_iter().find(|w| w.is_busy()).map(|w| w.status()))
@@ -779,6 +793,7 @@ impl App {
             Page::AssetExplorer => Some(tf("The Asset Explorer works on {gamedata} of the server you are logged in to.", &[("gamedata", &aio_remote::octane::gamedata())])),
             Page::Debug => Some(t("Debug follows the logs on the server you are logged in to.").to_string()),
             Page::SqlEditor => Some(t("The SQL Editor reaches MariaDB through the login to the server.").to_string()),
+            Page::CatalogManager => Some(t("The catalogue manager reaches the hotel database through the login to the server.").to_string()),
             _ => None,
         };
         if let (Some(message), None) = (&needs_login, &session) {
@@ -795,6 +810,7 @@ impl App {
                 scroll(ui, |ui| self.get_assets.show(ui, palette, &shared))
             }
             Page::SqlEditor => self.sql.show(ui, palette, &shared),
+            Page::CatalogManager => self.catalog.show(ui, palette, &shared),
             Page::Debug => self.debug.show(ui, palette, &shared),
             Page::History => self.history.show(ui, palette, &shared),
             Page::Tools | Page::ServerStatus | Page::EmulatorMonitor | Page::Terminal | Page::Doctor => {

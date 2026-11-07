@@ -7,6 +7,7 @@ pub mod asset_explorer;
 pub mod asset_tools;
 pub mod get_assets;
 pub mod atom_cms;
+pub mod catalog_manager;
 pub mod clone;
 pub mod crowdsec;
 pub mod custom_cms;

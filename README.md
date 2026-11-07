@@ -1315,6 +1315,24 @@ port; **Log in to MariaDB** asks again.
 `NULL` is shown as `(NULL)`, binary values as hex. Changes are made at once (autocommit), so make a backup first with
 **Tools → Create full database backup** before bigger changes. Big dumps go through **Tools → Import full database**.
 
+### Catalogue
+
+**HOTEL → Catalogue** edits the hotel catalogue in the database the emulator uses (`db.database` in its `config.ini`),
+through the same SSH tunnel and MariaDB login as the SQL Editor.
+
+- **Left:** every catalogue page as a tree, with a search on the name, the internal name or the id. Hidden or switched
+  off pages are grey.
+- **Page:** name, internal name, layout, catalogue (normal, Builders Club or both), parent page (never under itself),
+  order, icon, minimum rank, visible, enabled and club only. **Save page** writes it; **Undo changes** goes back.
+- **Offers:** the offers of the page with their furni, prices, limited series (sold / size) and order. Click one to
+  edit its name, furni ids (one id, or a bundle `100;200`), credits, points and their type, amount, limited size (never
+  below what is sold), order, offer id, page, extra data, club only and bulk buying.
+- **Publish** asks the running emulator over its RCON port (`rcon.port` in `config.ini`, on 127.0.0.1 of the server) to
+  load the catalogue again (`updatecatalog`); the players online are told to refresh it. Saved changes show in the hotel
+  after a publish.
+
+Every change is one statement with its values sent separately, in a transaction; nothing typed in becomes SQL text.
+
 ## Settings
 
 **The dashboard's component list** shows what runs on the server, compared with what is newest: the emulator;
